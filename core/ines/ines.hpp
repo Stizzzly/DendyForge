@@ -5,9 +5,21 @@
 namespace dendyforge
 {
 
+enum class Mirroring
+{
+    Horizontal,
+    Vertical
+};
+
+constexpr std::uint8_t FLAG_MIRRORING = 0x01;
+constexpr std::uint8_t FLAG_BATTERY = 0x02;
+constexpr std::uint8_t FLAG_TRAINER = 0x04;
+constexpr std::uint8_t FLAG_FOURSCREEN = 0x08;
+
+
 struct INesHeader
 {
-    char magic[4];
+    std::uint8_t magic[4];
 
     std::uint8_t prgRomBanks;
     std::uint8_t chrRomBanks;
