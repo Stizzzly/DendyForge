@@ -1,0 +1,3 @@
+/home/dendyforge/DendyForge/build/CMakeFiles/DendyForge.dir
+/home/dendyforge/DendyForge/build/CMakeFiles/edit_cache.dir
+/home/dendyforge/DendyForge/build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/dendyforge/DendyForge/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
