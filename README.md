@@ -26,7 +26,7 @@ A modern Dendy/NES emulator written in C++20.
 * ✅ Mapper Interface
 * ✅ Mapper 0 (NROM)
 * ✅ Connect Cartridge to Mapper
-* ⬜ Bus
+* ✅ Bus
 
 ---
 
