@@ -8,7 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(DendyForge
     src/main.cpp
+
     core/ines/ines_reader.cpp
+
+    core/cartridge/cartridge.cpp
     core/cartridge/cartridge_info.cpp
 )
 

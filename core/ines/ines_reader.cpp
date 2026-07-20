@@ -1,6 +1,7 @@
 #include "ines_reader.hpp"
 
 #include <fstream>
+#include <utility>
 
 namespace dendyforge
 {
@@ -28,6 +29,35 @@ bool INesReader::Load(const std::string& path)
     {
         return false;
     }
+    const std::size_t prgSize =
+        static_cast<std::size_t>(m_header.prgRomBanks) * 16 * 1024;
+    m_prgRom.resize(prgSize);
+
+    file.read(
+        reinterpret_cast<char*>(m_prgRom.data()),
+        static_cast<std::streamsize>(prgSize));
+
+    if (!file)
+    {
+    return false;
+    }
+
+    const std::size_t chrSize =
+        static_cast<std::size_t>(m_header.chrRomBanks) * 8 * 1024;
+
+    m_chrRom.resize(chrSize);
+
+    if (chrSize > 0)
+    {
+        file.read(
+            reinterpret_cast<char*>(m_chrRom.data()),
+            static_cast<std::streamsize>(chrSize));
+
+    if (!file)
+    {
+        return false;
+    }
+}
 
     return true;
 }
@@ -35,6 +65,16 @@ bool INesReader::Load(const std::string& path)
 const INesHeader& INesReader::Header() const
 {
     return m_header;
+}
+
+std::vector<std::uint8_t> INesReader::TakePRGRom()
+{
+    return std::move(m_prgRom);
+}
+
+std::vector<std::uint8_t> INesReader::TakeCHRRom()
+{
+    return std::move(m_chrRom);
 }
 
 } // namespace dendyforge

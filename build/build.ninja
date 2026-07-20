@@ -60,6 +60,14 @@ build CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o: CXX_COMPILER__Dendy
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/ines
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
 
+build CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/cartridge/cartridge.cpp || cmake_object_order_depends_target_DendyForge
+  DEP_FILE = CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o.d
+  FLAGS = -std=c++20
+  INCLUDES = -I/home/dendyforge/DendyForge/core
+  OBJECT_DIR = CMakeFiles/DendyForge.dir
+  OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/cartridge
+  TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
+
 build CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/cartridge/cartridge_info.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o.d
   FLAGS = -std=c++20
@@ -76,7 +84,7 @@ build CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o: CXX_COMPILE
 #############################################
 # Link the executable DendyForge
 
-build DendyForge: CXX_EXECUTABLE_LINKER__DendyForge_ CMakeFiles/DendyForge.dir/src/main.cpp.o CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o
+build DendyForge: CXX_EXECUTABLE_LINKER__DendyForge_ CMakeFiles/DendyForge.dir/src/main.cpp.o CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o
   DEP_FILE = CMakeFiles/DendyForge.dir/link.d
   LINK_FLAGS = -Wl,--dependency-file=CMakeFiles/DendyForge.dir/link.d
   OBJECT_DIR = CMakeFiles/DendyForge.dir
