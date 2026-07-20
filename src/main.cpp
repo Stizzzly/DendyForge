@@ -2,7 +2,9 @@
 
 #include "ines/ines_reader.hpp"
 #include "cartridge/cartridge_info.hpp"
+#include "bus/bus.hpp"
 #include "cartridge/cartridge.hpp"
+
 
 int main()
 {
@@ -70,6 +72,41 @@ int main()
     {
         std::cout << "CpuRead failed\n";
     }
+
+    dendyforge::Bus bus;
+
+    bus.CpuWrite(0x0000, 0xAA);
+
+    std::cout << "\nRAM test:\n";
+
+    std::cout << "$0000 -> $"
+              << std::hex
+              << static_cast<int>(bus.CpuRead(0x0000))
+              << '\n';
+
+    bus.CpuWrite(0x0000, 0x55);
+
+    std::cout << "$0800 -> $"
+              << std::hex
+              << static_cast<int>(bus.CpuRead(0x0800))
+              << '\n';
+
+    std::cout << "$1000 -> $"
+              << static_cast<int>(bus.CpuRead(0x1000))
+              << '\n';
+
+    std::cout << "$1800 -> $"
+              << static_cast<int>(bus.CpuRead(0x1800))
+              << '\n';
+
+    bus.InsertCartridge(&cartridge);
+
+    std::cout << "\nBus cartridge test:\n";
+
+    std::cout << "CPU $8000 -> $"
+              << std::hex
+              << static_cast<int>(bus.CpuRead(0x8000))
+              << '\n';
 
     return 0;
 }

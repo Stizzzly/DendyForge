@@ -16,6 +16,8 @@ add_executable(DendyForge
 
     core/mapper/mapper.cpp
     core/mapper/mapper0.cpp
+
+    core/bus/bus.cpp
 )
 
 target_include_directories(DendyForge PRIVATE
