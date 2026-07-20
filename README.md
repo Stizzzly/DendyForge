@@ -13,6 +13,19 @@ A modern Dendy/NES emulator written in C++20.
 - Mapper support
 - Open source
 
+## Roadmap
+
+✅ iNES Reader
+✅ Cartridge
+✅ Mapper (abstract interface)
+✅ Mapper 0 (NROM)
+⬜ Cartridge connects Mapper
+⬜ Bus
+⬜ CPU 6502
+⬜ PPU
+⬜ APU
+⬜ Controller
+
 ## Project Goals
 
 - Learn how the Dendy/NES hardware works
