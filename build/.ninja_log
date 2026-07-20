@@ -15,3 +15,6 @@
 6	83	1784574162925439221	CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o	3c286c758e9facfd
 5	88	1784574385117524099	CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o	3c286c758e9facfd
 88	279	1784574385200522636	DendyForge	e589d89bf39d0197
+6	1419	1784577723739883854	CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o	884fea64f80e3e0b
+5	1317	1784577936408543000	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
+1318	1498	1784577937721510028	DendyForge	e589d89bf39d0197
