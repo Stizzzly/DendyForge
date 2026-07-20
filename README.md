@@ -69,7 +69,7 @@ A modern Dendy/NES emulator written in C++20.
 * ⬜ Implement unofficial opcodes
 * ⬜ Validate unofficial opcode behavior
 
-**Result:** A standalone MOS 6502 emulator suitable for reuse in future projects (NES, Apple II, Commodore 64, Atari systems, and more).
+**Result:** A standalone MOS 6502 emulator suitable for reuse in future projects(maybe) (NES, Apple II, Commodore 64, Atari systems, and more).
 
 ---
 
