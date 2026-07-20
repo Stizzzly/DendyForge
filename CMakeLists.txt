@@ -13,6 +13,9 @@ add_executable(DendyForge
 
     core/cartridge/cartridge.cpp
     core/cartridge/cartridge_info.cpp
+
+    core/mapper/mapper.cpp
+    core/mapper/mapper0.cpp
 )
 
 target_include_directories(DendyForge PRIVATE

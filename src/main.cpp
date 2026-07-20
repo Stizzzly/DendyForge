@@ -3,6 +3,7 @@
 #include "ines/ines_reader.hpp"
 #include "cartridge/cartridge_info.hpp"
 #include "cartridge/cartridge.hpp"
+#include "mapper/mapper0.hpp"
 
 int main()
 {
@@ -53,6 +54,54 @@ int main()
 
     std::cout << "CHR bytes : "
               << cartridge.CHRRom().size()
+              << '\n';
+
+    dendyforge::Mapper0 mapper(
+        cartridge.PRGRomBanks(),
+        cartridge.CHRRomBanks());
+
+    std::uint32_t mapped = 0;
+
+    mapper.CpuRead(0x8000, mapped);
+
+    std::cout << "8000 -> "
+              << std::hex
+              << mapped
+              << '\n';
+
+    mapper.CpuRead(0x8001, mapped);
+
+    std::cout << "8001 -> "
+              << std::hex
+              << mapped
+              << '\n';
+
+    mapper.CpuRead(0xC000, mapped);
+
+    std::cout << "C000 -> "
+              << std::hex
+              << mapped
+              << '\n';
+
+    mapper.CpuRead(0xFFFF, mapped);
+
+    std::cout << "FFFF -> "
+              << std::hex
+              << mapped
+              << '\n';
+
+    mapper.PpuRead(0x0000, mapped);
+
+    std::cout << "PPU 0000 -> "
+              << std::hex
+              << mapped
+              << '\n';
+
+    mapper.PpuRead(0x1FFF, mapped);
+
+    std::cout << "PPU 1FFF -> "
+              << std::hex
+              << mapped
               << '\n';
 
     return 0;
