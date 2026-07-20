@@ -1,3 +1,7 @@
 # ninja log v7
-2	1053	1784566756197582738	CMakeFiles/DendyForge.dir/src/main.cpp.o	cf60293ffcb7ba6e
-1055	1215	1784566757250035940	DendyForge	a8751a393819197b
+4	988	1784567967806896827	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
+1032	1203	1784567968833865802	DendyForge	e35e7bdbfe883b35
+6	127	1784567967808896767	CMakeFiles/DendyForge.dir/core/ines/ines.cpp.o	3a775f2d381b81e7
+5	1032	1784567967807896797	CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o	e5a509d3e1b37728
+4	933	1784568069364828777	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
+933	1109	1784568070293800710	DendyForge	e35e7bdbfe883b35

@@ -23,4 +23,7 @@ struct INesHeader
     std::uint8_t reserved[5];
 };
 
+static_assert(sizeof(INesHeader) == 16,
+              "INesHeader must be exactly 16 bytes.");
+
 } // namespace dendyforge

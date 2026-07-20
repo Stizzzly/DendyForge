@@ -8,4 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(DendyForge
     src/main.cpp
+    core/ines/ines_reader.cpp
+    core/ines/ines.cpp
+)
+
+target_include_directories(DendyForge PRIVATE
+    core
 )
