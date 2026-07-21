@@ -37,7 +37,7 @@ A modern Dendy/NES emulator written in C++20.
 ### CPU Core
 
 - ✅ CPU Registers (A, X, Y, SP, PC)
-- ⬜ Processor Status Register
+- ✅ Processor Status Register
 - ⬜ Stack Operations
 - ⬜ Bus Interface
 - ⬜ Instruction Fetch / Decode / Execute
