@@ -37,6 +37,10 @@ private:
     private: std::uint8_t Read(std::uint16_t address);
     void Write(std::uint16_t address, std::uint8_t data);
 
+    // Stack operations
+    void Push(std::uint8_t data);
+    std::uint8_t Pop();
+
     Bus* m_bus{nullptr};
 
     // Registers

@@ -38,8 +38,8 @@ A modern Dendy/NES emulator written in C++20.
 
 - ✅ CPU Registers (A, X, Y, SP, PC)
 - ✅ Processor Status Register
-- ⬜ Stack Operations
-- ⬜ Bus Interface
+- ✅ Bus Interface
+- ✅ Stack Operations
 - ⬜ Instruction Fetch / Decode / Execute
 - ⬜ Reset Sequence
 - ⬜ IRQ Handling

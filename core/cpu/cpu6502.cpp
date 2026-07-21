@@ -51,4 +51,16 @@ void CPU6502::Write(std::uint16_t address, std::uint8_t data)
     m_bus->CpuWrite(address, data);
 }
 
+void CPU6502::Push(std::uint8_t data)
+{
+    Write(0x0100 + m_sp, data);
+    --m_sp;
+}
+
+std::uint8_t CPU6502::Pop()
+{
+    ++m_sp;
+    return Read(0x0100 + m_sp);
+}
+
 } // namespace dendyforge
