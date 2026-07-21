@@ -31,6 +31,7 @@ public:
 
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
+    std::uint16_t ProgramCounter() const;
 
 private:
     //Bus interface

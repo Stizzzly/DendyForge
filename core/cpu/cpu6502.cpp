@@ -35,6 +35,19 @@ void CPU6502::SetFlag(
 
 void CPU6502::Reset()
 {
+    m_a = 0;
+    m_x = 0;
+    m_y = 0;
+
+    m_sp = 0xFD;
+
+    m_status = static_cast<std::uint8_t>(Flags::U);
+
+    // Read reset vector ($FFFC-$FFFD)
+    const std::uint16_t lo = Read(0xFFFC);
+    const std::uint16_t hi = Read(0xFFFD);
+
+    m_pc = (hi << 8) | lo;
 }
 
 void CPU6502::Clock()
@@ -61,6 +74,11 @@ std::uint8_t CPU6502::Pop()
 {
     ++m_sp;
     return Read(0x0100 + m_sp);
+}
+
+std::uint16_t CPU6502::ProgramCounter() const
+{
+    return m_pc;
 }
 
 } // namespace dendyforge

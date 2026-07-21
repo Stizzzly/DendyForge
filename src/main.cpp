@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 
 #include "ines/ines_reader.hpp"
 #include "cartridge/cartridge_info.hpp"
@@ -111,6 +112,9 @@ int main()
 
     dendyforge::CPU6502 cpu;
 
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
     cpu.SetFlag(dendyforge::CPU6502::Flags::C, true);
     cpu.SetFlag(dendyforge::CPU6502::Flags::Z, true);
 
@@ -137,6 +141,26 @@ int main()
     std::cout << "Zero  : "
               << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
               << '\n';
+
+    std::cout << "\nCPU Reset test:\n";
+
+    std::cout << "Reset Vector Low  = $"
+              << std::hex
+              << static_cast<int>(bus.CpuRead(0xFFFC))
+              << '\n';
+
+    std::cout << "Reset Vector High = $"
+              << std::hex
+              << static_cast<int>(bus.CpuRead(0xFFFD))
+              << '\n';
+
+    std::cout << "PC = $"
+          << std::uppercase
+          << std::hex
+          << std::setw(4)
+          << std::setfill('0')
+          << cpu.ProgramCounter()
+          << '\n';
 
     return 0;
 }
