@@ -55,6 +55,7 @@ private:
 
     // Instruction methods
     std::uint8_t IMP();
+    std::uint8_t IMM();
     std::uint8_t XXX();
     std::uint8_t SEI();
 

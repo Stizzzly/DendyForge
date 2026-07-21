@@ -136,6 +136,12 @@ std::uint8_t CPU6502::IMP()
     return 0;
 }
 
+std::uint8_t CPU6502::IMM()
+{
+    m_addrAbs = m_pc++;
+    return 0;
+}
+
 std::uint8_t CPU6502::XXX()
 {
     return 0;
