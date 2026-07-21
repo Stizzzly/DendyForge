@@ -30,46 +30,64 @@ A modern Dendy/NES emulator written in C++20.
 
 ---
 
-## Phase 2 — MOS 6502 Emulator
+## Phase 2 — CPU 6502 Emulator
 
-**Goal:** Develop a complete, reusable MOS 6502 CPU emulator independent of the NES.
+**Goal:** Develop a complete, reusable, and hardware-accurate MOS 6502 CPU emulator independent of the Dendy.
+The resulting CPU core should be reusable in future emulation projects (NES/Famicom, Apple II, Commodore 64, Atari systems, and more).
 
 ### CPU Core
 
-* ⬜ CPU Registers
-* ⬜ Status Register
-* ⬜ Stack
-* ⬜ Reset Sequence
-* ⬜ IRQ
-* ⬜ NMI
-* ⬜ Clock Cycle Emulation
+- ⬜ CPU Registers (A, X, Y, SP, PC)
+- ⬜ Processor Status Register
+- ⬜ Stack Operations
+- ⬜ Bus Interface
+- ⬜ Instruction Fetch / Decode / Execute
+- ⬜ Reset Sequence
+- ⬜ IRQ Handling
+- ⬜ NMI Handling
+- ⬜ BRK / RTI
+- ⬜ Clock Cycle Emulation
 
 ### Addressing Modes
 
-* ⬜ Implement all official addressing modes
-* ⬜ Cycle-accurate page crossing
-* ⬜ Zero-page wrapping
-* ⬜ Indirect JMP hardware bug
+- ⬜ Implement all official addressing modes
+- ⬜ Zero-page wrapping
+- ⬜ Relative addressing
+- ⬜ Indirect JMP hardware bug
+- ⬜ Page-crossing cycle penalties
+- ⬜ Cycle-accurate address calculation
 
-### Official Instructions
+### Official Instruction Set
 
-* ⬜ Implement all 56 official instructions
-* ⬜ Implement all 151 official opcodes
-* ⬜ Correct flag behavior
-* ⬜ Correct cycle timing
+- ⬜ Implement all 56 official instructions (mnemonics)
+- ⬜ Implement all 151 official opcodes
+- ⬜ Correct processor flag behavior
+- ⬜ Correct cycle timing
+- ⬜ Accurate branch timing
+- ⬜ Accurate interrupt timing
 
 ### Validation
 
-* ⬜ Pass nestest.nes
-* ⬜ Pass Klaus Dormann 6502 Functional Test
-* ⬜ Pass Blargg CPU Tests
+- ⬜ Pass Klaus Dormann 6502 Functional Test
+- ⬜ Pass nestest.nes
+- ⬜ Pass Blargg CPU Tests
+- ⬜ Verify cycle accuracy against reference documentation
 
 ### Undocumented Instructions
 
-* ⬜ Implement unofficial opcodes
-* ⬜ Validate unofficial opcode behavior
+- ⬜ Implement unofficial (illegal) opcodes
+- ⬜ Match original MOS 6502 hardware behavior
+- ⬜ Validate unofficial opcode behavior
 
-**Result:** A standalone MOS 6502 emulator suitable for reuse in future projects(maybe) (NES, Apple II, Commodore 64, Atari systems, and more).
+### Result
+
+A standalone, reusable, and hardware-accurate MOS 6502 emulator suitable for integration into future projects, including:
+
+- Dendy
+- Apple II
+- Commodore 64
+- Atari 2600 / 5200 / 7800
+- Other MOS 6502-based systems
 
 ---
 
