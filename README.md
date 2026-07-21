@@ -32,12 +32,20 @@ A modern Dendy/NES emulator written in C++20.
 
 ## Phase 2 — CPU 6502 Emulator
 
+<<<<<<< HEAD
 **Goal:** Develop a complete, reusable, and hardware-accurate MOS 6502 CPU emulator independent of the Dendy.
+=======
+**Goal:** Develop a complete, reusable, and hardware-accurate MOS 6502 CPU emulator independent of the Dendy. 
+>>>>>>> f017d7a (Update README.md & Create A CPU)
 The resulting CPU core should be reusable in future emulation projects (NES/Famicom, Apple II, Commodore 64, Atari systems, and more).
 
 ### CPU Core
 
+<<<<<<< HEAD
 - ✅ CPU Registers (A, X, Y, SP, PC)
+=======
+- ⬜ CPU Registers (A, X, Y, SP, PC)
+>>>>>>> f017d7a (Update README.md & Create A CPU)
 - ⬜ Processor Status Register
 - ⬜ Stack Operations
 - ⬜ Bus Interface

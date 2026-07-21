@@ -9,6 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(DendyForge
     src/main.cpp
 
+    core/cpu/cpu6502.cpp
+
     core/ines/ines_reader.cpp
 
     core/cartridge/cartridge.cpp

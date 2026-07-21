@@ -4,7 +4,7 @@
 #include "cartridge/cartridge_info.hpp"
 #include "bus/bus.hpp"
 #include "cartridge/cartridge.hpp"
-
+#include "cpu/cpu6502.hpp"
 
 int main()
 {
@@ -106,6 +106,36 @@ int main()
     std::cout << "CPU $8000 -> $"
               << std::hex
               << static_cast<int>(bus.CpuRead(0x8000))
+              << '\n';
+    std::cout << "\nCPU Status Register test:\n";
+
+    dendyforge::CPU6502 cpu;
+
+    cpu.SetFlag(dendyforge::CPU6502::Flags::C, true);
+    cpu.SetFlag(dendyforge::CPU6502::Flags::Z, true);
+
+    std::cout << "Carry : "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+              << '\n';
+
+    std::cout << "Zero  : "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+              << '\n';
+
+    std::cout << "Negative : "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+              << '\n';
+
+    cpu.SetFlag(dendyforge::CPU6502::Flags::C, false);
+
+    std::cout << "\nAfter clearing Carry:\n";
+
+    std::cout << "Carry : "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+              << '\n';
+
+    std::cout << "Zero  : "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
               << '\n';
 
     return 0;

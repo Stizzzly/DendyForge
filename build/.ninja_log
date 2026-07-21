@@ -1,17 +1,17 @@
 # ninja log v7
-5	1317	1784577936408543000	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
-1318	1498	1784577937721510028	DendyForge	e589d89bf39d0197
+3	1437	1784579351622764463	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
+1438	1613	1784579353056726985	DendyForge	d5a7e8b72d701859
 6	127	1784567967808896767	CMakeFiles/DendyForge.dir/core/ines/ines.cpp.o	3a775f2d381b81e7
 5	1209	1784572372258050669	CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o	e5a509d3e1b37728
 7	82	1784568737227677001	CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o	bbf65a47f63bff5b
-3	98	1784579351593765221	build.ninja	68f755d708831c88
-3	98	1784579351591765274	/home/dendyforge/DendyForge/build/cmake_install.cmake	68f755d708831c88
-6	1419	1784577723739883854	CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o	884fea64f80e3e0b
+2	94	1784616534444218923	build.ninja	68f755d708831c88
+2	94	1784616534441219000	/home/dendyforge/DendyForge/build/cmake_install.cmake	68f755d708831c88
+6	1386	1784579351625764385	CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o	884fea64f80e3e0b
 5	88	1784574385117524099	CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o	3c286c758e9facfd
 4	75	1784574162923439256	CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o	2e5b54ac723ee02f
-2	94	1784579351593765221	build.ninja	68f755d708831c88
-2	94	1784579351593765221	/home/dendyforge/DendyForge/build/cmake_install.cmake	68f755d708831c88
 8	1315	1784579351626764359	CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o	8365fbd51ff2db45
-6	1386	1784579351625764385	CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o	884fea64f80e3e0b
-3	1437	1784579351622764463	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
-1438	1613	1784579353056726985	DendyForge	d5a7e8b72d701859
+36	200	1784616534444218923	build.ninja	68f755d708831c88
+36	200	1784616534444218923	/home/dendyforge/DendyForge/build/cmake_install.cmake	68f755d708831c88
+64	1434	1784616534545216328	CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o	efb38e8a5ecce064
+62	4044	1784616534543216379	CMakeFiles/DendyForge.dir/src/main.cpp.o	349cb05d46a0d33d
+4044	4402	1784616538524114074	DendyForge	8344c32cfa8d12c5
