@@ -1,3 +1,10 @@
+#include "cpu6502.hpp"
+
+#include "../bus/bus.hpp"
+
+namespace dendyforge
+{
+
 CPU6502::CPU6502()
 {
 }
@@ -7,6 +14,25 @@ void CPU6502::ConnectBus(Bus* bus)
     m_bus = bus;
 }
 
+bool CPU6502::GetFlag(Flags flag) const
+{
+    return (m_status & static_cast<std::uint8_t>(flag)) != 0;
+}
+
+void CPU6502::SetFlag(
+    Flags flag,
+    bool value)
+{
+    if (value)
+    {
+        m_status |= static_cast<std::uint8_t>(flag);
+    }
+    else
+    {
+        m_status &= ~static_cast<std::uint8_t>(flag);
+    }
+}
+
 void CPU6502::Reset()
 {
 }
@@ -14,3 +40,5 @@ void CPU6502::Reset()
 void CPU6502::Clock()
 {
 }
+
+} // namespace dendyforge
