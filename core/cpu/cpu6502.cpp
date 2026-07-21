@@ -4,9 +4,23 @@
 
 namespace dendyforge
 {
-
 CPU6502::CPU6502()
 {
+    m_lookup.fill(
+    {
+        "???",
+        nullptr,
+        nullptr,
+        0
+    });
+
+    m_lookup[0x78] =
+    {
+        "SEI",
+        nullptr,
+        nullptr,
+        2
+    };
 }
 
 void CPU6502::ConnectBus(Bus* bus)
@@ -94,6 +108,11 @@ std::uint8_t CPU6502::Fetch()
 std::uint8_t CPU6502::Opcode() const
 {
     return m_opcode;
+}
+
+const char* CPU6502::CurrentInstruction() const
+{
+    return m_lookup[m_opcode].name;
 }
 
 } // namespace dendyforge

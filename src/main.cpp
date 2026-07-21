@@ -179,5 +179,9 @@ int main()
               << static_cast<int>(cpu.Opcode())
               << '\n';
 
+    std::cout << "Instruction = "
+              << cpu.CurrentInstruction()
+              << '\n';
+
     return 0;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 
 namespace dendyforge
 {
@@ -22,6 +23,16 @@ public:
         N = 1 << 7  // Negative
     };
 
+    struct Instruction
+    {
+        const char* name;
+
+        std::uint8_t (CPU6502::*operate)();
+        std::uint8_t (CPU6502::*addressMode)();
+
+        std::uint8_t cycles;
+    };
+
     CPU6502();
 
     void ConnectBus(Bus* bus);
@@ -33,6 +44,7 @@ public:
     void SetFlag(Flags flag, bool value);
     std::uint16_t ProgramCounter() const;
     std::uint8_t Opcode() const;
+    const char* CurrentInstruction() const;
 
 private:
     //Bus interface
@@ -63,6 +75,8 @@ private:
 
     // Remaining CPU cycles
     std::uint8_t m_cycles{0};
+
+    std::array<Instruction, 256> m_lookup;
 };
 
 } // namespace dendyforge
