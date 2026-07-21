@@ -38,6 +38,9 @@ private:
     private: std::uint8_t Read(std::uint16_t address);
     void Write(std::uint16_t address, std::uint8_t data);
 
+    // Instruction fetch
+    std::uint8_t Fetch();
+
     // Stack operations
     void Push(std::uint8_t data);
     std::uint8_t Pop();
@@ -53,6 +56,9 @@ private:
     std::uint16_t m_pc{0}; // Program Counter
 
     std::uint8_t m_status{0}; //Processor status
+
+    // Current opcode
+    std::uint8_t m_opcode{0};
 };
 
 } // namespace dendyforge

@@ -40,8 +40,10 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Processor Status Register
 - ✅ Bus Interface
 - ✅ Stack Operations
-- ⬜ Reset Sequence
-- ⬜ Instruction Fetch / Decode / Execute
+- ✅ Reset Sequence
+- ✅ Instruction Fetch
+- ⬜ Instruction Decode 
+- ⬜ Instruction Execute
 - ⬜ IRQ Handling
 - ⬜ NMI Handling
 - ⬜ BRK / RTI

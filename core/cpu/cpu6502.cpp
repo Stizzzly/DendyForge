@@ -81,4 +81,12 @@ std::uint16_t CPU6502::ProgramCounter() const
     return m_pc;
 }
 
+std::uint8_t CPU6502::Fetch()
+{
+    m_opcode = Read(m_pc);
+    ++m_pc;
+
+    return m_opcode;
+}
+
 } // namespace dendyforge
