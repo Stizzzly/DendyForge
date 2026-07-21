@@ -183,5 +183,35 @@ int main()
               << cpu.CurrentInstruction()
               << '\n';
 
+    for (int i = 0; i < 8; ++i)
+    {
+        cpu.Clock();
+    }
+
+    cpu.Clock();
+
+    std::cout << "Opcode = "
+              << cpu.CurrentInstruction()
+              << '\n';
+
+    std::cout << "Cycles = "
+              << static_cast<int>(cpu.Cycles())
+              << '\n';
+
+    cpu.Reset();
+
+    for (int i = 0; i < 9; ++i)
+    {
+    cpu.Clock();
+    }
+
+    std::cout << "Instruction = "
+              << cpu.CurrentInstruction()
+              << '\n';
+
+    std::cout << "Interrupt Disable = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::I)
+              << '\n';
+
     return 0;
 }

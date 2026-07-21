@@ -1,26 +1,35 @@
 #include "cpu6502.hpp"
-
 #include "../bus/bus.hpp"
 
 namespace dendyforge
 {
+
+const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
+{
+    static constexpr auto LookupTable = []() consteval {
+        std::array<Instruction, 256> table{};
+
+        table.fill({
+            .name = "???",
+            .operate = &CPU6502::XXX,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 0
+        });
+
+        table[0x78] = {
+            .name = "SEI",
+            .operate = &CPU6502::SEI,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        return table;
+    }();
+
+    return LookupTable[opcode];
+}
 CPU6502::CPU6502()
 {
-    m_lookup.fill(
-    {
-        "???",
-        nullptr,
-        nullptr,
-        0
-    });
-
-    m_lookup[0x78] =
-    {
-        "SEI",
-        nullptr,
-        nullptr,
-        2
-    };
 }
 
 void CPU6502::ConnectBus(Bus* bus)
@@ -33,9 +42,7 @@ bool CPU6502::GetFlag(Flags flag) const
     return (m_status & static_cast<std::uint8_t>(flag)) != 0;
 }
 
-void CPU6502::SetFlag(
-    Flags flag,
-    bool value)
+void CPU6502::SetFlag(Flags flag, bool value)
 {
     if (value)
     {
@@ -52,12 +59,9 @@ void CPU6502::Reset()
     m_a = 0;
     m_x = 0;
     m_y = 0;
-
     m_sp = 0xFD;
-
     m_status = static_cast<std::uint8_t>(Flags::U);
 
-    // Read reset vector ($FFFC-$FFFD)
     const std::uint16_t lo = Read(0xFFFC);
     const std::uint16_t hi = Read(0xFFFD);
 
@@ -67,7 +71,19 @@ void CPU6502::Reset()
 
 void CPU6502::Clock()
 {
-    Fetch();
+    if (m_cycles == 0)
+    {
+        Fetch();
+
+        const auto& instruction = GetInstructionConfig(m_opcode);
+
+        m_cycles = instruction.cycles;
+
+        (this->*instruction.addressMode)();
+        (this->*instruction.operate)();
+    }
+
+    --m_cycles;
 }
 
 std::uint8_t CPU6502::Read(std::uint16_t address)
@@ -101,7 +117,6 @@ std::uint8_t CPU6502::Fetch()
 {
     m_opcode = Read(m_pc);
     ++m_pc;
-
     return m_opcode;
 }
 
@@ -112,7 +127,29 @@ std::uint8_t CPU6502::Opcode() const
 
 const char* CPU6502::CurrentInstruction() const
 {
-    return m_lookup[m_opcode].name;
+    return GetInstructionConfig(m_opcode).name;
+}
+
+std::uint8_t CPU6502::IMP()
+{
+    m_fetched = m_a;
+    return 0;
+}
+
+std::uint8_t CPU6502::XXX()
+{
+    return 0;
+}
+
+std::uint8_t CPU6502::SEI()
+{
+    SetFlag(Flags::I, true);
+    return 0;
+}
+
+std::uint8_t CPU6502::Cycles() const
+{
+    return m_cycles;
 }
 
 } // namespace dendyforge

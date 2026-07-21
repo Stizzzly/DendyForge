@@ -42,7 +42,7 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Stack Operations
 - ✅ Reset Sequence
 - ✅ Instruction Fetch
-- ⬜ Instruction Decode 
+- ✅ Instruction Decode 
 - ⬜ Instruction Execute
 - ⬜ IRQ Handling
 - ⬜ NMI Handling

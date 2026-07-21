@@ -45,11 +45,20 @@ public:
     std::uint16_t ProgramCounter() const;
     std::uint8_t Opcode() const;
     const char* CurrentInstruction() const;
+    std::uint8_t Cycles() const;
 
 private:
-    //Bus interface
-    private: std::uint8_t Read(std::uint16_t address);
+
+    // Bus interface
+    std::uint8_t Read(std::uint16_t address);
     void Write(std::uint16_t address, std::uint8_t data);
+
+    // Instruction methods
+    std::uint8_t IMP();
+    std::uint8_t XXX();
+    std::uint8_t SEI();
+
+    static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 
     // Instruction fetch
     std::uint8_t Fetch();
@@ -61,22 +70,19 @@ private:
     Bus* m_bus{nullptr};
 
     // Registers
-    std::uint8_t m_a{0}; //Accumulator
-    std::uint8_t m_x{0}; // Index X
-    std::uint8_t m_y{0}; //Index Y
+    std::uint8_t m_a{0};
+    std::uint8_t m_x{0};
+    std::uint8_t m_y{0};
+    std::uint8_t m_sp{0};
+    std::uint16_t m_pc{0};
+    std::uint8_t m_status{0};
 
-    std::uint8_t m_sp{0}; // Stack Pointer
-    std::uint16_t m_pc{0}; // Program Counter
-
-    std::uint8_t m_status{0}; //Processor status
-
-    // Current opcode
     std::uint8_t m_opcode{0};
+    std::uint16_t m_addrAbs{0};
+    std::uint16_t m_addrRel{0};
+    std::uint8_t m_fetched{0};
 
-    // Remaining CPU cycles
     std::uint8_t m_cycles{0};
-
-    std::array<Instruction, 256> m_lookup;
 };
 
 } // namespace dendyforge
