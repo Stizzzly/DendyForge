@@ -33,18 +33,21 @@ public:
     void SetFlag(Flags flag, bool value);
 
 private:
+    //Bus interface
+    private: std::uint8_t Read(std::uint16_t address);
+    void Write(std::uint16_t address, std::uint8_t data);
+
     Bus* m_bus{nullptr};
 
     // Registers
-    std::uint8_t m_a{0};
-    std::uint8_t m_x{0};
-    std::uint8_t m_y{0};
+    std::uint8_t m_a{0}; //Accumulator
+    std::uint8_t m_x{0}; // Index X
+    std::uint8_t m_y{0}; //Index Y
 
-    std::uint8_t m_sp{0};
-    std::uint16_t m_pc{0};
+    std::uint8_t m_sp{0}; // Stack Pointer
+    std::uint16_t m_pc{0}; // Program Counter
 
-    std::uint8_t m_status{0};
+    std::uint8_t m_status{0}; //Processor status
 };
 
 } // namespace dendyforge
-//te

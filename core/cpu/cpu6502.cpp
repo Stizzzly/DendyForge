@@ -41,4 +41,14 @@ void CPU6502::Clock()
 {
 }
 
+std::uint8_t CPU6502::Read(std::uint16_t address)
+{
+    return m_bus->CpuRead(address);
+}
+
+void CPU6502::Write(std::uint16_t address, std::uint8_t data)
+{
+    m_bus->CpuWrite(address, data);
+}
+
 } // namespace dendyforge
