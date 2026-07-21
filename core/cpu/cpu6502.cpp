@@ -48,10 +48,12 @@ void CPU6502::Reset()
     const std::uint16_t hi = Read(0xFFFD);
 
     m_pc = (hi << 8) | lo;
+    m_cycles = 8;
 }
 
 void CPU6502::Clock()
 {
+    Fetch();
 }
 
 std::uint8_t CPU6502::Read(std::uint16_t address)
@@ -86,6 +88,11 @@ std::uint8_t CPU6502::Fetch()
     m_opcode = Read(m_pc);
     ++m_pc;
 
+    return m_opcode;
+}
+
+std::uint8_t CPU6502::Opcode() const
+{
     return m_opcode;
 }
 

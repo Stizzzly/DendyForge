@@ -32,6 +32,7 @@ public:
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
     std::uint16_t ProgramCounter() const;
+    std::uint8_t Opcode() const;
 
 private:
     //Bus interface
@@ -59,6 +60,9 @@ private:
 
     // Current opcode
     std::uint8_t m_opcode{0};
+
+    // Remaining CPU cycles
+    std::uint8_t m_cycles{0};
 };
 
 } // namespace dendyforge

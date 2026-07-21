@@ -162,5 +162,22 @@ int main()
           << cpu.ProgramCounter()
           << '\n';
 
+    std::cout << "\nInstruction Fetch test:\n";
+
+    cpu.Clock();
+
+    std::cout << "PC after fetch = $"
+              << std::uppercase
+              << std::hex
+              << std::setw(4)
+              << std::setfill('0')
+              << cpu.ProgramCounter()
+              << '\n';
+
+    std::cout << "Opcode = $"
+              << std::setw(2)
+              << static_cast<int>(cpu.Opcode())
+              << '\n';
+
     return 0;
 }
