@@ -37,7 +37,7 @@ The resulting CPU core should be reusable in future emulation projects (NES/Fami
 
 ### CPU Core
 
-- ⬜ CPU Registers (A, X, Y, SP, PC)
+- ✅ CPU Registers (A, X, Y, SP, PC)
 - ⬜ Processor Status Register
 - ⬜ Stack Operations
 - ⬜ Bus Interface
