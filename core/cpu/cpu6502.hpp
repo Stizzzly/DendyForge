@@ -43,6 +43,8 @@ public:
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
 
+
+    std::uint8_t Accumulator() const;
     std::uint16_t ProgramCounter() const;
     std::uint8_t StackPointer() const;
     std::uint8_t Status() const;
@@ -56,12 +58,24 @@ private:
     std::uint8_t Read(std::uint16_t address);
     void Write(std::uint16_t address, std::uint8_t data);
 
-    // Instruction methods
-    std::uint8_t IMP();
-    std::uint8_t IMM();
-    std::uint8_t XXX();
-    std::uint8_t SEI();
-    std::uint8_t LDA();
+    // Режимы адрессации
+    std::uint8_t IMP(); // Implied
+    std::uint8_t IMM(); // Immediate
+    std::uint8_t ABS(); // Absolute
+
+    // Операции (Инструкции)
+    std::uint8_t XXX(); // Illegal/Template
+
+    // Загрузка и Сохранение (Load/Store)
+    std::uint8_t LDA(); // Load Accumulator
+
+    // Арифметика и логика (ALU) пока пусто
+
+    // Изменение флагов (Status Flags)
+    std::uint8_t SEI(); // Set Interrupt Disable
+
+    // Переходы и ветвления (Jumps & Branches)
+    std::uint8_t JMP(); // Jump
 
     static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 

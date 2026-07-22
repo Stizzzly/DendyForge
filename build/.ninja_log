@@ -19,3 +19,15 @@
 4	95	1784709082403247138	/home/dendyforge/DendyForge/build/cmake_install.cmake	68f755d708831c88
 6	1472	1784709121479365299	CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o	24d1066680c6e754
 1472	1659	1784709122946335759	DendyForge	6756da8aad32ffee
+14	1563	1784736182073979290	CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o	24d1066680c6e754
+1563	1755	1784736183623856226	DendyForge	6756da8aad32ffee
+5	1446	1784736738774798423	CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o	24d1066680c6e754
+1447	1630	1784736740216958564	DendyForge	6756da8aad32ffee
+4	292	1784737858311064649	CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o	b0fd006117fd2b50
+6	1502	1784737858312064643	CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o	24d1066680c6e754
+1502	1686	1784737859808055358	DendyForge	6756da8aad32ffee
+5	314	1784738913141877567	CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o	b0fd006117fd2b50
+4	1519	1784738964968452271	CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o	24d1066680c6e754
+1519	1715	1784738966482625246	DendyForge	6756da8aad32ffee
+5	326	1784739312206226526	CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o	b0fd006117fd2b50
+326	536	1784739312526224601	DendyForge	6756da8aad32ffee

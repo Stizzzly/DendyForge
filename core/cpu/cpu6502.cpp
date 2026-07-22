@@ -28,6 +28,12 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMM,
             .cycles = 2
         };
+        table[0x4C] = {
+            .name = "JMP",
+            .operate = &CPU6502::JMP,
+            .addressMode = &CPU6502::ABS,
+            .cycles = 3
+        };
 
         return table;
     }();
@@ -90,6 +96,11 @@ void CPU6502::Clock()
     }
 
     --m_cycles;
+}
+
+std::uint8_t CPU6502::Accumulator() const
+{
+    return m_a;
 }
 
 std::uint8_t CPU6502::Read(std::uint16_t address)
@@ -178,6 +189,28 @@ std::uint8_t CPU6502::LDA()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, (m_a & 0x80) != 0);
 
+    return 0;
+}
+
+std::uint8_t CPU6502::ABS()
+{
+    // Читаем младший байт адреса
+    const std::uint16_t lo = Read(m_pc);
+    ++m_pc;
+
+    // Читаем старший байт адреса
+    const std::uint16_t hi = Read(m_pc);
+    ++m_pc;
+
+    // Собираем 16-битный адрес
+    m_addrAbs = (hi << 8) | lo;
+
+    return 0;
+}
+
+std::uint8_t CPU6502::JMP()
+{
+    m_pc = m_addrAbs;
     return 0;
 }
 
