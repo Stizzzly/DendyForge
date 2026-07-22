@@ -22,6 +22,12 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMP,
             .cycles = 2
         };
+        table[0xA9] = {
+            .name = "LDA",
+            .operate = &CPU6502::LDA,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
 
         return table;
     }();
@@ -153,9 +159,27 @@ std::uint8_t CPU6502::SEI()
     return 0;
 }
 
+std::uint8_t CPU6502::LDA()
+{
+    FetchData();
+
+    m_a = m_fetched;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, (m_a & 0x80) != 0);
+
+    return 0;
+}
+
 std::uint8_t CPU6502::Cycles() const
 {
     return m_cycles;
+}
+
+std::uint8_t CPU6502::FetchData()
+{
+    m_fetched = Read(m_addrAbs);
+    return m_fetched;
 }
 
 } // namespace dendyforge

@@ -20,8 +20,14 @@ add_executable(DendyForge
     core/mapper/mapper0.cpp
 
     core/bus/bus.cpp
+
+    tests/test_runner.cpp
+    tests/cpu/cpu_tests.cpp
+    tests/bus/bus_tests.cpp
+    tests/cartridge/cartridge_tests.cpp
 )
 
 target_include_directories(DendyForge PRIVATE
     core
+    tests
 )

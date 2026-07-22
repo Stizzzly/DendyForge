@@ -58,11 +58,13 @@ private:
     std::uint8_t IMM();
     std::uint8_t XXX();
     std::uint8_t SEI();
+    std::uint8_t LDA();
 
     static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 
     // Instruction fetch
     std::uint8_t Fetch();
+    std::uint8_t FetchData();
 
     // Stack operations
     void Push(std::uint8_t data);

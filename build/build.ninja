@@ -47,7 +47,7 @@ build cmake_object_order_depends_target_DendyForge: phony || .
 build CMakeFiles/DendyForge.dir/src/main.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/src/main.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/src/main.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/src
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -55,7 +55,7 @@ build CMakeFiles/DendyForge.dir/src/main.cpp.o: CXX_COMPILER__DendyForge_unscann
 build CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/cpu/cpu6502.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/cpu
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -63,7 +63,7 @@ build CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o: CXX_COMPILER__DendyForge
 build CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/ines/ines_reader.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/ines
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -71,7 +71,7 @@ build CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o: CXX_COMPILER__Dendy
 build CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/cartridge/cartridge.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/cartridge
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -79,7 +79,7 @@ build CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o: CXX_COMPILER__De
 build CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/cartridge/cartridge_info.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/cartridge
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -87,7 +87,7 @@ build CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o: CXX_COMPILE
 build CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/mapper/mapper.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/mapper
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -95,7 +95,7 @@ build CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o: CXX_COMPILER__DendyFor
 build CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/mapper/mapper0.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/mapper
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
@@ -103,9 +103,41 @@ build CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o: CXX_COMPILER__DendyFo
 build CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/core/bus/bus.cpp || cmake_object_order_depends_target_DendyForge
   DEP_FILE = CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o.d
   FLAGS = -std=c++20
-  INCLUDES = -I/home/dendyforge/DendyForge/core
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
   OBJECT_DIR = CMakeFiles/DendyForge.dir
   OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/core/bus
+  TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
+
+build CMakeFiles/DendyForge.dir/tests/test_runner.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/tests/test_runner.cpp || cmake_object_order_depends_target_DendyForge
+  DEP_FILE = CMakeFiles/DendyForge.dir/tests/test_runner.cpp.o.d
+  FLAGS = -std=c++20
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
+  OBJECT_DIR = CMakeFiles/DendyForge.dir
+  OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/tests
+  TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
+
+build CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/tests/cpu/cpu_tests.cpp || cmake_object_order_depends_target_DendyForge
+  DEP_FILE = CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o.d
+  FLAGS = -std=c++20
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
+  OBJECT_DIR = CMakeFiles/DendyForge.dir
+  OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/tests/cpu
+  TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
+
+build CMakeFiles/DendyForge.dir/tests/bus/bus_tests.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/tests/bus/bus_tests.cpp || cmake_object_order_depends_target_DendyForge
+  DEP_FILE = CMakeFiles/DendyForge.dir/tests/bus/bus_tests.cpp.o.d
+  FLAGS = -std=c++20
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
+  OBJECT_DIR = CMakeFiles/DendyForge.dir
+  OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/tests/bus
+  TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
+
+build CMakeFiles/DendyForge.dir/tests/cartridge/cartridge_tests.cpp.o: CXX_COMPILER__DendyForge_unscanned_ /home/dendyforge/DendyForge/tests/cartridge/cartridge_tests.cpp || cmake_object_order_depends_target_DendyForge
+  DEP_FILE = CMakeFiles/DendyForge.dir/tests/cartridge/cartridge_tests.cpp.o.d
+  FLAGS = -std=c++20
+  INCLUDES = -I/home/dendyforge/DendyForge/core -I/home/dendyforge/DendyForge/tests
+  OBJECT_DIR = CMakeFiles/DendyForge.dir
+  OBJECT_FILE_DIR = CMakeFiles/DendyForge.dir/tests/cartridge
   TARGET_SUPPORT_DIR = CMakeFiles/DendyForge.dir
 
 
@@ -116,7 +148,7 @@ build CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o: CXX_COMPILER__DendyForge_uns
 #############################################
 # Link the executable DendyForge
 
-build DendyForge: CXX_EXECUTABLE_LINKER__DendyForge_ CMakeFiles/DendyForge.dir/src/main.cpp.o CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o
+build DendyForge: CXX_EXECUTABLE_LINKER__DendyForge_ CMakeFiles/DendyForge.dir/src/main.cpp.o CMakeFiles/DendyForge.dir/core/cpu/cpu6502.cpp.o CMakeFiles/DendyForge.dir/core/ines/ines_reader.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge.cpp.o CMakeFiles/DendyForge.dir/core/cartridge/cartridge_info.cpp.o CMakeFiles/DendyForge.dir/core/mapper/mapper.cpp.o CMakeFiles/DendyForge.dir/core/mapper/mapper0.cpp.o CMakeFiles/DendyForge.dir/core/bus/bus.cpp.o CMakeFiles/DendyForge.dir/tests/test_runner.cpp.o CMakeFiles/DendyForge.dir/tests/cpu/cpu_tests.cpp.o CMakeFiles/DendyForge.dir/tests/bus/bus_tests.cpp.o CMakeFiles/DendyForge.dir/tests/cartridge/cartridge_tests.cpp.o
   DEP_FILE = CMakeFiles/DendyForge.dir/link.d
   LINK_FLAGS = -Wl,--dependency-file=CMakeFiles/DendyForge.dir/link.d
   OBJECT_DIR = CMakeFiles/DendyForge.dir
