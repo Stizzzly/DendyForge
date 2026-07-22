@@ -51,6 +51,7 @@ public:
     std::uint8_t Opcode() const;
     std::uint8_t Cycles() const;
     const char* CurrentInstruction() const;
+    std::uint8_t X() const;
 
 private:
 
@@ -68,6 +69,8 @@ private:
 
     // Загрузка и Сохранение (Load/Store)
     std::uint8_t LDA(); // Load Accumulator
+    std::uint8_t LDX(); // Load X
+    std::uint8_t LDY(); // Load Y
 
     // Арифметика и логика (ALU) пока пусто
 

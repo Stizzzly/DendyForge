@@ -277,6 +277,60 @@ void TestLDA()
         << '\n';
 }
 
+void TestLDX()
+{
+    std::cout << "\nLDX\n";
+
+    dendyforge::INesReader reader;
+
+    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
+    {
+        std::cout << "Failed to load cpu_test.nes\n";
+        return;
+    }
+
+    dendyforge::Cartridge cartridge(
+        reader.Header(),
+        reader.TakePRGRom(),
+        reader.TakeCHRRom());
+
+    dendyforge::Bus bus;
+    bus.InsertCartridge(&cartridge);
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    ExecuteInstruction(cpu); // JMP Main
+    ExecuteInstruction(cpu); // LDA #$42
+    ExecuteInstruction(cpu); // LDX #$11
+
+    std::cout
+        << "X = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.X())
+        << '\n';
+
+    std::cout
+        << "Zero = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+        << '\n';
+
+    std::cout
+        << "Negative = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+        << '\n';
+}
+
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Tests ===\n";
@@ -286,4 +340,5 @@ void RunCpuTests()
     TestFetch();
     TestDecode();
     TestLDA();
+    TestLDX();
 }

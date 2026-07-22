@@ -22,6 +22,14 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMP,
             .cycles = 2
         };
+
+        table[0xA2] = {
+            .name = "LDX",
+            .operate = &CPU6502::LDX,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
+
         table[0xA9] = {
             .name = "LDA",
             .operate = &CPU6502::LDA,
@@ -192,6 +200,18 @@ std::uint8_t CPU6502::LDA()
     return 0;
 }
 
+std::uint8_t CPU6502::LDX()
+{
+    FetchData();
+
+    m_x = m_fetched;
+
+    SetFlag(Flags::Z, m_x == 0x00);
+    SetFlag(Flags::N, m_x & 0x80);
+
+    return 0;
+}
+
 std::uint8_t CPU6502::ABS()
 {
     // Читаем младший байт адреса
@@ -225,4 +245,8 @@ std::uint8_t CPU6502::FetchData()
     return m_fetched;
 }
 
+std::uint8_t CPU6502::X() const
+{
+    return m_x;
+}
 } // namespace dendyforge
