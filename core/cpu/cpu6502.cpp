@@ -119,6 +119,16 @@ std::uint16_t CPU6502::ProgramCounter() const
     return m_pc;
 }
 
+std::uint8_t CPU6502::StackPointer() const
+{
+    return m_sp;
+}
+
+std::uint8_t CPU6502::Status() const
+{
+    return m_status;
+}
+
 std::uint8_t CPU6502::Fetch()
 {
     m_opcode = Read(m_pc);

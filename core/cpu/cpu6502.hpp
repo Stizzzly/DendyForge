@@ -42,10 +42,13 @@ public:
 
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
+
     std::uint16_t ProgramCounter() const;
+    std::uint8_t StackPointer() const;
+    std::uint8_t Status() const;
     std::uint8_t Opcode() const;
-    const char* CurrentInstruction() const;
     std::uint8_t Cycles() const;
+    const char* CurrentInstruction() const;
 
 private:
 
