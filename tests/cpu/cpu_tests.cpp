@@ -475,6 +475,44 @@ void TestStore()
         << std::setfill('0')
         << static_cast<int>(data)
         << '\n';
+
+    std::cout << "\nSTA,STX,STY (ZP0)\n";
+
+    ExecuteInstruction(cpu); // LDA #$AA
+    ExecuteInstruction(cpu); // STA $00
+
+    ExecuteInstruction(cpu); // LDX #$BB
+    ExecuteInstruction(cpu); // STX $01
+
+    ExecuteInstruction(cpu); // LDY #$CC
+    ExecuteInstruction(cpu); // STY $02
+
+    data = bus.CpuRead(0x0000);
+    std::cout << "$0000 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    data = bus.CpuRead(0x0001);
+    std::cout << "$0001 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    data = bus.CpuRead(0x0002);
+    std::cout << "$0002 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
 }
 void RunCpuTests()
 {

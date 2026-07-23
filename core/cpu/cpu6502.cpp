@@ -64,6 +64,20 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 4
         };
 
+        table[0x95] = {
+            .name = "STA",
+            .operate = &CPU6502::STA,
+            .addressMode = &CPU6502::ZPX,
+            .cycles = 4
+        };
+
+        table[0x96] = {
+            .name = "STX",
+            .operate = &CPU6502::STX,
+            .addressMode = &CPU6502::ZPY,
+            .cycles = 4
+        };
+
         table[0xA0] = {
             .name = "LDY",
             .operate = &CPU6502::LDY,
@@ -110,6 +124,33 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .operate = &CPU6502::JMP,
             .addressMode = &CPU6502::ABS,
             .cycles = 3
+        };
+        table[0xE8] = {
+            .name = "INX",
+            .operate = &CPU6502::INX,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0xC8] = {
+            .name = "INY",
+            .operate = &CPU6502::INY,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0xCA] = {
+            .name = "DEX",
+            .operate = &CPU6502::DEX,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0x88] = {
+            .name = "DEY",
+            .operate = &CPU6502::DEY,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
         };
 
         return table;
@@ -301,37 +342,77 @@ std::uint8_t CPU6502::STA()
 
 std::uint8_t CPU6502::STX()
 {
-    std::cout
-        << "STX: addr=$"
-        << std::hex << m_addrAbs
-        << " X=$"
-        << static_cast<int>(m_x)
-        << '\n';
-
     Write(m_addrAbs, m_x);
     return 0;
 }
 
 std::uint8_t CPU6502::STY()
 {
-    std::cout
-        << "STY: addr=$"
-        << std::hex << m_addrAbs
-        << " Y=$"
-        << static_cast<int>(m_y)
-        << '\n';
-
     Write(m_addrAbs, m_y);
     return 0;
 }
 
 std::uint8_t CPU6502::ZPX()
 {
+    // Читаем адрес из следующего байта
+    m_addrAbs = Read(m_pc);
+    ++m_pc;
+
+    // Добавляем X и оставляем только младший байт
+    m_addrAbs = (m_addrAbs + m_x) & 0x00FF;
+
     return 0;
 }
 
 std::uint8_t CPU6502::ZPY()
 {
+    // Читаем адрес из следующего байта
+    m_addrAbs = Read(m_pc);
+    ++m_pc;
+
+    // Добавляем Y и оставляем только младший байт
+    m_addrAbs = (m_addrAbs + m_y) & 0x00FF;
+
+    return 0;
+}
+
+std::uint8_t CPU6502::INX()
+{
+    ++m_x;
+
+    SetFlag(Flags::Z, m_x == 0x00);
+    SetFlag(Flags::N, (m_x & 0x80) != 0);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::INY()
+{
+    ++m_y;
+
+    SetFlag(Flags::Z, m_y == 0x00);
+    SetFlag(Flags::N, (m_y & 0x80) != 0);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::DEX()
+{
+    --m_x;
+
+    SetFlag(Flags::Z, m_x == 0x00);
+    SetFlag(Flags::N, (m_x & 0x80) != 0);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::DEY()
+{
+    --m_y;
+
+    SetFlag(Flags::Z, m_y == 0x00);
+    SetFlag(Flags::N, (m_y & 0x80) != 0);
+
     return 0;
 }
 

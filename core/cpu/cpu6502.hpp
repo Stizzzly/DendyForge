@@ -87,6 +87,12 @@ private:
 
     // Арифметика и логика (ALU) пока пусто
 
+    // Инкремент / Декремент
+    std::uint8_t INX(); // Increment X
+    std::uint8_t INY(); // Increment Y
+    std::uint8_t DEX(); // Decrement X
+    std::uint8_t DEY(); // Decrement Y
+
     // Изменение флагов (Status Flags)
     std::uint8_t SEI(); // Set Interrupt Disable
 
