@@ -513,6 +513,75 @@ void TestStore()
           << std::setfill('0')
           << static_cast<int>(data)
           << '\n';
+
+    std::cout << "\nSTA,STX,STY (ZPX/ZPY)\n";
+
+    ExecuteInstruction(cpu); // LDX #$05
+    ExecuteInstruction(cpu); // LDA #$42
+    ExecuteInstruction(cpu); // STA $10,X
+
+    ExecuteInstruction(cpu); // LDY #$03
+    ExecuteInstruction(cpu); // LDX #$99
+    ExecuteInstruction(cpu); // STX $20,Y
+
+    ExecuteInstruction(cpu); // LDX #$07
+    ExecuteInstruction(cpu); // LDY #$55
+    ExecuteInstruction(cpu); // STY $30,X
+
+    data = bus.CpuRead(0x0015);
+    std::cout << "$0015 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    data = bus.CpuRead(0x0023);
+    std::cout << "$0023 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    data = bus.CpuRead(0x0037);
+    std::cout << "$0037 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    std::cout << "\nZero Page Wrap\n";
+
+    ExecuteInstruction(cpu); // LDX #$10
+    ExecuteInstruction(cpu); // LDA #$77
+    ExecuteInstruction(cpu); // STA $F8,X
+
+    ExecuteInstruction(cpu); // LDY #$20
+    ExecuteInstruction(cpu); // LDX #$66
+    ExecuteInstruction(cpu); // STX $F0,Y
+
+    data = bus.CpuRead(0x0008);
+    std::cout << "$0008 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
+
+    data = bus.CpuRead(0x0010);
+    std::cout << "$0010 = $"
+          << std::hex
+          << std::uppercase
+          << std::setw(2)
+          << std::setfill('0')
+          << static_cast<int>(data)
+          << '\n';
 }
 void RunCpuTests()
 {

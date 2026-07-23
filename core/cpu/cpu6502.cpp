@@ -64,6 +64,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 4
         };
 
+        table[0x94] = {
+            .name = "STY",
+            .operate = &CPU6502::STY,
+            .addressMode = &CPU6502::ZPX,
+            .cycles = 4
+        };
+
         table[0x95] = {
             .name = "STA",
             .operate = &CPU6502::STA,
