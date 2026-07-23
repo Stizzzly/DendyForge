@@ -43,16 +43,16 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Reset Sequence
 - ✅ Instruction Fetch
 - ✅ Instruction Decode 
-- ⬜ Instruction Execute
+- 🟡 Instruction Execute
 - ⬜ IRQ Handling
 - ⬜ NMI Handling
 - ⬜ BRK / RTI
-- ⬜ Clock Cycle Emulation
+- 🟡 Clock Cycle Emulation
 
 ### Addressing Modes
 
-- ⬜ Implement all official addressing modes
-- ⬜ Zero-page wrapping
+- 🟡 Implement all official addressing modes
+- ✅ Zero-page wrapping
 - ⬜ Relative addressing
 - ⬜ Indirect JMP hardware bug
 - ⬜ Page-crossing cycle penalties
