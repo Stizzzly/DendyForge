@@ -246,12 +246,11 @@ void TestLDA()
     {
         cpu.Clock();
     }
-
-    //
-    // JMP Main
-    //
-    ExecuteInstruction(cpu);
-
+    ExecuteInstruction(cpu); // SEI
+    ExecuteInstruction(cpu); // CLD
+    ExecuteInstruction(cpu); // LDX #$FF
+    ExecuteInstruction(cpu); // TXS
+    ExecuteInstruction(cpu); // JMP Main
     //
     // LDA #$42
     //
@@ -307,10 +306,15 @@ void TestLDX()
         cpu.Clock();
     }
 
+    ExecuteInstruction(cpu); // SEI
+    ExecuteInstruction(cpu); // CLD
+    ExecuteInstruction(cpu); // LDX #$FF
+    ExecuteInstruction(cpu); // TXS
     ExecuteInstruction(cpu); // JMP Main
-    ExecuteInstruction(cpu); // LDA #$42
-    ExecuteInstruction(cpu); // LDX #$11
 
+    ExecuteInstruction(cpu); // LDA
+    ExecuteInstruction(cpu); // STA
+    ExecuteInstruction(cpu); // LDX
     std::cout
         << "X = $"
         << std::uppercase
@@ -361,11 +365,17 @@ void TestLDY()
         cpu.Clock();
     }
 
+    ExecuteInstruction(cpu); // SEI
+    ExecuteInstruction(cpu); // CLD
+    ExecuteInstruction(cpu); // LDX #$FF
+    ExecuteInstruction(cpu); // TXS
     ExecuteInstruction(cpu); // JMP Main
-    ExecuteInstruction(cpu); // LDA #$42
-    ExecuteInstruction(cpu); // LDX #$11
-    ExecuteInstruction(cpu); // LDY
 
+    ExecuteInstruction(cpu); // LDA
+    ExecuteInstruction(cpu); // STA
+    ExecuteInstruction(cpu); // LDX
+    ExecuteInstruction(cpu); // STX
+    ExecuteInstruction(cpu); // LDY
     std::cout
         << "Y = $"
         << std::uppercase
@@ -479,3 +489,4 @@ void RunCpuTests()
     TestLDY();
     TestStore();
 }
+
