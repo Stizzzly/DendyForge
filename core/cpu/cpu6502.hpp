@@ -53,6 +53,7 @@ public:
     const char* CurrentInstruction() const;
     std::uint8_t X() const;
     std::uint8_t Y() const;
+    void UpdateZN(std::uint8_t value);
 
 private:
 

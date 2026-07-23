@@ -311,10 +311,14 @@ std::uint8_t CPU6502::LDA()
 
     m_a = m_fetched;
 
-    SetFlag(Flags::Z, m_a == 0x00);
-    SetFlag(Flags::N, (m_a & 0x80) != 0);
-
+    UpdateZN(m_a);
     return 0;
+}
+
+void CPU6502::UpdateZN(std::uint8_t value)
+{
+    SetFlag(Flags::Z, value == 0x00);
+    SetFlag(Flags::N, value & 0x80);
 }
 
 std::uint8_t CPU6502::LDX()
@@ -323,9 +327,7 @@ std::uint8_t CPU6502::LDX()
 
     m_x = m_fetched;
 
-    SetFlag(Flags::Z, m_x == 0x00);
-    SetFlag(Flags::N, m_x & 0x80);
-
+    UpdateZN(m_x);
     return 0;
 }
 
@@ -335,9 +337,7 @@ std::uint8_t CPU6502::LDY()
 
     m_y = m_fetched;
 
-    SetFlag(Flags::Z, m_y == 0x00);
-    SetFlag(Flags::N, m_y & 0x80);
-
+    UpdateZN(m_y);
     return 0;
 }
 
@@ -387,9 +387,7 @@ std::uint8_t CPU6502::INX()
 {
     ++m_x;
 
-    SetFlag(Flags::Z, m_x == 0x00);
-    SetFlag(Flags::N, (m_x & 0x80) != 0);
-
+    UpdateZN(m_x);
     return 0;
 }
 
@@ -397,9 +395,7 @@ std::uint8_t CPU6502::INY()
 {
     ++m_y;
 
-    SetFlag(Flags::Z, m_y == 0x00);
-    SetFlag(Flags::N, (m_y & 0x80) != 0);
-
+    UpdateZN(m_y);
     return 0;
 }
 
@@ -408,7 +404,7 @@ std::uint8_t CPU6502::DEX()
     --m_x;
 
     SetFlag(Flags::Z, m_x == 0x00);
-    SetFlag(Flags::N, (m_x & 0x80) != 0);
+    SetFlag(Flags::N, m_x & 0x80);
 
     return 0;
 }
@@ -418,7 +414,7 @@ std::uint8_t CPU6502::DEY()
     --m_y;
 
     SetFlag(Flags::Z, m_y == 0x00);
-    SetFlag(Flags::N, (m_y & 0x80) != 0);
+    SetFlag(Flags::N, m_y & 0x80);
 
     return 0;
 }

@@ -9,7 +9,6 @@
 
 namespace
 {
-
 void ExecuteInstruction(dendyforge::CPU6502& cpu)
 {
     cpu.Clock();
@@ -19,6 +18,13 @@ void ExecuteInstruction(dendyforge::CPU6502& cpu)
         cpu.Clock();
     }
 }
+}
+void ExecuteInstructions(dendyforge::CPU6502& cpu, int count)
+{
+    while (count--)
+    {
+        ExecuteInstruction(cpu);
+    }
 }
 void TestFlags()
 {
@@ -246,16 +252,7 @@ void TestLDA()
     {
         cpu.Clock();
     }
-    ExecuteInstruction(cpu); // SEI
-    ExecuteInstruction(cpu); // CLD
-    ExecuteInstruction(cpu); // LDX #$FF
-    ExecuteInstruction(cpu); // TXS
-    ExecuteInstruction(cpu); // JMP Main
-    //
-    // LDA #$42
-    //
-    ExecuteInstruction(cpu);
-
+    ExecuteInstructions(cpu, 6);
     std::cout
         << "A = $"
         << std::uppercase
@@ -306,15 +303,7 @@ void TestLDX()
         cpu.Clock();
     }
 
-    ExecuteInstruction(cpu); // SEI
-    ExecuteInstruction(cpu); // CLD
-    ExecuteInstruction(cpu); // LDX #$FF
-    ExecuteInstruction(cpu); // TXS
-    ExecuteInstruction(cpu); // JMP Main
-
-    ExecuteInstruction(cpu); // LDA
-    ExecuteInstruction(cpu); // STA
-    ExecuteInstruction(cpu); // LDX
+    ExecuteInstructions(cpu, 7);
     std::cout
         << "X = $"
         << std::uppercase
@@ -365,17 +354,7 @@ void TestLDY()
         cpu.Clock();
     }
 
-    ExecuteInstruction(cpu); // SEI
-    ExecuteInstruction(cpu); // CLD
-    ExecuteInstruction(cpu); // LDX #$FF
-    ExecuteInstruction(cpu); // TXS
-    ExecuteInstruction(cpu); // JMP Main
-
-    ExecuteInstruction(cpu); // LDA
-    ExecuteInstruction(cpu); // STA
-    ExecuteInstruction(cpu); // LDX
-    ExecuteInstruction(cpu); // STX
-    ExecuteInstruction(cpu); // LDY
+    ExecuteInstructions(cpu, 10);
     std::cout
         << "Y = $"
         << std::uppercase
@@ -426,21 +405,7 @@ void TestStore()
         cpu.Clock();
     }
 
-    ExecuteInstruction(cpu); // SEI
-    ExecuteInstruction(cpu); // CLD
-    ExecuteInstruction(cpu); // LDX #$FF
-    ExecuteInstruction(cpu); // TXS
-    ExecuteInstruction(cpu); // JMP Main
-
-    ExecuteInstruction(cpu); // LDA
-    ExecuteInstruction(cpu); // STA
-
-    ExecuteInstruction(cpu); // LDX #$11
-    ExecuteInstruction(cpu); // STX
-
-    ExecuteInstruction(cpu); // LDY #$22
-    ExecuteInstruction(cpu); // STY
-
+    ExecuteInstructions(cpu, 11);
     std::uint8_t data = 0;
 
     data = bus.CpuRead(0x0200);
@@ -478,15 +443,7 @@ void TestStore()
 
     std::cout << "\nSTA,STX,STY (ZP0)\n";
 
-    ExecuteInstruction(cpu); // LDA #$AA
-    ExecuteInstruction(cpu); // STA $00
-
-    ExecuteInstruction(cpu); // LDX #$BB
-    ExecuteInstruction(cpu); // STX $01
-
-    ExecuteInstruction(cpu); // LDY #$CC
-    ExecuteInstruction(cpu); // STY $02
-
+    ExecuteInstructions(cpu, 6);
     data = bus.CpuRead(0x0000);
     std::cout << "$0000 = $"
           << std::hex
@@ -516,18 +473,7 @@ void TestStore()
 
     std::cout << "\nSTA,STX,STY (ZPX/ZPY)\n";
 
-    ExecuteInstruction(cpu); // LDX #$05
-    ExecuteInstruction(cpu); // LDA #$42
-    ExecuteInstruction(cpu); // STA $10,X
-
-    ExecuteInstruction(cpu); // LDY #$03
-    ExecuteInstruction(cpu); // LDX #$99
-    ExecuteInstruction(cpu); // STX $20,Y
-
-    ExecuteInstruction(cpu); // LDX #$07
-    ExecuteInstruction(cpu); // LDY #$55
-    ExecuteInstruction(cpu); // STY $30,X
-
+    ExecuteInstructions(cpu, 9);
     data = bus.CpuRead(0x0015);
     std::cout << "$0015 = $"
           << std::hex
@@ -557,14 +503,7 @@ void TestStore()
 
     std::cout << "\nZero Page Wrap\n";
 
-    ExecuteInstruction(cpu); // LDX #$10
-    ExecuteInstruction(cpu); // LDA #$77
-    ExecuteInstruction(cpu); // STA $F8,X
-
-    ExecuteInstruction(cpu); // LDY #$20
-    ExecuteInstruction(cpu); // LDX #$66
-    ExecuteInstruction(cpu); // STX $F0,Y
-
+    ExecuteInstructions(cpu, 6);
     data = bus.CpuRead(0x0008);
     std::cout << "$0008 = $"
           << std::hex
@@ -583,6 +522,56 @@ void TestStore()
           << static_cast<int>(data)
           << '\n';
 }
+
+void TestIncrementDecrement()
+{
+    std::cout << "\nINX,INY,DEX,DEY\n";
+
+    dendyforge::INesReader reader;
+
+    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
+    {
+        std::cout << "Failed to load cpu_test.nes\n";
+        return;
+    }
+
+    dendyforge::Cartridge cartridge(
+        reader.Header(),
+        reader.TakePRGRom(),
+        reader.TakeCHRRom());
+
+    dendyforge::Bus bus;
+    bus.InsertCartridge(&cartridge);
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    ExecuteInstructions(cpu, 40);
+    std::cout
+        << "X = $"
+        << std::hex
+        << std::uppercase
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.X())
+        << '\n';
+
+    std::cout
+        << "Y = $"
+        << std::hex
+        << std::uppercase
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.Y())
+        << '\n';
+}
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Tests ===\n";
@@ -595,5 +584,6 @@ void RunCpuTests()
     TestLDX();
     TestLDY();
     TestStore();
+    TestIncrementDecrement();
 }
 
