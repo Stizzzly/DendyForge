@@ -1,6 +1,7 @@
 #include "cpu6502.hpp"
 #include "../bus/bus.hpp"
-
+#include <ios>
+#include <iostream>
 namespace dendyforge
 {
 
@@ -22,12 +23,80 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMP,
             .cycles = 2
         };
+        table[0x85] = {
+            .name = "STA",
+            .operate = &CPU6502::STA,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
+        };
+
+        table[0x86] = {
+             .name = "STX",
+             .operate = &CPU6502::STX,
+             .addressMode = &CPU6502::ZP0,
+             .cycles = 3
+        };
+
+        table[0x84] = {
+            .name = "STY",
+            .operate = &CPU6502::STY,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
+        };
+        table[0x8D] = {
+            .name = "STA",
+            .operate = &CPU6502::STA,
+            .addressMode = &CPU6502::ABS,
+            .cycles = 4
+        };
+
+        table[0x8E] = {
+            .name = "STX",
+            .operate = &CPU6502::STX,
+            .addressMode = &CPU6502::ABS,
+            .cycles = 4
+        };
+
+        table[0x8C] = {
+            .name = "STY",
+            .operate = &CPU6502::STY,
+            .addressMode = &CPU6502::ABS,
+            .cycles = 4
+        };
+
+        table[0xA0] = {
+            .name = "LDY",
+            .operate = &CPU6502::LDY,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
 
         table[0xA2] = {
             .name = "LDX",
             .operate = &CPU6502::LDX,
             .addressMode = &CPU6502::IMM,
             .cycles = 2
+        };
+
+        table[0xA5] = {
+            .name = "LDA",
+            .operate = &CPU6502::LDA,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
+        };
+
+        table[0xA6] = {
+            .name = "LDX",
+            .operate = &CPU6502::LDX,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
+        };
+
+        table[0xA4] = {
+            .name = "LDY",
+            .operate = &CPU6502::LDY,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
         };
 
         table[0xA9] = {
@@ -212,6 +281,60 @@ std::uint8_t CPU6502::LDX()
     return 0;
 }
 
+std::uint8_t CPU6502::LDY()
+{
+    FetchData();
+
+    m_y = m_fetched;
+
+    SetFlag(Flags::Z, m_y == 0x00);
+    SetFlag(Flags::N, m_y & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::STA()
+{
+    Write(m_addrAbs, m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::STX()
+{
+    std::cout
+        << "STX: addr=$"
+        << std::hex << m_addrAbs
+        << " X=$"
+        << static_cast<int>(m_x)
+        << '\n';
+
+    Write(m_addrAbs, m_x);
+    return 0;
+}
+
+std::uint8_t CPU6502::STY()
+{
+    std::cout
+        << "STY: addr=$"
+        << std::hex << m_addrAbs
+        << " Y=$"
+        << static_cast<int>(m_y)
+        << '\n';
+
+    Write(m_addrAbs, m_y);
+    return 0;
+}
+
+std::uint8_t CPU6502::ZPX()
+{
+    return 0;
+}
+
+std::uint8_t CPU6502::ZPY()
+{
+    return 0;
+}
+
 std::uint8_t CPU6502::ABS()
 {
     // Читаем младший байт адреса
@@ -224,6 +347,16 @@ std::uint8_t CPU6502::ABS()
 
     // Собираем 16-битный адрес
     m_addrAbs = (hi << 8) | lo;
+
+    return 0;
+}
+
+std::uint8_t CPU6502::ZP0()
+{
+    m_addrAbs = Read(m_pc);
+    m_pc++;
+
+    m_addrAbs &= 0x00FF;
 
     return 0;
 }
@@ -248,5 +381,10 @@ std::uint8_t CPU6502::FetchData()
 std::uint8_t CPU6502::X() const
 {
     return m_x;
+}
+
+std::uint8_t CPU6502::Y() const
+{
+    return m_y;
 }
 } // namespace dendyforge

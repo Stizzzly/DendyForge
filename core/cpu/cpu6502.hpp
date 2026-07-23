@@ -52,6 +52,7 @@ public:
     std::uint8_t Cycles() const;
     const char* CurrentInstruction() const;
     std::uint8_t X() const;
+    std::uint8_t Y() const;
 
 private:
 
@@ -62,7 +63,16 @@ private:
     // Режимы адрессации
     std::uint8_t IMP(); // Implied
     std::uint8_t IMM(); // Immediate
+    std::uint8_t ZP0(); // Zero Page
+    std::uint8_t ZPX(); // Zero Page, X
+    std::uint8_t ZPY(); // Zero Page, Y
+    std::uint8_t REL(); // Relative
     std::uint8_t ABS(); // Absolute
+    std::uint8_t ABX(); // Absolute, X
+    std::uint8_t ABY(); // Absolute, Y
+    std::uint8_t IND(); // Indirect
+    std::uint8_t IZX(); // Indexed Indirect (Indirect, X)
+    std::uint8_t IZY(); // Indirect Indexed (Indirect), Y
 
     // Операции (Инструкции)
     std::uint8_t XXX(); // Illegal/Template
@@ -71,6 +81,9 @@ private:
     std::uint8_t LDA(); // Load Accumulator
     std::uint8_t LDX(); // Load X
     std::uint8_t LDY(); // Load Y
+    std::uint8_t STA(); // Store Accumulator
+    std::uint8_t STX(); // Store X
+    std::uint8_t STY(); // Store Y
 
     // Арифметика и логика (ALU) пока пусто
 
