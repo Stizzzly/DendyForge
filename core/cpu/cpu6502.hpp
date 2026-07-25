@@ -35,6 +35,8 @@ public:
 
     CPU6502();
 
+    void SetBCDSupport(bool enable);
+
     void ConnectBus(Bus* bus);
 
     void Reset();
@@ -56,6 +58,9 @@ public:
     void UpdateZN(std::uint8_t value);
 
 private:
+
+    // Decimal mode support(because Dendy CPU didnt have it)
+    bool m_supportBCD = true;
 
     // Bus interface
     std::uint8_t Read(std::uint16_t address);
@@ -94,6 +99,8 @@ private:
     std::uint8_t CMP();
     std::uint8_t CPX();
     std::uint8_t CPY();
+    std::uint8_t ADC();
+    std::uint8_t SBC();
 
     // Инкремент / Декремент
     std::uint8_t INX(); // Increment X

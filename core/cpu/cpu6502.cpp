@@ -67,6 +67,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0x69] = {
+            .name = "ADC",
+            .operate = &CPU6502::ADC,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
+
         table[0x78] = {
             .name = "SEI",
             .operate = &CPU6502::SEI,
@@ -294,6 +301,12 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0xE9] = {
+            .name = "SBC",
+            .operate = &CPU6502::SBC,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
         return table;
     }();
 
@@ -301,6 +314,11 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
 }
 CPU6502::CPU6502()
 {
+}
+
+void CPU6502::SetBCDSupport(bool enable)
+{
+    m_supportBCD = enable;
 }
 
 void CPU6502::ConnectBus(Bus* bus)
@@ -414,6 +432,35 @@ std::uint8_t CPU6502::Opcode() const
 const char* CPU6502::CurrentInstruction() const
 {
     return GetInstructionConfig(m_opcode).name;
+}
+
+std::uint8_t CPU6502::ADC()
+{
+    FetchData();
+
+    std::uint16_t temp =
+        static_cast<std::uint16_t>(m_a)
+        + static_cast<std::uint16_t>(m_fetched)
+        + static_cast<std::uint16_t>(GetFlag(Flags::C));
+
+    SetFlag(Flags::C, temp > 0xFF);
+
+    SetFlag(
+        Flags::V,
+        (~(m_a ^ m_fetched) & (m_a ^ temp) & 0x80)
+    );
+
+    m_a = temp & 0xFF;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::SBC()
+{
+    return 0;
 }
 
 std::uint8_t CPU6502::IMP()

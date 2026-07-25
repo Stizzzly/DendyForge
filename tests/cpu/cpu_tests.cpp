@@ -705,6 +705,70 @@ void TestCompareInstructions()
               << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
               << '\n';
 }
+
+void RunADCTest(
+    const std::string& rom,
+    const std::string& title)
+{
+    std::cout << "\n" << title << '\n';
+
+    dendyforge::Bus bus;
+    dendyforge::Cartridge cartridge({}, {}, {});
+
+    auto cpu = CreateCPU(rom, bus, cartridge);
+
+    ExecuteProgram(cpu);
+
+    std::cout << "A = $"
+              << std::uppercase
+              << std::hex
+              << std::setw(2)
+              << std::setfill('0')
+              << static_cast<int>(cpu.Accumulator())
+              << '\n';
+
+    std::cout << "Carry = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+              << '\n';
+
+    std::cout << "Zero = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+              << '\n';
+
+    std::cout << "Negative = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+              << '\n';
+
+    std::cout << "Overflow = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::V)
+              << '\n';
+}
+
+void TestADC()
+{
+    std::cout << "\nADC\n";
+
+    RunADCTest(
+        "tests/cpu/roms/adc/adc_normal.nes",
+        "Normal");
+
+    RunADCTest(
+        "tests/cpu/roms/adc/adc_carry.nes",
+        "Carry");
+
+    RunADCTest(
+        "tests/cpu/roms/adc/adc_zero.nes",
+        "Zero");
+
+    RunADCTest(
+        "tests/cpu/roms/adc/adc_overflow.nes",
+        "Overflow");
+
+    RunADCTest(
+        "tests/cpu/roms/adc/adc_carry_in.nes",
+        "Carry In");
+}
+
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Core ===\n";
@@ -723,4 +787,5 @@ void RunCpuTests()
     TestTransferInstructions();
     TestLogicalInstructions();
     TestCompareInstructions();
+    TestADC();
 }
