@@ -45,6 +45,20 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0x98] = {
+            .name = "TYA",
+            .operate = &CPU6502::TYA,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0x9A] = {
+            .name = "TXS",
+            .operate = &CPU6502::TXS,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
         table[0xD8] = {
             .name = "CLD",
             .operate = &CPU6502::CLD,
@@ -62,6 +76,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0xB8] = {
             .name = "CLV",
             .operate = &CPU6502::CLV,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0xBA] = {
+            .name = "TSX",
+            .operate = &CPU6502::TSX,
             .addressMode = &CPU6502::IMP,
             .cycles = 2
         };
@@ -104,6 +125,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .operate = &CPU6502::STY,
             .addressMode = &CPU6502::ABS,
             .cycles = 4
+        };
+
+        table[0x8A] = {
+            .name = "TXA",
+            .operate = &CPU6502::TXA,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
         };
 
         table[0x94] = {
@@ -162,10 +190,24 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 3
         };
 
+        table[0xA8] = {
+            .name = "TAY",
+            .operate = &CPU6502::TAY,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
         table[0xA9] = {
             .name = "LDA",
             .operate = &CPU6502::LDA,
             .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
+
+        table[0xAA] = {
+            .name = "TAX",
+            .operate = &CPU6502::TAX,
+            .addressMode = &CPU6502::IMP,
             .cycles = 2
         };
         table[0x4C] = {
@@ -397,6 +439,62 @@ void CPU6502::UpdateZN(std::uint8_t value)
 {
     SetFlag(Flags::Z, value == 0x00);
     SetFlag(Flags::N, value & 0x80);
+}
+
+std::uint8_t CPU6502::TAX()
+{
+    m_x = m_a;
+
+    SetFlag(Flags::Z, m_x == 0x00);
+    SetFlag(Flags::N, m_x & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::TAY()
+{
+    m_y = m_a;
+
+    SetFlag(Flags::Z, m_y == 0x00);
+    SetFlag(Flags::N, m_y & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::TXA()
+{
+    m_a = m_x;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::TYA()
+{
+    m_a = m_y;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::TSX()
+{
+    m_x = m_sp;
+
+    SetFlag(Flags::Z, m_x == 0x00);
+    SetFlag(Flags::N, m_x & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::TXS()
+{
+    m_sp = m_x;
+    return 0;
 }
 
 std::uint8_t CPU6502::LDX()

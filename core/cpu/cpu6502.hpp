@@ -95,13 +95,21 @@ private:
     std::uint8_t DEY(); // Decrement Y
 
     // Изменение флагов (Status Flags)
-    std::uint8_t CLC();
-    std::uint8_t SEC();
-    std::uint8_t CLI();
-    std::uint8_t SEI();
-    std::uint8_t CLD();
-    std::uint8_t SED();
-    std::uint8_t CLV();
+    std::uint8_t CLC(); // Clear Carry Flag
+    std::uint8_t SEC(); // Set Carry Flag
+    std::uint8_t CLI(); // Clear Interrupt Disable
+    std::uint8_t SEI(); // Set Interrupt Disable
+    std::uint8_t CLD(); // Clear Decimal Mode
+    std::uint8_t SED(); // Set Decimal Mode
+    std::uint8_t CLV(); // Clear Overflow Flag
+
+    // Переносы между регистрами (Register Transfers)
+    std::uint8_t TAX(); // Transfer A to X
+    std::uint8_t TAY(); // Transfer A to Y
+    std::uint8_t TXA(); // Transfer X to A
+    std::uint8_t TYA(); // Transfer Y to A
+    std::uint8_t TSX(); // Transfer Stack Pointer to X
+    std::uint8_t TXS(); // Transfer X to Stack Pointer
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump
