@@ -639,6 +639,45 @@ void TestTransferInstructions()
         << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
         << '\n';
 }
+
+void TestLogicalInstructions()
+{
+    std::cout << "\nLogical Instructions\n";
+
+    dendyforge::Bus bus;
+    dendyforge::Cartridge cartridge({}, {}, {});
+
+    auto cpu = CreateCPU(
+        "tests/cpu/roms/logical/logical_test.nes",
+        bus,
+        cartridge);
+
+    ExecuteProgram(cpu);
+
+    std::cout
+        << "A = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.Accumulator())
+        << '\n';
+
+    std::cout
+        << "Zero = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+        << '\n';
+
+    std::cout
+        << "Negative = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+        << '\n';
+
+    std::cout
+        << "Overflow = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::V)
+        << '\n';
+}
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Core ===\n";
@@ -655,4 +694,5 @@ void RunCpuTests()
     TestIncrementInstructions();
     TestFlagInstructions();
     TestTransferInstructions();
+    TestLogicalInstructions();
 }

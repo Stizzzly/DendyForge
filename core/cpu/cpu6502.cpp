@@ -17,6 +17,14 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 0
         });
 
+        table[0x09] = {
+            .name = "ORA",
+            .operate = &CPU6502::ORA,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
+
+
         table[0x18] = {
             .name = "CLC",
             .operate = &CPU6502::CLC,
@@ -24,10 +32,31 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0x24] = {
+            .name = "BIT",
+            .operate = &CPU6502::BIT,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 3
+        };
+
+        table[0x29] = {
+            .name = "AND",
+            .operate = &CPU6502::AND,
+            .addressMode = &CPU6502::IMM,
+            .cycles = 2
+        };
+
         table[0x38] = {
             .name = "SEC",
             .operate = &CPU6502::SEC,
             .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0x49] = {
+            .name = "EOR",
+            .operate = &CPU6502::EOR,
+            .addressMode = &CPU6502::IMM,
             .cycles = 2
         };
 
@@ -351,9 +380,9 @@ std::uint8_t CPU6502::Status() const
 
 std::uint8_t CPU6502::Fetch()
 {
-    m_opcode = Read(m_pc);
-    ++m_pc;
-    return m_opcode;
+   m_opcode = Read(m_pc);
+   ++m_pc;
+   return m_opcode;
 }
 
 std::uint8_t CPU6502::Opcode() const
@@ -439,6 +468,53 @@ void CPU6502::UpdateZN(std::uint8_t value)
 {
     SetFlag(Flags::Z, value == 0x00);
     SetFlag(Flags::N, value & 0x80);
+}
+
+std::uint8_t CPU6502::AND()
+{
+    FetchData();
+
+    m_a &= m_fetched;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::ORA()
+{
+    FetchData();
+
+    m_a |= m_fetched;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::EOR()
+{
+    FetchData();
+
+    m_a ^= m_fetched;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
+    return 0;
+}
+
+std::uint8_t CPU6502::BIT()
+{
+    FetchData();
+
+    SetFlag(Flags::Z, (m_a & m_fetched) == 0x00);
+    SetFlag(Flags::V, m_fetched & 0x40);
+    SetFlag(Flags::N, m_fetched & 0x80);
+
+    return 0;
 }
 
 std::uint8_t CPU6502::TAX()

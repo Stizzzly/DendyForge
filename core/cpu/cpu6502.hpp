@@ -86,7 +86,11 @@ private:
     std::uint8_t STX(); // Store X
     std::uint8_t STY(); // Store Y
 
-    // Арифметика и логика (ALU) пока пусто
+    // Арифметика и логика (ALU)
+    std::uint8_t AND(); // Logical AND
+    std::uint8_t ORA(); // Logical Inclusive OR
+    std::uint8_t EOR(); // Logical Exclusive OR / XOR
+    std::uint8_t BIT(); // Bit Test
 
     // Инкремент / Декремент
     std::uint8_t INX(); // Increment X
