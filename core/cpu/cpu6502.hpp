@@ -95,7 +95,13 @@ private:
     std::uint8_t DEY(); // Decrement Y
 
     // Изменение флагов (Status Flags)
-    std::uint8_t SEI(); // Set Interrupt Disable
+    std::uint8_t CLC();
+    std::uint8_t SEC();
+    std::uint8_t CLI();
+    std::uint8_t SEI();
+    std::uint8_t CLD();
+    std::uint8_t SED();
+    std::uint8_t CLV();
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump

@@ -19,12 +19,42 @@ void ExecuteInstruction(dendyforge::CPU6502& cpu)
     }
 }
 }
-void ExecuteInstructions(dendyforge::CPU6502& cpu, int count)
+
+void ExecuteProgram(dendyforge::CPU6502& cpu,
+                    int maxInstructions = 100)
 {
-    while (count--)
+    for (int i = 0; i < maxInstructions; i++)
     {
         ExecuteInstruction(cpu);
     }
+}
+
+dendyforge::CPU6502 CreateCPU(const std::string& romPath,
+                              dendyforge::Bus& bus,
+                              dendyforge::Cartridge& cartridge)
+{
+    dendyforge::INesReader reader;
+
+    if (!reader.Load(romPath))
+    {
+        throw std::runtime_error("Failed to load " + romPath);
+    }
+
+    cartridge = dendyforge::Cartridge(
+        reader.Header(),
+        reader.TakePRGRom(),
+        reader.TakeCHRRom());
+
+    bus.InsertCartridge(&cartridge);
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+        cpu.Clock();
+
+    return cpu;
 }
 void TestFlags()
 {
@@ -223,36 +253,20 @@ void TestDecode()
         << '\n';
 }
 
-void TestLDA()
+void TestLoadInstructions()
 {
-    std::cout << "\nLDA\n";
-
-    dendyforge::INesReader reader;
-
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
-    {
-        std::cout << "Failed to load cpu_test.nes\n";
-        return;
-    }
-
-    dendyforge::Cartridge cartridge(
-        reader.Header(),
-        reader.TakePRGRom(),
-        reader.TakeCHRRom());
+    std::cout << "\nLoad Instructions\n";
 
     dendyforge::Bus bus;
-    bus.InsertCartridge(&cartridge);
+    dendyforge::Cartridge cartridge({}, {}, {});
 
-    dendyforge::CPU6502 cpu;
-    cpu.ConnectBus(&bus);
+    auto cpu = CreateCPU(
+        "tests/cpu/roms/load/load_test.nes",
+        bus,
+        cartridge);
 
-    cpu.Reset();
+    ExecuteProgram(cpu);
 
-    while (cpu.Cycles() > 0)
-    {
-        cpu.Clock();
-    }
-    ExecuteInstructions(cpu, 6);
     std::cout
         << "A = $"
         << std::uppercase
@@ -270,40 +284,8 @@ void TestLDA()
     std::cout
         << "Negative = "
         << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
-        << '\n';
-}
+        << "\n\n";
 
-void TestLDX()
-{
-    std::cout << "\nLDX\n";
-
-    dendyforge::INesReader reader;
-
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
-    {
-        std::cout << "Failed to load cpu_test.nes\n";
-        return;
-    }
-
-    dendyforge::Cartridge cartridge(
-        reader.Header(),
-        reader.TakePRGRom(),
-        reader.TakeCHRRom());
-
-    dendyforge::Bus bus;
-    bus.InsertCartridge(&cartridge);
-
-    dendyforge::CPU6502 cpu;
-    cpu.ConnectBus(&bus);
-
-    cpu.Reset();
-
-    while (cpu.Cycles() > 0)
-    {
-        cpu.Clock();
-    }
-
-    ExecuteInstructions(cpu, 7);
     std::cout
         << "X = $"
         << std::uppercase
@@ -321,40 +303,8 @@ void TestLDX()
     std::cout
         << "Negative = "
         << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
-        << '\n';
-}
+        << "\n\n";
 
-void TestLDY()
-{
-    std::cout << "\nLDY\n";
-
-    dendyforge::INesReader reader;
-
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
-    {
-        std::cout << "Failed to load cpu_test.nes\n";
-        return;
-    }
-
-    dendyforge::Cartridge cartridge(
-        reader.Header(),
-        reader.TakePRGRom(),
-        reader.TakeCHRRom());
-
-    dendyforge::Bus bus;
-    bus.InsertCartridge(&cartridge);
-
-    dendyforge::CPU6502 cpu;
-    cpu.ConnectBus(&bus);
-
-    cpu.Reset();
-
-    while (cpu.Cycles() > 0)
-    {
-        cpu.Clock();
-    }
-
-    ExecuteInstructions(cpu, 10);
     std::cout
         << "Y = $"
         << std::uppercase
@@ -375,13 +325,13 @@ void TestLDY()
         << '\n';
 }
 
-void TestStore()
+void TestStoreInstructions()
 {
     std::cout << "\nSTA,STX,STY\n";
 
     dendyforge::INesReader reader;
 
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
+    if (!reader.Load("tests/cpu/roms/store/store_test.nes"))
     {
         std::cout << "Failed to load cpu_test.nes\n";
         return;
@@ -405,7 +355,7 @@ void TestStore()
         cpu.Clock();
     }
 
-    ExecuteInstructions(cpu, 11);
+    ExecuteProgram(cpu);
     std::uint8_t data = 0;
 
     data = bus.CpuRead(0x0200);
@@ -443,7 +393,7 @@ void TestStore()
 
     std::cout << "\nSTA,STX,STY (ZP0)\n";
 
-    ExecuteInstructions(cpu, 6);
+    ExecuteProgram(cpu);
     data = bus.CpuRead(0x0000);
     std::cout << "$0000 = $"
           << std::hex
@@ -473,7 +423,7 @@ void TestStore()
 
     std::cout << "\nSTA,STX,STY (ZPX/ZPY)\n";
 
-    ExecuteInstructions(cpu, 9);
+    ExecuteProgram(cpu);
     data = bus.CpuRead(0x0015);
     std::cout << "$0015 = $"
           << std::hex
@@ -503,7 +453,7 @@ void TestStore()
 
     std::cout << "\nZero Page Wrap\n";
 
-    ExecuteInstructions(cpu, 6);
+    ExecuteProgram(cpu);
     data = bus.CpuRead(0x0008);
     std::cout << "$0008 = $"
           << std::hex
@@ -523,13 +473,13 @@ void TestStore()
           << '\n';
 }
 
-void TestIncrementDecrement()
+void TestIncrementInstructions()
 {
     std::cout << "\nINX,INY,DEX,DEY\n";
 
     dendyforge::INesReader reader;
 
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
+    if (!reader.Load("tests/cpu/roms/increment/increment_test.nes"))
     {
         std::cout << "Failed to load cpu_test.nes\n";
         return;
@@ -553,7 +503,7 @@ void TestIncrementDecrement()
         cpu.Clock();
     }
 
-    ExecuteInstructions(cpu, 40);
+    ExecuteProgram(cpu);
     std::cout
         << "X = $"
         << std::hex
@@ -572,18 +522,75 @@ void TestIncrementDecrement()
         << static_cast<int>(cpu.Y())
         << '\n';
 }
+
+void TestFlagInstructions()
+{
+    std::cout << "\nFlag Instructions\n";
+
+    dendyforge::INesReader reader;
+
+    if (!reader.Load("tests/cpu/roms/flags/flag_test.nes"))
+    {
+        std::cout << "Failed to load cpu_test.nes\n";
+        return;
+    }
+
+    dendyforge::Cartridge cartridge(
+        reader.Header(),
+        reader.TakePRGRom(),
+        reader.TakeCHRRom());
+
+    dendyforge::Bus bus;
+    bus.InsertCartridge(&cartridge);
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    ExecuteProgram(cpu);
+
+    std::cout << "I=" << cpu.GetFlag(dendyforge::CPU6502::Flags::I)
+              << '\n';
+    std::cout
+        << "Carry = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+        << '\n';
+
+    std::cout
+        << "Interrupt = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::I)
+        << '\n';
+
+    std::cout
+        << "Decimal = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::D)
+        << '\n';
+
+    std::cout
+        << "Overflow = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::V)
+        << '\n';
+
+}
 void RunCpuTests()
 {
-    std::cout << "\n=== CPU Tests ===\n";
+    std::cout << "\n=== CPU Core ===\n";
 
     TestFlags();
     TestReset();
     TestFetch();
     TestDecode();
-    TestLDA();
-    TestLDX();
-    TestLDY();
-    TestStore();
-    TestIncrementDecrement();
-}
 
+    std::cout << "\n=== Instruction Tests ===\n";
+
+    TestLoadInstructions();
+    TestStoreInstructions();
+    TestIncrementInstructions();
+    TestFlagInstructions();
+}
