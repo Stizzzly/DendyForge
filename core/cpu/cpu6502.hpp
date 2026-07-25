@@ -91,6 +91,9 @@ private:
     std::uint8_t ORA(); // Logical Inclusive OR
     std::uint8_t EOR(); // Logical Exclusive OR / XOR
     std::uint8_t BIT(); // Bit Test
+    std::uint8_t CMP();
+    std::uint8_t CPX();
+    std::uint8_t CPY();
 
     // Инкремент / Декремент
     std::uint8_t INX(); // Increment X

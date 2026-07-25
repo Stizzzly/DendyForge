@@ -678,6 +678,33 @@ void TestLogicalInstructions()
         << cpu.GetFlag(dendyforge::CPU6502::Flags::V)
         << '\n';
 }
+
+void TestCompareInstructions()
+{
+    std::cout << "\nCompare Instructions\n";
+
+    dendyforge::Bus bus;
+    dendyforge::Cartridge cartridge({}, {}, {});
+
+    auto cpu = CreateCPU(
+        "tests/cpu/roms/compare/compare_test.nes",
+        bus,
+        cartridge);
+
+    ExecuteProgram(cpu);
+
+    std::cout << "Carry = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+              << '\n';
+
+    std::cout << "Zero = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+              << '\n';
+
+    std::cout << "Negative = "
+              << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+              << '\n';
+}
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Core ===\n";
@@ -695,4 +722,5 @@ void RunCpuTests()
     TestFlagInstructions();
     TestTransferInstructions();
     TestLogicalInstructions();
+    TestCompareInstructions();
 }

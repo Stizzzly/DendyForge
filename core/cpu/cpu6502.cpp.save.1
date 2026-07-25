@@ -254,23 +254,16 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
 
         table[0xC0] = {
             .name = "CPY",
-            .operate = &CPU6502::CPY,
-            .addressMode = &CPU6502::IMM,
-            .cycles = 2
-        };
+    .operate = &CPU6502::CPY,
+    .addressMode = &CPU6502::IMM,
+    .cycles = 2
+};
 
         table[0xC8] = {
             .name = "INY",
             .operate = &CPU6502::INY,
             .addressMode = &CPU6502::IMP,
             .cycles = 2
-        };
-
-        table[0xC9] = {
-             .name = "CMP",
-             .operate = &CPU6502::CMP,
-             .addressMode = &CPU6502::IMM,
-             .cycles = 2
         };
 
         table[0xCA] = {
@@ -284,13 +277,6 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .name = "DEY",
             .operate = &CPU6502::DEY,
             .addressMode = &CPU6502::IMP,
-            .cycles = 2
-        };
-
-        table[0xE0] = {
-            .name = "CPX",
-            .operate = &CPU6502::CPX,
-            .addressMode = &CPU6502::IMM,
             .cycles = 2
         };
 
@@ -489,61 +475,6 @@ void CPU6502::UpdateZN(std::uint8_t value)
 {
     SetFlag(Flags::Z, value == 0x00);
     SetFlag(Flags::N, value & 0x80);
-}
-
-std::uint8_t CPU6502::CMP()
-{
-    FetchData();
-
-    std::uint16_t temp =
-        static_cast<std::uint16_t>(m_a)
-        - static_cast<std::uint16_t>(m_fetched);
-
-    SetFlag(Flags::C, m_a >= m_fetched);
-    SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
-    SetFlag(Flags::N, temp & 0x80);
-
-    return 0;
-}
-
-std::uint8_t CPU6502::CPX()
-{
-    FetchData();
-
-    std::uint16_t temp =
-        static_cast<std::uint16_t>(m_x)
-        - static_cast<std::uint16_t>(m_fetched);
-
-    SetFlag(Flags::C, m_x >= m_fetched);
-    SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
-    SetFlag(Flags::N, temp & 0x80);
-
-    std::cout
-    << "X=$"
-    << std::hex
-    << static_cast<int>(m_x)
-    << " fetched=$"
-    << static_cast<int>(m_fetched)
-    << " temp=$"
-    << temp
-    << '\n';
-
-    return 0;
-}
-
-std::uint8_t CPU6502::CPY()
-{
-    FetchData();
-
-    std::uint16_t temp =
-        static_cast<std::uint16_t>(m_y)
-        - static_cast<std::uint16_t>(m_fetched);
-
-    SetFlag(Flags::C, m_y >= m_fetched);
-    SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
-    SetFlag(Flags::N, temp & 0x80);
-
-    return 0;
 }
 
 std::uint8_t CPU6502::AND()
