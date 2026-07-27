@@ -460,6 +460,28 @@ std::uint8_t CPU6502::ADC()
 
 std::uint8_t CPU6502::SBC()
 {
+    FetchData();
+
+    std::uint16_t value =
+        static_cast<std::uint16_t>(m_fetched) ^ 0x00FF;
+
+    std::uint16_t temp =
+        static_cast<std::uint16_t>(m_a)
+        + value
+        + static_cast<std::uint16_t>(GetFlag(Flags::C));
+
+    SetFlag(Flags::C, temp & 0xFF00);
+
+    SetFlag(
+        Flags::V,
+        ((temp ^ m_a) & (temp ^ value) & 0x0080)
+    );
+
+    m_a = temp & 0x00FF;
+
+    SetFlag(Flags::Z, m_a == 0x00);
+    SetFlag(Flags::N, m_a & 0x80);
+
     return 0;
 }
 

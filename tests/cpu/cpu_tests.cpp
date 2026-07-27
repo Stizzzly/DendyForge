@@ -769,6 +769,74 @@ void TestADC()
         "Carry In");
 }
 
+void RunArithmeticTest(
+    const std::string& rom,
+    const std::string& title)
+{
+    std::cout << "\n" << title << '\n';
+
+    dendyforge::Bus bus;
+    dendyforge::Cartridge cartridge({}, {}, {});
+
+    auto cpu = CreateCPU(rom, bus, cartridge);
+
+    ExecuteProgram(cpu);
+
+    std::cout
+        << "A = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.Accumulator())
+        << '\n';
+
+    std::cout
+        << "Carry = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+        << '\n';
+
+    std::cout
+        << "Zero = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+        << '\n';
+
+    std::cout
+        << "Negative = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+        << '\n';
+
+    std::cout
+        << "Overflow = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::V)
+        << '\n';
+}
+
+void TestSBC()
+{
+    std::cout << "\nSBC\n";
+
+    RunArithmeticTest(
+        "tests/cpu/roms/sbc/sbc_normal.nes",
+        "Normal");
+
+    RunArithmeticTest(
+        "tests/cpu/roms/sbc/sbc_borrow.nes",
+        "Borrow");
+
+    RunArithmeticTest(
+        "tests/cpu/roms/sbc/sbc_zero.nes",
+        "Zero");
+
+    RunArithmeticTest(
+        "tests/cpu/roms/sbc/sbc_overflow.nes",
+        "Overflow");
+
+    RunArithmeticTest(
+        "tests/cpu/roms/sbc/sbc_borrow_in.nes",
+        "Borrow In");
+}
+
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Core ===\n";
@@ -788,4 +856,5 @@ void RunCpuTests()
     TestLogicalInstructions();
     TestCompareInstructions();
     TestADC();
+    TestSBC();
 }
