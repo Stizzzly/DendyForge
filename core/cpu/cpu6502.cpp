@@ -17,6 +17,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 0
         });
 
+        table[0x06] = {
+            .name = "ASL",
+            .operate = &CPU6502::ASL,
+            .addressMode = &CPU6502::ZP0,
+            .cycles = 5
+        };
+
         table[0x09] = {
             .name = "ORA",
             .operate = &CPU6502::ORA,
@@ -24,6 +31,33 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0x0A] = {
+            .name = "ASL",
+            .operate = &CPU6502::ASL,
+            .addressMode = &CPU6502::IMP,
+            .cycles = 2
+        };
+
+        table[0x0E] = {
+            .name = "ASL",
+            .operate = &CPU6502::ASL,
+            .addressMode = &CPU6502::ABS,
+            .cycles = 6
+        };
+
+        table[0x1E] = {
+            .name = "ASL",
+            .operate = &CPU6502::ASL,
+            .addressMode = &CPU6502::ABX,
+            .cycles = 7
+        };
+
+        table[0x16] = {
+            .name = "ASL",
+            .operate = &CPU6502::ASL,
+            .addressMode = &CPU6502::ZPX,
+            .cycles = 6
+        };
 
         table[0x18] = {
             .name = "CLC",
@@ -316,11 +350,6 @@ CPU6502::CPU6502()
 {
 }
 
-void CPU6502::SetBCDSupport(bool enable)
-{
-    m_supportBCD = enable;
-}
-
 void CPU6502::ConnectBus(Bus* bus)
 {
     m_bus = bus;
@@ -432,6 +461,66 @@ std::uint8_t CPU6502::Opcode() const
 const char* CPU6502::CurrentInstruction() const
 {
     return GetInstructionConfig(m_opcode).name;
+}
+
+std::uint8_t CPU6502::ABX()
+{
+    std::uint16_t lo = Read(m_pc);
+    ++m_pc;
+
+    std::uint16_t hi = Read(m_pc);
+    ++m_pc;
+
+    m_addrAbs = (hi << 8) | lo;
+
+    std::uint16_t oldPage = m_addrAbs & 0xFF00;
+
+    m_addrAbs += m_x;
+
+    return ((m_addrAbs & 0xFF00) != oldPage);
+}
+
+std::uint8_t CPU6502::ABY()
+{
+    std::uint16_t lo = Read(m_pc);
+    ++m_pc;
+
+    std::uint16_t hi = Read(m_pc);
+    ++m_pc;
+
+    m_addrAbs = (hi << 8) | lo;
+
+    std::uint16_t oldPage = m_addrAbs & 0xFF00;
+
+    m_addrAbs += m_y;
+
+    return ((m_addrAbs & 0xFF00) != oldPage);
+}
+
+std::uint8_t CPU6502::ASL()
+{
+    FetchData();
+
+    std::uint16_t temp =
+        static_cast<std::uint16_t>(m_fetched) << 1;
+
+    SetFlag(Flags::C, (temp & 0xFF00) != 0);
+
+    temp &= 0x00FF;
+
+    SetFlag(Flags::Z, temp == 0x00);
+    SetFlag(Flags::N, (temp & 0x80) != 0);
+
+    if (GetInstructionConfig(m_opcode).addressMode == &CPU6502::IMP)
+    {
+        m_a = static_cast<std::uint8_t>(temp);
+    }
+    else
+    {
+        Write(m_addrAbs, static_cast<std::uint8_t>(temp));
+    }
+
+    return 0;
 }
 
 std::uint8_t CPU6502::ADC()

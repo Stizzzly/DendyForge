@@ -837,6 +837,89 @@ void TestSBC()
         "Borrow In");
 }
 
+void RunShiftTest(
+    const std::string& rom,
+    const std::string& title)
+{
+    std::cout << "\n" << title << '\n';
+
+    dendyforge::Bus bus;
+    dendyforge::Cartridge cartridge({}, {}, {});
+
+    auto cpu = CreateCPU(rom, bus, cartridge);
+
+    ExecuteProgram(cpu);
+
+    std::cout
+        << "A = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(cpu.Accumulator())
+        << '\n';
+
+    std::cout
+        << "Carry = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::C)
+        << '\n';
+
+    std::cout
+        << "Zero = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::Z)
+        << '\n';
+
+    std::cout
+        << "Negative = "
+        << cpu.GetFlag(dendyforge::CPU6502::Flags::N)
+        << '\n';
+
+    std::cout
+        << "$0010 = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(bus.CpuRead(0x0010))
+        << '\n';
+
+    std::cout
+        << "$0011 = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(bus.CpuRead(0x0011))
+        << '\n';
+
+    std::cout
+        << "$0200 = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(bus.CpuRead(0x0200))
+        << '\n';
+
+    std::cout
+        << "$0201 = $"
+        << std::uppercase
+        << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << static_cast<int>(bus.CpuRead(0x0201))
+        << '\n';
+}
+
+void TestASL()
+{
+    std::cout << "\nASL\n";
+
+    RunShiftTest(
+        "tests/cpu/roms/asl/asl_test.nes",
+        "Shift Left");
+}
+
 void RunCpuTests()
 {
     std::cout << "\n=== CPU Core ===\n";
@@ -857,4 +940,5 @@ void RunCpuTests()
     TestCompareInstructions();
     TestADC();
     TestSBC();
+    TestASL();
 }

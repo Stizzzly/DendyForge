@@ -35,8 +35,6 @@ public:
 
     CPU6502();
 
-    void SetBCDSupport(bool enable);
-
     void ConnectBus(Bus* bus);
 
     void Reset();
@@ -58,9 +56,6 @@ public:
     void UpdateZN(std::uint8_t value);
 
 private:
-
-    // Decimal mode support(because Dendy CPU didnt have it)
-    bool m_supportBCD = true;
 
     // Bus interface
     std::uint8_t Read(std::uint16_t address);
@@ -124,6 +119,8 @@ private:
     std::uint8_t TYA(); // Transfer Y to A
     std::uint8_t TSX(); // Transfer Stack Pointer to X
     std::uint8_t TXS(); // Transfer X to Stack Pointer
+
+    std::uint8_t ASL();
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump
