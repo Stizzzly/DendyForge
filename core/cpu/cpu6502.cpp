@@ -1,7 +1,5 @@
 #include "cpu6502.hpp"
 #include "../bus/bus.hpp"
-#include <ios>
-#include <iostream>
 namespace dendyforge
 {
 
@@ -675,16 +673,6 @@ std::uint8_t CPU6502::CPX()
     SetFlag(Flags::C, m_x >= m_fetched);
     SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
     SetFlag(Flags::N, temp & 0x80);
-
-    std::cout
-    << "X=$"
-    << std::hex
-    << static_cast<int>(m_x)
-    << " fetched=$"
-    << static_cast<int>(m_fetched)
-    << " temp=$"
-    << temp
-    << '\n';
 
     return 0;
 }

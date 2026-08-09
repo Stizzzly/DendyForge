@@ -6,28 +6,50 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(DendyForge
-    src/main.cpp
-
+add_library(DendyForgeCore
     core/cpu/cpu6502.cpp
-
     core/ines/ines_reader.cpp
-
     core/cartridge/cartridge.cpp
     core/cartridge/cartridge_info.cpp
-
     core/mapper/mapper.cpp
     core/mapper/mapper0.cpp
-
     core/bus/bus.cpp
+)
 
-    tests/test_runner.cpp
+target_include_directories(DendyForgeCore PUBLIC
+    core
+)
+
+add_executable(DendyForgeTests
+    tests/test_main.cpp
     tests/cpu/cpu_tests.cpp
     tests/bus/bus_tests.cpp
     tests/cartridge/cartridge_tests.cpp
 )
 
-target_include_directories(DendyForge PRIVATE
-    core
+target_link_libraries(DendyForgeTests PRIVATE DendyForgeCore)
+
+target_include_directories(DendyForgeTests PRIVATE
     tests
+    tests/third_party
 )
+
+target_compile_definitions(DendyForgeTests PRIVATE
+    DENDYFORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+if(MINGW)
+    get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+
+    foreach(runtimeDll
+        libgcc_s_seh-1.dll
+        libstdc++-6.dll
+        libwinpthread-1.dll
+    )
+        add_custom_command(TARGET DendyForgeTests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MINGW_BIN_DIR}/${runtimeDll}"
+                "$<TARGET_FILE_DIR:DendyForgeTests>"
+        )
+    endforeach()
+endif()

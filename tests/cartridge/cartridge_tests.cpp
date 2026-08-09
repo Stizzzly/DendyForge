@@ -1,41 +1,22 @@
-#include "cartridge_tests.hpp"
-
-#include <iostream>
+#include <doctest/doctest.h>
 
 #include "ines/ines_reader.hpp"
 #include "cartridge/cartridge.hpp"
+#include "cpu/cpu_test_support.hpp"
 
-void RunCartridgeTests()
+TEST_CASE("iNES reader loads the CPU test cartridge")
 {
-    std::cout << "\n=== Cartridge Tests ===\n";
-
     dendyforge::INesReader reader;
+    const auto path = dendyforge::test::RomPath("cpu_test.nes");
 
-    if (!reader.Load("tests/cpu/roms/cpu_test.nes"))
-    {
-        std::cout << "FAIL: ROM loading\n";
-        return;
-    }
+    REQUIRE_MESSAGE(reader.Load(path.string()), "Unable to load ROM: " << path.string());
 
     dendyforge::Cartridge cartridge(
         reader.Header(),
         reader.TakePRGRom(),
         reader.TakeCHRRom());
 
-    std::cout << "PASS: ROM loading\n";
-
-    std::cout
-        << "Mapper : "
-        << static_cast<int>(cartridge.Info().Mapper())
-        << '\n';
-
-    std::cout
-        << "PRG ROM : "
-        << cartridge.PRGRom().size()
-        << '\n';
-
-    std::cout
-        << "CHR ROM : "
-        << cartridge.CHRRom().size()
-        << '\n';
+    CHECK(cartridge.Info().Mapper() == 0);
+    CHECK(cartridge.PRGRom().size() == 32 * 1024);
+    CHECK(cartridge.CHRRom().size() == 8 * 1024);
 }
