@@ -1,0 +1,51 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-clang-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "environment": {
+        "PATH": "C:/msys64/mingw64/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "C:/msys64/mingw64/bin/clang++.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/msys64/mingw64/bin/ninja.exe"
+      }
+    },
+    {
+      "name": "mingw-clang-debug",
+      "displayName": "MinGW64 Clang Debug",
+      "description": "Windows x64 build with MinGW64, Clang, and Ninja.",
+      "inherits": "mingw-clang-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "mingw-clang-release",
+      "displayName": "MinGW64 Clang Release",
+      "description": "Windows x64 build with MinGW64, Clang, and Ninja.",
+      "inherits": "mingw-clang-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw-clang-debug",
+      "configurePreset": "mingw-clang-debug"
+    },
+    {
+      "name": "mingw-clang-release",
+      "configurePreset": "mingw-clang-release"
+    }
+  ]
+}
