@@ -346,3 +346,16 @@ TEST_CASE("CPU executes stack and subroutine instructions")
     CHECK_FALSE(machine->cpu.GetFlag(CPU6502::Flags::D));
     CHECK(machine->cpu.StackPointer() == 0xFF);
 }
+
+TEST_CASE("CPU enters a BRK handler and resumes through RTI")
+{
+    const auto path = RomPath("interrupts/interrupts_test.nes");
+    auto machine = LoadCpuMachine("interrupts/interrupts_test.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0200) == 0x42);
+    CHECK(machine->bus.CpuRead(0x0201) == 0x55);
+    CHECK(machine->cpu.StackPointer() == 0xFF);
+}

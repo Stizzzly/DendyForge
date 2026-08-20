@@ -385,6 +385,9 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0xE1] = {"SBC", &CPU6502::SBC, &CPU6502::IZX, 6};
         table[0xF1] = {"SBC", &CPU6502::SBC, &CPU6502::IZY, 5};
 
+        table[0x00] = {"BRK", &CPU6502::BRK, &CPU6502::IMP, 7};
+        table[0x40] = {"RTI", &CPU6502::RTI, &CPU6502::IMP, 6};
+
         table[0x08] = {"PHP", &CPU6502::PHP, &CPU6502::IMP, 3};
         table[0x28] = {"PLP", &CPU6502::PLP, &CPU6502::IMP, 4};
         table[0x48] = {"PHA", &CPU6502::PHA, &CPU6502::IMP, 3};
@@ -467,6 +470,23 @@ void CPU6502::Clock()
     }
 
     --m_cycles;
+}
+
+void CPU6502::IRQ()
+{
+    if (GetFlag(Flags::I))
+    {
+        return;
+    }
+
+    EnterInterrupt(0xFFFE, false);
+    m_cycles = 7;
+}
+
+void CPU6502::NMI()
+{
+    EnterInterrupt(0xFFFA, false);
+    m_cycles = 7;
 }
 
 std::uint8_t CPU6502::Accumulator() const
@@ -1168,6 +1188,25 @@ std::uint8_t CPU6502::RTS()
     return 0;
 }
 
+std::uint8_t CPU6502::BRK()
+{
+    ++m_pc;
+    EnterInterrupt(0xFFFE, true);
+    return 0;
+}
+
+std::uint8_t CPU6502::RTI()
+{
+    m_status = Pop();
+    SetFlag(Flags::B, false);
+    SetFlag(Flags::U, true);
+
+    const std::uint16_t lo = Pop();
+    const std::uint16_t hi = Pop();
+    m_pc = (hi << 8) | lo;
+    return 0;
+}
+
 void CPU6502::BranchIf(bool condition)
 {
     if (!condition)
@@ -1184,6 +1223,31 @@ void CPU6502::BranchIf(bool condition)
     }
 
     m_pc = targetAddress;
+}
+
+void CPU6502::EnterInterrupt(std::uint16_t vector, bool breakInstruction)
+{
+    Push((m_pc >> 8) & 0x00FF);
+    Push(m_pc & 0x00FF);
+
+    std::uint8_t status = m_status | static_cast<std::uint8_t>(Flags::U);
+    if (breakInstruction)
+    {
+        status |= static_cast<std::uint8_t>(Flags::B);
+    }
+    else
+    {
+        status &= ~static_cast<std::uint8_t>(Flags::B);
+    }
+
+    Push(status);
+    SetFlag(Flags::B, false);
+    SetFlag(Flags::U, true);
+    SetFlag(Flags::I, true);
+
+    const std::uint16_t lo = Read(vector);
+    const std::uint16_t hi = Read(vector + 1);
+    m_pc = (hi << 8) | lo;
 }
 
 std::uint8_t CPU6502::BCC()

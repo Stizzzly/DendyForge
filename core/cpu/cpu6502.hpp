@@ -40,6 +40,8 @@ public:
 
     void Reset();
     void Clock();
+    void IRQ();
+    void NMI();
 
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
@@ -143,6 +145,8 @@ private:
     std::uint8_t JMP(); // Jump
     std::uint8_t JSR(); // Jump to Subroutine
     std::uint8_t RTS(); // Return from Subroutine
+    std::uint8_t BRK(); // Break
+    std::uint8_t RTI(); // Return from Interrupt
     std::uint8_t BCC();
     std::uint8_t BCS();
     std::uint8_t BEQ();
@@ -153,6 +157,7 @@ private:
     std::uint8_t BVS();
 
     void BranchIf(bool condition);
+    void EnterInterrupt(std::uint16_t vector, bool breakInstruction);
 
     static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 

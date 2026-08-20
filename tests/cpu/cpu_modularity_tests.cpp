@@ -198,3 +198,72 @@ TEST_CASE("CPU6502 stack and subroutine instructions preserve their stack contra
     CHECK(cpu.ProgramCounter() == 0x8007);
     CHECK(cpu.StackPointer() == 0xFB);
 }
+
+TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0x00; // BRK
+    bus.memory[0x8001] = 0xEA; // BRK padding byte
+    bus.memory[0xFFFE] = 0x00;
+    bus.memory[0xFFFF] = 0x90;
+    bus.memory[0xFFFA] = 0x00;
+    bus.memory[0xFFFB] = 0xA0;
+    bus.memory[0x9000] = 0x40; // RTI
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    cpu.Clock();
+    CHECK(cpu.Cycles() == 6);
+    CHECK(cpu.ProgramCounter() == 0x9000);
+    CHECK(cpu.StackPointer() == 0xFA);
+    CHECK(bus.memory[0x01FD] == 0x80);
+    CHECK(bus.memory[0x01FC] == 0x02);
+    CHECK((bus.memory[0x01FB] & 0x30) == 0x30);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x8002);
+    CHECK(cpu.StackPointer() == 0xFD);
+    CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+    CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::B));
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::U));
+
+    cpu.IRQ();
+    CHECK(cpu.Cycles() == 7);
+    CHECK(cpu.ProgramCounter() == 0x9000);
+    CHECK(bus.memory[0x01FD] == 0x80);
+    CHECK(bus.memory[0x01FC] == 0x02);
+    CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
+
+    cpu.Reset();
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    cpu.SetFlag(dendyforge::CPU6502::Flags::I, true);
+    cpu.IRQ();
+    CHECK(cpu.Cycles() == 0);
+    CHECK(cpu.ProgramCounter() == 0x8000);
+
+    cpu.NMI();
+    CHECK(cpu.Cycles() == 7);
+    CHECK(cpu.ProgramCounter() == 0xA000);
+    CHECK(bus.memory[0x01FD] == 0x80);
+    CHECK(bus.memory[0x01FC] == 0x00);
+    CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
+}

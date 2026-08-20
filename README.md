@@ -45,9 +45,9 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Instruction Fetch
 - ✅ Instruction Decode 
 - 🟡 Instruction Execute
-- ⬜ IRQ Handling
-- ⬜ NMI Handling
-- ⬜ BRK / RTI
+- ✅ IRQ Handling
+- ✅ NMI Handling
+- ✅ BRK / RTI
 - 🟡 Clock Cycle Emulation
 
 ### Addressing Modes
