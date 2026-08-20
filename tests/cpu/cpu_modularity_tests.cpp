@@ -67,3 +67,88 @@ TEST_CASE("CPU6502 works with a platform-specific CpuBus")
     CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::V));
     CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
 }
+
+TEST_CASE("CPU6502 applies page-crossing and branch cycle penalties")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0xF9;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x80F9] = 0xA9; // LDA #$01
+    bus.memory[0x80FA] = 0x01;
+    bus.memory[0x80FB] = 0xD0; // BNE $8100
+    bus.memory[0x80FC] = 0x03;
+    bus.memory[0x8100] = 0xA2; // LDX #$01
+    bus.memory[0x8101] = 0x01;
+    bus.memory[0x8102] = 0xBD; // LDA $02FF,X
+    bus.memory[0x8103] = 0xFF;
+    bus.memory[0x8104] = 0x02;
+    bus.memory[0x0300] = 0x5A;
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    CompleteInstruction(cpu);
+    cpu.Clock();
+    CHECK(cpu.ProgramCounter() == 0x8100);
+    CHECK(cpu.Cycles() == 3);
+    CompleteInstruction(cpu);
+
+    CompleteInstruction(cpu);
+    cpu.Clock();
+    CHECK(cpu.Cycles() == 4);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x5A);
+}
+
+TEST_CASE("CPU6502 wraps indirect JMP reads at page boundaries")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0x6C; // JMP ($00FF)
+    bus.memory[0x8001] = 0xFF;
+    bus.memory[0x8002] = 0x00;
+    bus.memory[0x00FF] = 0x34;
+    bus.memory[0x0000] = 0x90;
+    bus.memory[0x0100] = 0x91;
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x9034);
+}
+
+TEST_CASE("CPU6502 gives unknown opcodes a finite execution time")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0x02;
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    cpu.Clock();
+
+    CHECK(cpu.ProgramCounter() == 0x8001);
+    CHECK(cpu.Cycles() == 1);
+}

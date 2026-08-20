@@ -12,7 +12,7 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .name = "???",
             .operate = &CPU6502::XXX,
             .addressMode = &CPU6502::IMP,
-            .cycles = 0
+            .cycles = 2
         });
 
         table[0x06] = {
@@ -105,6 +105,14 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMM,
             .cycles = 2
         };
+
+        table[0x65] = {"ADC", &CPU6502::ADC, &CPU6502::ZP0, 3};
+        table[0x75] = {"ADC", &CPU6502::ADC, &CPU6502::ZPX, 4};
+        table[0x6D] = {"ADC", &CPU6502::ADC, &CPU6502::ABS, 4};
+        table[0x7D] = {"ADC", &CPU6502::ADC, &CPU6502::ABX, 4};
+        table[0x79] = {"ADC", &CPU6502::ADC, &CPU6502::ABY, 4};
+        table[0x61] = {"ADC", &CPU6502::ADC, &CPU6502::IZX, 6};
+        table[0x71] = {"ADC", &CPU6502::ADC, &CPU6502::IZY, 5};
 
         table[0x78] = {
             .name = "SEI",
@@ -223,6 +231,11 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 4
         };
 
+        table[0x81] = {"STA", &CPU6502::STA, &CPU6502::IZX, 6};
+        table[0x91] = {"STA", &CPU6502::STA, &CPU6502::IZY, 6};
+        table[0x99] = {"STA", &CPU6502::STA, &CPU6502::ABY, 5};
+        table[0x9D] = {"STA", &CPU6502::STA, &CPU6502::ABX, 5};
+
         table[0xA0] = {
             .name = "LDY",
             .operate = &CPU6502::LDY,
@@ -272,6 +285,21 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .cycles = 2
         };
 
+        table[0xA1] = {"LDA", &CPU6502::LDA, &CPU6502::IZX, 6};
+        table[0xB1] = {"LDA", &CPU6502::LDA, &CPU6502::IZY, 5};
+        table[0xB5] = {"LDA", &CPU6502::LDA, &CPU6502::ZPX, 4};
+        table[0xAD] = {"LDA", &CPU6502::LDA, &CPU6502::ABS, 4};
+        table[0xBD] = {"LDA", &CPU6502::LDA, &CPU6502::ABX, 4};
+        table[0xB9] = {"LDA", &CPU6502::LDA, &CPU6502::ABY, 4};
+
+        table[0xB6] = {"LDX", &CPU6502::LDX, &CPU6502::ZPY, 4};
+        table[0xAE] = {"LDX", &CPU6502::LDX, &CPU6502::ABS, 4};
+        table[0xBE] = {"LDX", &CPU6502::LDX, &CPU6502::ABY, 4};
+
+        table[0xB4] = {"LDY", &CPU6502::LDY, &CPU6502::ZPX, 4};
+        table[0xAC] = {"LDY", &CPU6502::LDY, &CPU6502::ABS, 4};
+        table[0xBC] = {"LDY", &CPU6502::LDY, &CPU6502::ABX, 4};
+
         table[0xAA] = {
             .name = "TAX",
             .operate = &CPU6502::TAX,
@@ -284,6 +312,16 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::ABS,
             .cycles = 3
         };
+        table[0x6C] = {"JMP", &CPU6502::JMP, &CPU6502::IND, 5};
+
+        table[0x10] = {"BPL", &CPU6502::BPL, &CPU6502::REL, 2};
+        table[0x30] = {"BMI", &CPU6502::BMI, &CPU6502::REL, 2};
+        table[0x50] = {"BVC", &CPU6502::BVC, &CPU6502::REL, 2};
+        table[0x70] = {"BVS", &CPU6502::BVS, &CPU6502::REL, 2};
+        table[0x90] = {"BCC", &CPU6502::BCC, &CPU6502::REL, 2};
+        table[0xB0] = {"BCS", &CPU6502::BCS, &CPU6502::REL, 2};
+        table[0xD0] = {"BNE", &CPU6502::BNE, &CPU6502::REL, 2};
+        table[0xF0] = {"BEQ", &CPU6502::BEQ, &CPU6502::REL, 2};
         table[0xE8] = {
             .name = "INX",
             .operate = &CPU6502::INX,
@@ -339,6 +377,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
             .addressMode = &CPU6502::IMM,
             .cycles = 2
         };
+        table[0xE5] = {"SBC", &CPU6502::SBC, &CPU6502::ZP0, 3};
+        table[0xF5] = {"SBC", &CPU6502::SBC, &CPU6502::ZPX, 4};
+        table[0xED] = {"SBC", &CPU6502::SBC, &CPU6502::ABS, 4};
+        table[0xFD] = {"SBC", &CPU6502::SBC, &CPU6502::ABX, 4};
+        table[0xF9] = {"SBC", &CPU6502::SBC, &CPU6502::ABY, 4};
+        table[0xE1] = {"SBC", &CPU6502::SBC, &CPU6502::IZX, 6};
+        table[0xF1] = {"SBC", &CPU6502::SBC, &CPU6502::IZY, 5};
         return table;
     }();
 
@@ -406,8 +451,12 @@ void CPU6502::Clock()
 
         m_cycles = instruction.cycles;
 
-        (this->*instruction.addressMode)();
-        (this->*instruction.operate)();
+        const std::uint8_t additionalAddressCycles =
+            (this->*instruction.addressMode)();
+        const std::uint8_t additionalOperationCycles =
+            (this->*instruction.operate)();
+
+        m_cycles += additionalAddressCycles & additionalOperationCycles;
     }
 
     --m_cycles;
@@ -574,7 +623,7 @@ std::uint8_t CPU6502::ADC()
         );
         SetFlag(Flags::Z, binaryResult == 0);
         SetFlag(Flags::C, decimalCarry);
-        return 0;
+        return 1;
     }
 
     SetFlag(Flags::C, temp > 0xFF);
@@ -589,7 +638,7 @@ std::uint8_t CPU6502::ADC()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, m_a & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::SBC()
@@ -637,7 +686,7 @@ std::uint8_t CPU6502::SBC()
         );
         SetFlag(Flags::Z, binaryResult == 0);
         SetFlag(Flags::C, !decimalBorrow);
-        return 0;
+        return 1;
     }
 
     SetFlag(Flags::C, temp & 0xFF00);
@@ -652,7 +701,7 @@ std::uint8_t CPU6502::SBC()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, m_a & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::IMP()
@@ -721,7 +770,7 @@ std::uint8_t CPU6502::LDA()
     m_a = m_fetched;
 
     UpdateZN(m_a);
-    return 0;
+    return 1;
 }
 
 void CPU6502::UpdateZN(std::uint8_t value)
@@ -742,7 +791,7 @@ std::uint8_t CPU6502::CMP()
     SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
     SetFlag(Flags::N, temp & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::CPX()
@@ -757,7 +806,7 @@ std::uint8_t CPU6502::CPX()
     SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
     SetFlag(Flags::N, temp & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::CPY()
@@ -772,7 +821,7 @@ std::uint8_t CPU6502::CPY()
     SetFlag(Flags::Z, (temp & 0x00FF) == 0x00);
     SetFlag(Flags::N, temp & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::AND()
@@ -784,7 +833,7 @@ std::uint8_t CPU6502::AND()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, m_a & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::ORA()
@@ -796,7 +845,7 @@ std::uint8_t CPU6502::ORA()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, m_a & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::EOR()
@@ -808,7 +857,7 @@ std::uint8_t CPU6502::EOR()
     SetFlag(Flags::Z, m_a == 0x00);
     SetFlag(Flags::N, m_a & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::BIT()
@@ -819,7 +868,7 @@ std::uint8_t CPU6502::BIT()
     SetFlag(Flags::V, m_fetched & 0x40);
     SetFlag(Flags::N, m_fetched & 0x80);
 
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::TAX()
@@ -885,7 +934,7 @@ std::uint8_t CPU6502::LDX()
     m_x = m_fetched;
 
     UpdateZN(m_x);
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::LDY()
@@ -895,7 +944,7 @@ std::uint8_t CPU6502::LDY()
     m_y = m_fetched;
 
     UpdateZN(m_y);
-    return 0;
+    return 1;
 }
 
 std::uint8_t CPU6502::STA()
@@ -938,6 +987,64 @@ std::uint8_t CPU6502::ZPY()
     m_addrAbs = (m_addrAbs + m_y) & 0x00FF;
 
     return 0;
+}
+
+std::uint8_t CPU6502::REL()
+{
+    m_addrRel = Read(m_pc);
+    ++m_pc;
+
+    if (m_addrRel & 0x0080)
+    {
+        m_addrRel |= 0xFF00;
+    }
+
+    return 0;
+}
+
+std::uint8_t CPU6502::IND()
+{
+    const std::uint16_t pointerLo = Read(m_pc);
+    ++m_pc;
+    const std::uint16_t pointerHi = Read(m_pc);
+    ++m_pc;
+
+    const std::uint16_t pointer = (pointerHi << 8) | pointerLo;
+    const std::uint16_t lo = Read(pointer);
+
+    const std::uint16_t hiAddress =
+        pointerLo == 0x00FF ? pointer & 0xFF00 : pointer + 1;
+
+    const std::uint16_t hi = Read(hiAddress);
+    m_addrAbs = (hi << 8) | lo;
+
+    return 0;
+}
+
+std::uint8_t CPU6502::IZX()
+{
+    const std::uint16_t pointer = Read(m_pc);
+    ++m_pc;
+
+    const std::uint16_t lo = Read((pointer + m_x) & 0x00FF);
+    const std::uint16_t hi = Read((pointer + m_x + 1) & 0x00FF);
+    m_addrAbs = (hi << 8) | lo;
+
+    return 0;
+}
+
+std::uint8_t CPU6502::IZY()
+{
+    const std::uint16_t pointer = Read(m_pc);
+    ++m_pc;
+
+    const std::uint16_t lo = Read(pointer & 0x00FF);
+    const std::uint16_t hi = Read((pointer + 1) & 0x00FF);
+    const std::uint16_t baseAddress = (hi << 8) | lo;
+
+    m_addrAbs = baseAddress + m_y;
+
+    return (m_addrAbs & 0xFF00) != (baseAddress & 0xFF00);
 }
 
 std::uint8_t CPU6502::INX()
@@ -1005,6 +1112,72 @@ std::uint8_t CPU6502::ZP0()
 std::uint8_t CPU6502::JMP()
 {
     m_pc = m_addrAbs;
+    return 0;
+}
+
+void CPU6502::BranchIf(bool condition)
+{
+    if (!condition)
+    {
+        return;
+    }
+
+    ++m_cycles;
+
+    const std::uint16_t targetAddress = m_pc + m_addrRel;
+    if ((targetAddress & 0xFF00) != (m_pc & 0xFF00))
+    {
+        ++m_cycles;
+    }
+
+    m_pc = targetAddress;
+}
+
+std::uint8_t CPU6502::BCC()
+{
+    BranchIf(!GetFlag(Flags::C));
+    return 0;
+}
+
+std::uint8_t CPU6502::BCS()
+{
+    BranchIf(GetFlag(Flags::C));
+    return 0;
+}
+
+std::uint8_t CPU6502::BEQ()
+{
+    BranchIf(GetFlag(Flags::Z));
+    return 0;
+}
+
+std::uint8_t CPU6502::BMI()
+{
+    BranchIf(GetFlag(Flags::N));
+    return 0;
+}
+
+std::uint8_t CPU6502::BNE()
+{
+    BranchIf(!GetFlag(Flags::Z));
+    return 0;
+}
+
+std::uint8_t CPU6502::BPL()
+{
+    BranchIf(!GetFlag(Flags::N));
+    return 0;
+}
+
+std::uint8_t CPU6502::BVC()
+{
+    BranchIf(!GetFlag(Flags::V));
+    return 0;
+}
+
+std::uint8_t CPU6502::BVS()
+{
+    BranchIf(GetFlag(Flags::V));
     return 0;
 }
 

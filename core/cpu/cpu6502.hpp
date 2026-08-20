@@ -16,6 +16,7 @@ public:
         // CPU2A03 exposes the D flag, but its ALU always uses binary
         // arithmetic. A standalone CPU6502 keeps decimal arithmetic.
         bool decimalModeEnabled{true};
+
     };
 
     enum class Flags : std::uint8_t
@@ -28,16 +29,6 @@ public:
         U = 1 << 5, // Unused (always set)
         V = 1 << 6, // Overflow
         N = 1 << 7  // Negative
-    };
-
-    struct Instruction
-    {
-        const char* name;
-
-        std::uint8_t (CPU6502::*operate)();
-        std::uint8_t (CPU6502::*addressMode)();
-
-        std::uint8_t cycles;
     };
 
     CPU6502();
@@ -63,9 +54,17 @@ public:
     const char* CurrentInstruction() const;
     std::uint8_t X() const;
     std::uint8_t Y() const;
-    void UpdateZN(std::uint8_t value);
-
 private:
+
+    struct Instruction
+    {
+        const char* name;
+
+        std::uint8_t (CPU6502::*operate)();
+        std::uint8_t (CPU6502::*addressMode)();
+
+        std::uint8_t cycles;
+    };
 
     // Bus interface
     std::uint8_t Read(std::uint16_t address);
@@ -95,6 +94,8 @@ private:
     std::uint8_t STA(); // Store Accumulator
     std::uint8_t STX(); // Store X
     std::uint8_t STY(); // Store Y
+
+    void UpdateZN(std::uint8_t value);
 
     // Арифметика и логика (ALU)
     std::uint8_t AND(); // Logical AND
@@ -134,6 +135,16 @@ private:
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump
+    std::uint8_t BCC();
+    std::uint8_t BCS();
+    std::uint8_t BEQ();
+    std::uint8_t BMI();
+    std::uint8_t BNE();
+    std::uint8_t BPL();
+    std::uint8_t BVC();
+    std::uint8_t BVS();
+
+    void BranchIf(bool condition);
 
     static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 

@@ -311,3 +311,22 @@ TEST_CASE("CPU ASL updates accumulator, memory, and status flags")
     CHECK(machine->bus.CpuRead(0x0200) == 0x10);
     CHECK(machine->bus.CpuRead(0x0201) == 0x20);
 }
+
+TEST_CASE("CPU supports indexed, indirect, and relative addressing modes")
+{
+    const auto path = RomPath("addressing/addressing_test.nes");
+    auto machine = LoadCpuMachine("addressing/addressing_test.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0200) == 0x42);
+    CHECK(machine->bus.CpuRead(0x0201) == 0x77);
+    CHECK(machine->bus.CpuRead(0x0202) == 0xA1);
+    CHECK(machine->bus.CpuRead(0x0203) == 0xB2);
+    CHECK(machine->bus.CpuRead(0x0204) == 0xC3);
+    CHECK(machine->bus.CpuRead(0x0205) == 0xD4);
+    CHECK(machine->bus.CpuRead(0x0206) == 0xE5);
+    CHECK(machine->bus.CpuRead(0x0207) == 0xF6);
+    CHECK(machine->bus.CpuRead(0x0208) == 0xA7);
+}
