@@ -445,6 +445,19 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0x41] = {"EOR", &CPU6502::EOR, &CPU6502::IZX, 6};
         table[0x51] = {"EOR", &CPU6502::EOR, &CPU6502::IZY, 5};
         table[0x2C] = {"BIT", &CPU6502::BIT, &CPU6502::ABS, 4};
+
+        table[0xC5] = {"CMP", &CPU6502::CMP, &CPU6502::ZP0, 3};
+        table[0xD5] = {"CMP", &CPU6502::CMP, &CPU6502::ZPX, 4};
+        table[0xCD] = {"CMP", &CPU6502::CMP, &CPU6502::ABS, 4};
+        table[0xDD] = {"CMP", &CPU6502::CMP, &CPU6502::ABX, 4};
+        table[0xD9] = {"CMP", &CPU6502::CMP, &CPU6502::ABY, 4};
+        table[0xC1] = {"CMP", &CPU6502::CMP, &CPU6502::IZX, 6};
+        table[0xD1] = {"CMP", &CPU6502::CMP, &CPU6502::IZY, 5};
+        table[0xE4] = {"CPX", &CPU6502::CPX, &CPU6502::ZP0, 3};
+        table[0xEC] = {"CPX", &CPU6502::CPX, &CPU6502::ABS, 4};
+        table[0xC4] = {"CPY", &CPU6502::CPY, &CPU6502::ZP0, 3};
+        table[0xCC] = {"CPY", &CPU6502::CPY, &CPU6502::ABS, 4};
+        table[0xEA] = {"NOP", &CPU6502::NOP, &CPU6502::IMP, 2};
         return table;
     }();
 
@@ -878,6 +891,11 @@ std::uint8_t CPU6502::IMM()
 }
 
 std::uint8_t CPU6502::XXX()
+{
+    return 0;
+}
+
+std::uint8_t CPU6502::NOP()
 {
     return 0;
 }

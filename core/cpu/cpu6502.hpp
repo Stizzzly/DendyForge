@@ -88,6 +88,7 @@ private:
 
     // Операции (Инструкции)
     std::uint8_t XXX(); // Illegal/Template
+    std::uint8_t NOP();
 
     // Загрузка и Сохранение (Load/Store)
     std::uint8_t LDA(); // Load Accumulator

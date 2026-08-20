@@ -61,8 +61,8 @@ A modern Dendy/NES emulator written in C++20.
 
 ### Official Instruction Set
 
-- 🟡 Implement all 56 official instructions (mnemonics)
-- 🟡 Implement all 151 official opcodes
+- ✅ Implement all 56 official instructions (mnemonics)
+- ✅ Implement all 151 official opcodes
 - 🟡 Correct processor flag behavior
 - 🟡 Correct cycle timing
 - ✅ Accurate branch timing

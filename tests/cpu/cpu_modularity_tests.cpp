@@ -356,3 +356,45 @@ TEST_CASE("CPU6502 applies logical operations through indexed and indirect modes
     CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::V));
     CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
 }
+
+TEST_CASE("CPU6502 compares through memory forms and executes NOP")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0xA9; // LDA #$20
+    bus.memory[0x8001] = 0x20;
+    bus.memory[0x8002] = 0xC5; // CMP $10
+    bus.memory[0x8003] = 0x10;
+    bus.memory[0x0010] = 0x20;
+    bus.memory[0x8004] = 0xA2; // LDX #$30
+    bus.memory[0x8005] = 0x30;
+    bus.memory[0x8006] = 0xEC; // CPX $0200
+    bus.memory[0x8007] = 0x00;
+    bus.memory[0x8008] = 0x02;
+    bus.memory[0x0200] = 0x30;
+    bus.memory[0x8009] = 0xA0; // LDY #$40
+    bus.memory[0x800A] = 0x40;
+    bus.memory[0x800B] = 0xC4; // CPY $11
+    bus.memory[0x800C] = 0x11;
+    bus.memory[0x0011] = 0x40;
+    bus.memory[0x800D] = 0xEA; // NOP
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+    while (cpu.Cycles() > 0) cpu.Clock();
+
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
+    CompleteInstruction(cpu);
+    CHECK(cpu.Opcode() == 0xEA);
+}
