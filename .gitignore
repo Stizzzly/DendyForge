@@ -1,6 +1,17 @@
 # NES ROMs
 roms/
 *.nes
+*.o
+
+# Versioned CPU test fixtures.
+!tests/
+!tests/cpu/
+!tests/cpu/roms/
+!tests/cpu/roms/**/
+!tests/cpu/roms/**/*.asm
+!tests/cpu/roms/**/*.cfg
+!tests/cpu/roms/**/build.sh
+!tests/cpu/roms/**/*.nes
 
 # CMake build directories created by local presets
 out/

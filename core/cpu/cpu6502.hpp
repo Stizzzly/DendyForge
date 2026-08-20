@@ -3,14 +3,21 @@
 #include <cstdint>
 #include <array>
 
+#include "cpu_bus.hpp"
+
 namespace dendyforge
 {
-
-class Bus;
 
 class CPU6502
 {
 public:
+    struct Configuration
+    {
+        // CPU2A03 exposes the D flag, but its ALU always uses binary
+        // arithmetic. A standalone CPU6502 keeps decimal arithmetic.
+        bool decimalModeEnabled{true};
+    };
+
     enum class Flags : std::uint8_t
     {
         C = 1 << 0, // Carry
@@ -34,8 +41,11 @@ public:
     };
 
     CPU6502();
+    explicit CPU6502(Configuration configuration);
 
-    void ConnectBus(Bus* bus);
+    void ConnectBus(CpuBus* bus);
+
+    bool IsDecimalModeEnabled() const;
 
     void Reset();
     void Clock();
@@ -135,7 +145,8 @@ private:
     void Push(std::uint8_t data);
     std::uint8_t Pop();
 
-    Bus* m_bus{nullptr};
+    CpuBus* m_bus{nullptr};
+    bool m_decimalModeEnabled{true};
 
     // Registers
     std::uint8_t m_a{0};

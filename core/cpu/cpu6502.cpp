@@ -1,5 +1,5 @@
 #include "cpu6502.hpp"
-#include "../bus/bus.hpp"
+
 namespace dendyforge
 {
 
@@ -345,12 +345,23 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
     return LookupTable[opcode];
 }
 CPU6502::CPU6502()
+    : CPU6502(Configuration{})
 {
 }
 
-void CPU6502::ConnectBus(Bus* bus)
+CPU6502::CPU6502(Configuration configuration)
+    : m_decimalModeEnabled(configuration.decimalModeEnabled)
+{
+}
+
+void CPU6502::ConnectBus(CpuBus* bus)
 {
     m_bus = bus;
+}
+
+bool CPU6502::IsDecimalModeEnabled() const
+{
+    return m_decimalModeEnabled;
 }
 
 bool CPU6502::GetFlag(Flags flag) const
@@ -525,10 +536,46 @@ std::uint8_t CPU6502::ADC()
 {
     FetchData();
 
+    const std::uint8_t accumulator = m_a;
+    const std::uint8_t carryIn = GetFlag(Flags::C) ? 1 : 0;
     std::uint16_t temp =
-        static_cast<std::uint16_t>(m_a)
+        static_cast<std::uint16_t>(accumulator)
         + static_cast<std::uint16_t>(m_fetched)
-        + static_cast<std::uint16_t>(GetFlag(Flags::C));
+        + carryIn;
+
+    if (m_decimalModeEnabled && GetFlag(Flags::D))
+    {
+        const std::uint8_t binaryResult = static_cast<std::uint8_t>(temp);
+        std::uint8_t lowNibble =
+            (accumulator & 0x0F) + (m_fetched & 0x0F) + carryIn;
+
+        bool decimalCarry = lowNibble > 9;
+        if (decimalCarry)
+        {
+            lowNibble = (lowNibble - 10) & 0x0F;
+        }
+
+        std::uint8_t highNibble =
+            (accumulator >> 4) + (m_fetched >> 4) + decimalCarry;
+        const bool negative = (highNibble & 0x08) != 0;
+
+        decimalCarry = highNibble > 9;
+        if (decimalCarry)
+        {
+            highNibble = (highNibble - 10) & 0x0F;
+        }
+
+        m_a = (highNibble << 4) | lowNibble;
+        SetFlag(Flags::N, negative);
+        SetFlag(
+            Flags::V,
+            ((accumulator >= 0x80) ^ negative) &&
+            ((m_fetched >= 0x80) ^ negative)
+        );
+        SetFlag(Flags::Z, binaryResult == 0);
+        SetFlag(Flags::C, decimalCarry);
+        return 0;
+    }
 
     SetFlag(Flags::C, temp > 0xFF);
 
@@ -549,13 +596,49 @@ std::uint8_t CPU6502::SBC()
 {
     FetchData();
 
+    const std::uint8_t accumulator = m_a;
+    const std::uint8_t carryIn = GetFlag(Flags::C) ? 1 : 0;
     std::uint16_t value =
         static_cast<std::uint16_t>(m_fetched) ^ 0x00FF;
 
     std::uint16_t temp =
-        static_cast<std::uint16_t>(m_a)
+        static_cast<std::uint16_t>(accumulator)
         + value
-        + static_cast<std::uint16_t>(GetFlag(Flags::C));
+        + carryIn;
+
+    if (m_decimalModeEnabled && GetFlag(Flags::D))
+    {
+        const std::uint8_t binaryResult = static_cast<std::uint8_t>(temp);
+        const bool negative = (binaryResult & 0x80) != 0;
+        const std::uint8_t borrow = carryIn == 0 ? 1 : 0;
+        std::uint8_t lowNibble =
+            (accumulator & 0x0F) - (m_fetched & 0x0F) - borrow;
+
+        bool decimalBorrow = lowNibble >= 0x80;
+        if (decimalBorrow)
+        {
+            lowNibble = (lowNibble + 10) & 0x0F;
+        }
+
+        std::uint8_t highNibble =
+            (accumulator >> 4) - (m_fetched >> 4) - decimalBorrow;
+        decimalBorrow = highNibble >= 0x80;
+        if (decimalBorrow)
+        {
+            highNibble = (highNibble + 10) & 0x0F;
+        }
+
+        m_a = (highNibble << 4) | lowNibble;
+        SetFlag(Flags::N, negative);
+        SetFlag(
+            Flags::V,
+            ((accumulator >= 0x80) ^ negative) &&
+            ((m_fetched < 0x80) ^ negative)
+        );
+        SetFlag(Flags::Z, binaryResult == 0);
+        SetFlag(Flags::C, !decimalBorrow);
+        return 0;
+    }
 
     SetFlag(Flags::C, temp & 0xFF00);
 

@@ -32,7 +32,7 @@ A modern Dendy/NES emulator written in C++20.
 
 ## Phase 2 — CPU 6502 Emulator
 
-**Goal:** Develop a complete, reusable, and hardware-accurate MOS 6502 CPU emulator independent of the Dendy.
+**Goal:** Develop a complete, reusable, and hardware-accurate CPU6502 emulator independent of the Dendy.
 
 ### CPU Core
 
@@ -77,18 +77,18 @@ A modern Dendy/NES emulator written in C++20.
 ### Undocumented Instructions
 
 - ⬜ Implement unofficial (illegal) opcodes
-- ⬜ Match original MOS 6502 hardware behavior
+- ⬜ Match original CPU6502 hardware behavior
 - ⬜ Validate unofficial opcode behavior
 
 ### Result
 
-A standalone, reusable, and hardware-accurate MOS 6502 emulator suitable for integration into future projects, including:
+A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for integration into future projects, including:
 
 - Dendy
 - Apple II
 - Commodore 64
 - Atari 2600 / 5200 / 7800
-- Other MOS 6502-based systems
+- Other CPU6502-based systems
 
 ---
 
@@ -187,7 +187,7 @@ A standalone, reusable, and hardware-accurate MOS 6502 emulator suitable for int
 
 Release requirements:
 
-* Complete MOS 6502 emulation
+* Complete CPU6502 emulation
 * Complete NES hardware emulation
 * Accurate Mapper support
 * SDL3 frontend

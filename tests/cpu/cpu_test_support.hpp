@@ -27,8 +27,10 @@ struct CpuMachine
 
     CpuMachine(const INesHeader& header,
                std::vector<std::uint8_t>&& prgRom,
-               std::vector<std::uint8_t>&& chrRom)
-        : cartridge(header, std::move(prgRom), std::move(chrRom))
+               std::vector<std::uint8_t>&& chrRom,
+               CPU6502::Configuration cpuConfiguration)
+        : cartridge(header, std::move(prgRom), std::move(chrRom)),
+          cpu(cpuConfiguration)
     {
         bus.InsertCartridge(&cartridge);
         cpu.ConnectBus(&bus);
@@ -36,7 +38,9 @@ struct CpuMachine
     }
 };
 
-inline std::unique_ptr<CpuMachine> LoadCpuMachine(std::string_view romPath)
+inline std::unique_ptr<CpuMachine> LoadCpuMachine(
+    std::string_view romPath,
+    CPU6502::Configuration cpuConfiguration = {.decimalModeEnabled = false})
 {
     INesReader reader;
     const auto path = RomPath(romPath);
@@ -47,7 +51,7 @@ inline std::unique_ptr<CpuMachine> LoadCpuMachine(std::string_view romPath)
     }
 
     return std::make_unique<CpuMachine>(
-        reader.Header(), reader.TakePRGRom(), reader.TakeCHRRom());
+        reader.Header(), reader.TakePRGRom(), reader.TakeCHRRom(), cpuConfiguration);
 }
 
 inline void CompleteInstruction(CPU6502& cpu)

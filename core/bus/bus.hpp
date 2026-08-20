@@ -3,20 +3,22 @@
 #include <array>
 #include <cstdint>
 
+#include "../cpu/cpu_bus.hpp"
+
 namespace dendyforge
 {
 
 class Cartridge;
 
-class Bus
+class Bus : public CpuBus
 {
 public:
     Bus();
 
     void InsertCartridge(Cartridge* cartridge);
 
-    std::uint8_t CpuRead(std::uint16_t address);
-    void CpuWrite(std::uint16_t address, std::uint8_t data);
+    std::uint8_t CpuRead(std::uint16_t address) override;
+    void CpuWrite(std::uint16_t address, std::uint8_t data) override;
 
 private:
     Cartridge* m_cartridge{nullptr};

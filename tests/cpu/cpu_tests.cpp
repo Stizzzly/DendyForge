@@ -262,6 +262,40 @@ TEST_CASE("CPU SBC updates accumulator and status flags")
     }
 }
 
+TEST_CASE("CPU performs BCD arithmetic when decimal mode is enabled")
+{
+    const auto path = RomPath("decimal/decimal_mode_test.nes");
+    auto machine = LoadCpuMachine(
+        "decimal/decimal_mode_test.nes",
+        {.decimalModeEnabled = true});
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE(machine->cpu.IsDecimalModeEnabled());
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0000) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0001) == 0x49);
+    CHECK(machine->cpu.Accumulator() == 0x49);
+    CHECK(machine->cpu.GetFlag(CPU6502::Flags::C));
+    CHECK(machine->cpu.GetFlag(CPU6502::Flags::D));
+}
+
+TEST_CASE("CPU ignores decimal arithmetic when configured as an NES 2A03")
+{
+    const auto path = RomPath("decimal/decimal_mode_test.nes");
+    auto machine = LoadCpuMachine("decimal/decimal_mode_test.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE_FALSE(machine->cpu.IsDecimalModeEnabled());
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0000) == 0x9A);
+    CHECK(machine->bus.CpuRead(0x0001) == 0x4F);
+    CHECK(machine->cpu.Accumulator() == 0x4F);
+    CHECK(machine->cpu.GetFlag(CPU6502::Flags::C));
+    CHECK(machine->cpu.GetFlag(CPU6502::Flags::D));
+}
+
 TEST_CASE("CPU ASL updates accumulator, memory, and status flags")
 {
     const auto path = RomPath("asl/asl_test.nes");

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(DendyForge LANGUAGES CXX)
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -23,6 +25,7 @@ target_include_directories(DendyForgeCore PUBLIC
 add_executable(DendyForgeTests
     tests/test_main.cpp
     tests/cpu/cpu_tests.cpp
+    tests/cpu/cpu_modularity_tests.cpp
     tests/bus/bus_tests.cpp
     tests/cartridge/cartridge_tests.cpp
 )
@@ -37,6 +40,8 @@ target_include_directories(DendyForgeTests PRIVATE
 target_compile_definitions(DendyForgeTests PRIVATE
     DENDYFORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_test(NAME DendyForgeTests COMMAND DendyForgeTests)
 
 if(MINGW)
     get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
