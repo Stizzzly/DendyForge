@@ -62,7 +62,7 @@ TEST_CASE("CPU reset uses the reset vector from the iNES ROM")
 
     CHECK(machine->cpu.ProgramCounter() == 0x8000);
     CHECK(machine->cpu.StackPointer() == 0xFD);
-    CHECK(machine->cpu.Status() == 0x20);
+    CHECK(machine->cpu.Status() == 0x24);
     CHECK(machine->cpu.Cycles() == 8);
 }
 
@@ -382,4 +382,23 @@ TEST_CASE("CPU updates memory through rotate, shift, increment, and decrement")
     CHECK(machine->bus.CpuRead(0x0204) == 0xFF);
     CHECK(machine->bus.CpuRead(0x0206) == 0x00);
     CHECK(machine->bus.CpuRead(0x0207) == 0xFF);
+}
+
+TEST_CASE("CPU passes nestest in automation mode")
+{
+    const auto romPath = RomPath("nestest.nes");
+    auto machine = LoadCpuMachine("nestest.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << romPath.string());
+
+    CompleteReset(machine->cpu);
+    machine->cpu.SetProgramCounter(0xC000);
+
+    constexpr std::size_t MaxInstructions = 5'000'000;
+    for (std::size_t instruction = 0; instruction < MaxInstructions; ++instruction)
+    {
+        CompleteInstruction(machine->cpu);
+    }
+
+    CHECK(machine->bus.CpuRead(0x0002) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0003) == 0x00);
 }

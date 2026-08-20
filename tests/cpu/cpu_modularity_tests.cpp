@@ -221,6 +221,7 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
         cpu.Clock();
     }
 
+    cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
     cpu.Clock();
     CHECK(cpu.Cycles() == 6);
     CHECK(cpu.ProgramCounter() == 0x9000);
@@ -242,6 +243,7 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
     CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::B));
     CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::U));
 
+    cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
     cpu.IRQ();
     CHECK(cpu.Cycles() == 7);
     CHECK(cpu.ProgramCounter() == 0x9000);

@@ -506,7 +506,8 @@ void CPU6502::Reset()
     m_x = 0;
     m_y = 0;
     m_sp = 0xFD;
-    m_status = static_cast<std::uint8_t>(Flags::U);
+    m_status = static_cast<std::uint8_t>(Flags::U) |
+               static_cast<std::uint8_t>(Flags::I);
 
     const std::uint16_t lo = Read(0xFFFC);
     const std::uint16_t hi = Read(0xFFFD);
@@ -583,6 +584,11 @@ std::uint8_t CPU6502::Pop()
 std::uint16_t CPU6502::ProgramCounter() const
 {
     return m_pc;
+}
+
+void CPU6502::SetProgramCounter(std::uint16_t value)
+{
+    m_pc = value;
 }
 
 std::uint8_t CPU6502::StackPointer() const

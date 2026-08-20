@@ -49,6 +49,7 @@ public:
 
     std::uint8_t Accumulator() const;
     std::uint16_t ProgramCounter() const;
+    void SetProgramCounter(std::uint16_t value);
     std::uint8_t StackPointer() const;
     std::uint8_t Status() const;
     std::uint8_t Opcode() const;
