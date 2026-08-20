@@ -71,7 +71,7 @@ A modern Dendy/NES emulator written in C++20.
 ### Validation
 
 - ⬜ Pass Klaus Dormann 6502 Functional Test
-- ⬜ Pass nestest.nes
+- ✅ Pass nestest.nes (reference trace: PC, registers, and cycles)
 - ⬜ Pass Blargg CPU Tests
 - ⬜ Verify cycle accuracy against reference documentation
 

@@ -458,6 +458,62 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0xC4] = {"CPY", &CPU6502::CPY, &CPU6502::ZP0, 3};
         table[0xCC] = {"CPY", &CPU6502::CPY, &CPU6502::ABS, 4};
         table[0xEA] = {"NOP", &CPU6502::NOP, &CPU6502::IMP, 2};
+
+        // These no-op encodings are used by the nestest diagnostic program.
+        // They consume their operands and timing but have no observable effect.
+        for (const std::uint8_t opcode : {0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xFA})
+        {
+            table[opcode] = {"NOP", &CPU6502::NOP, &CPU6502::IMP, 2};
+        }
+        for (const std::uint8_t opcode : {0x80, 0x82, 0x89, 0xC2, 0xE2})
+        {
+            table[opcode] = {"NOP", &CPU6502::NOP, &CPU6502::IMM, 2};
+        }
+        for (const std::uint8_t opcode : {0x04, 0x44, 0x64})
+        {
+            table[opcode] = {"NOP", &CPU6502::NOP, &CPU6502::ZP0, 3};
+        }
+        for (const std::uint8_t opcode : {0x14, 0x34, 0x54, 0x74, 0xD4, 0xF4})
+        {
+            table[opcode] = {"NOP", &CPU6502::NOP, &CPU6502::ZPX, 4};
+        }
+        table[0x0C] = {"NOP", &CPU6502::NOP, &CPU6502::ABS, 4};
+        for (const std::uint8_t opcode : {0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC})
+        {
+            table[opcode] = {"NOP", &CPU6502::NOP, &CPU6502::ABX, 4};
+        }
+
+        table[0xA3] = {"LAX", &CPU6502::LAX, &CPU6502::IZX, 6};
+        table[0xA7] = {"LAX", &CPU6502::LAX, &CPU6502::ZP0, 3};
+        table[0xAF] = {"LAX", &CPU6502::LAX, &CPU6502::ABS, 4};
+        table[0xB3] = {"LAX", &CPU6502::LAX, &CPU6502::IZY, 5};
+        table[0xB7] = {"LAX", &CPU6502::LAX, &CPU6502::ZPY, 4};
+        table[0xBF] = {"LAX", &CPU6502::LAX, &CPU6502::ABY, 4};
+
+        table[0x83] = {"SAX", &CPU6502::SAX, &CPU6502::IZX, 6};
+        table[0x87] = {"SAX", &CPU6502::SAX, &CPU6502::ZP0, 3};
+        table[0x8F] = {"SAX", &CPU6502::SAX, &CPU6502::ABS, 4};
+        table[0x97] = {"SAX", &CPU6502::SAX, &CPU6502::ZPY, 4};
+
+        const auto addReadModifyWrite = [&table](
+            const std::array<std::uint8_t, 7>& opcodes,
+            std::uint8_t (CPU6502::*operation)())
+        {
+            table[opcodes[0]] = {"RMW", operation, &CPU6502::IZX, 8};
+            table[opcodes[1]] = {"RMW", operation, &CPU6502::ZP0, 5};
+            table[opcodes[2]] = {"RMW", operation, &CPU6502::ABS, 6};
+            table[opcodes[3]] = {"RMW", operation, &CPU6502::IZY, 8};
+            table[opcodes[4]] = {"RMW", operation, &CPU6502::ZPX, 6};
+            table[opcodes[5]] = {"RMW", operation, &CPU6502::ABY, 7};
+            table[opcodes[6]] = {"RMW", operation, &CPU6502::ABX, 7};
+        };
+        addReadModifyWrite({0x03, 0x07, 0x0F, 0x13, 0x17, 0x1B, 0x1F}, &CPU6502::SLO);
+        addReadModifyWrite({0x23, 0x27, 0x2F, 0x33, 0x37, 0x3B, 0x3F}, &CPU6502::RLA);
+        addReadModifyWrite({0x43, 0x47, 0x4F, 0x53, 0x57, 0x5B, 0x5F}, &CPU6502::SRE);
+        addReadModifyWrite({0x63, 0x67, 0x6F, 0x73, 0x77, 0x7B, 0x7F}, &CPU6502::RRA);
+        addReadModifyWrite({0xC3, 0xC7, 0xCF, 0xD3, 0xD7, 0xDB, 0xDF}, &CPU6502::DCP);
+        addReadModifyWrite({0xE3, 0xE7, 0xEF, 0xF3, 0xF7, 0xFB, 0xFF}, &CPU6502::ISB);
+        table[0xEB] = {"SBC", &CPU6502::SBC, &CPU6502::IMM, 2};
         return table;
     }();
 
@@ -884,6 +940,89 @@ std::uint8_t CPU6502::SBC()
     return 1;
 }
 
+std::uint8_t CPU6502::LAX()
+{
+    FetchData();
+    m_a = m_fetched;
+    m_x = m_fetched;
+    UpdateZN(m_a);
+    return 1;
+}
+
+std::uint8_t CPU6502::SAX()
+{
+    Write(m_addrAbs, m_a & m_x);
+    return 0;
+}
+
+std::uint8_t CPU6502::SLO()
+{
+    FetchData();
+    const std::uint16_t shifted = static_cast<std::uint16_t>(m_fetched) << 1;
+    SetFlag(Flags::C, (shifted & 0xFF00) != 0);
+    const std::uint8_t value = shifted & 0x00FF;
+    Write(m_addrAbs, value);
+    m_a |= value;
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::RLA()
+{
+    FetchData();
+    const std::uint16_t rotated =
+        (static_cast<std::uint16_t>(m_fetched) << 1) |
+        (GetFlag(Flags::C) ? 1 : 0);
+    SetFlag(Flags::C, (rotated & 0xFF00) != 0);
+    const std::uint8_t value = rotated & 0x00FF;
+    Write(m_addrAbs, value);
+    m_a &= value;
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::SRE()
+{
+    FetchData();
+    SetFlag(Flags::C, (m_fetched & 0x01) != 0);
+    const std::uint8_t value = m_fetched >> 1;
+    Write(m_addrAbs, value);
+    m_a ^= value;
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::RRA()
+{
+    FetchData();
+    const std::uint8_t value =
+        (m_fetched >> 1) | (GetFlag(Flags::C) ? 0x80 : 0x00);
+    SetFlag(Flags::C, (m_fetched & 0x01) != 0);
+    Write(m_addrAbs, value);
+    ADC();
+    return 0;
+}
+
+std::uint8_t CPU6502::DCP()
+{
+    FetchData();
+    const std::uint8_t value = m_fetched - 1;
+    Write(m_addrAbs, value);
+    const std::uint16_t result = static_cast<std::uint16_t>(m_a) - value;
+    SetFlag(Flags::C, m_a >= value);
+    UpdateZN(static_cast<std::uint8_t>(result));
+    return 0;
+}
+
+std::uint8_t CPU6502::ISB()
+{
+    FetchData();
+    const std::uint8_t value = m_fetched + 1;
+    Write(m_addrAbs, value);
+    SBC();
+    return 0;
+}
+
 std::uint8_t CPU6502::IMP()
 {
     m_fetched = m_a;
@@ -903,7 +1042,7 @@ std::uint8_t CPU6502::XXX()
 
 std::uint8_t CPU6502::NOP()
 {
-    return 0;
+    return GetInstructionConfig(m_opcode).addressMode == &CPU6502::ABX;
 }
 
 std::uint8_t CPU6502::SEI()

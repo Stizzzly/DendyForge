@@ -15,3 +15,4 @@ roms/
 
 # CMake build directories created by local presets
 out/
+tests/cpu/roms/nestestres.log

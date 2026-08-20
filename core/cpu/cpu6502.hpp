@@ -111,6 +111,14 @@ private:
     std::uint8_t CPY();
     std::uint8_t ADC();
     std::uint8_t SBC();
+    std::uint8_t LAX();
+    std::uint8_t SAX();
+    std::uint8_t SLO();
+    std::uint8_t RLA();
+    std::uint8_t SRE();
+    std::uint8_t RRA();
+    std::uint8_t DCP();
+    std::uint8_t ISB();
 
     // Инкремент / Декремент
     std::uint8_t INX(); // Increment X
