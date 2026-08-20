@@ -140,6 +140,11 @@ private:
     std::uint8_t PLP(); // Pull Processor Status
 
     std::uint8_t ASL();
+    std::uint8_t LSR();
+    std::uint8_t ROL();
+    std::uint8_t ROR();
+    std::uint8_t INC();
+    std::uint8_t DEC();
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump

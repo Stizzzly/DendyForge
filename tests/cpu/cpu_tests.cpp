@@ -359,3 +359,27 @@ TEST_CASE("CPU enters a BRK handler and resumes through RTI")
     CHECK(machine->bus.CpuRead(0x0201) == 0x55);
     CHECK(machine->cpu.StackPointer() == 0xFF);
 }
+
+TEST_CASE("CPU updates memory through rotate, shift, increment, and decrement")
+{
+    const auto path = RomPath("rmw/rmw_test.nes");
+    auto machine = LoadCpuMachine("rmw/rmw_test.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0010) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0011) == 0x80);
+    CHECK(machine->bus.CpuRead(0x0012) == 0x01);
+    CHECK(machine->bus.CpuRead(0x0013) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0014) == 0xFF);
+    CHECK(machine->bus.CpuRead(0x0021) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0022) == 0xFF);
+    CHECK(machine->bus.CpuRead(0x0200) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0201) == 0x80);
+    CHECK(machine->bus.CpuRead(0x0202) == 0x01);
+    CHECK(machine->bus.CpuRead(0x0203) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0204) == 0xFF);
+    CHECK(machine->bus.CpuRead(0x0206) == 0x00);
+    CHECK(machine->bus.CpuRead(0x0207) == 0xFF);
+}

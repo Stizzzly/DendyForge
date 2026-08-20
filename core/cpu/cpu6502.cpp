@@ -394,6 +394,34 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0x68] = {"PLA", &CPU6502::PLA, &CPU6502::IMP, 4};
         table[0x20] = {"JSR", &CPU6502::JSR, &CPU6502::ABS, 6};
         table[0x60] = {"RTS", &CPU6502::RTS, &CPU6502::IMP, 6};
+
+        table[0x26] = {"ROL", &CPU6502::ROL, &CPU6502::ZP0, 5};
+        table[0x36] = {"ROL", &CPU6502::ROL, &CPU6502::ZPX, 6};
+        table[0x2E] = {"ROL", &CPU6502::ROL, &CPU6502::ABS, 6};
+        table[0x3E] = {"ROL", &CPU6502::ROL, &CPU6502::ABX, 7};
+        table[0x2A] = {"ROL", &CPU6502::ROL, &CPU6502::IMP, 2};
+
+        table[0x46] = {"LSR", &CPU6502::LSR, &CPU6502::ZP0, 5};
+        table[0x56] = {"LSR", &CPU6502::LSR, &CPU6502::ZPX, 6};
+        table[0x4E] = {"LSR", &CPU6502::LSR, &CPU6502::ABS, 6};
+        table[0x5E] = {"LSR", &CPU6502::LSR, &CPU6502::ABX, 7};
+        table[0x4A] = {"LSR", &CPU6502::LSR, &CPU6502::IMP, 2};
+
+        table[0x66] = {"ROR", &CPU6502::ROR, &CPU6502::ZP0, 5};
+        table[0x76] = {"ROR", &CPU6502::ROR, &CPU6502::ZPX, 6};
+        table[0x6E] = {"ROR", &CPU6502::ROR, &CPU6502::ABS, 6};
+        table[0x7E] = {"ROR", &CPU6502::ROR, &CPU6502::ABX, 7};
+        table[0x6A] = {"ROR", &CPU6502::ROR, &CPU6502::IMP, 2};
+
+        table[0xE6] = {"INC", &CPU6502::INC, &CPU6502::ZP0, 5};
+        table[0xF6] = {"INC", &CPU6502::INC, &CPU6502::ZPX, 6};
+        table[0xEE] = {"INC", &CPU6502::INC, &CPU6502::ABS, 6};
+        table[0xFE] = {"INC", &CPU6502::INC, &CPU6502::ABX, 7};
+
+        table[0xC6] = {"DEC", &CPU6502::DEC, &CPU6502::ZP0, 5};
+        table[0xD6] = {"DEC", &CPU6502::DEC, &CPU6502::ZPX, 6};
+        table[0xCE] = {"DEC", &CPU6502::DEC, &CPU6502::ABS, 6};
+        table[0xDE] = {"DEC", &CPU6502::DEC, &CPU6502::ABX, 7};
         return table;
     }();
 
@@ -605,6 +633,89 @@ std::uint8_t CPU6502::ASL()
         Write(m_addrAbs, static_cast<std::uint8_t>(temp));
     }
 
+    return 0;
+}
+
+std::uint8_t CPU6502::LSR()
+{
+    FetchData();
+
+    SetFlag(Flags::C, (m_fetched & 0x01) != 0);
+    const std::uint8_t result = m_fetched >> 1;
+    UpdateZN(result);
+
+    if (GetInstructionConfig(m_opcode).addressMode == &CPU6502::IMP)
+    {
+        m_a = result;
+    }
+    else
+    {
+        Write(m_addrAbs, result);
+    }
+
+    return 0;
+}
+
+std::uint8_t CPU6502::ROL()
+{
+    FetchData();
+
+    const std::uint16_t result =
+        (static_cast<std::uint16_t>(m_fetched) << 1) |
+        (GetFlag(Flags::C) ? 1 : 0);
+    SetFlag(Flags::C, (result & 0xFF00) != 0);
+
+    const std::uint8_t value = result & 0x00FF;
+    UpdateZN(value);
+
+    if (GetInstructionConfig(m_opcode).addressMode == &CPU6502::IMP)
+    {
+        m_a = value;
+    }
+    else
+    {
+        Write(m_addrAbs, value);
+    }
+
+    return 0;
+}
+
+std::uint8_t CPU6502::ROR()
+{
+    FetchData();
+
+    const std::uint8_t value =
+        (m_fetched >> 1) | (GetFlag(Flags::C) ? 0x80 : 0x00);
+    SetFlag(Flags::C, (m_fetched & 0x01) != 0);
+    UpdateZN(value);
+
+    if (GetInstructionConfig(m_opcode).addressMode == &CPU6502::IMP)
+    {
+        m_a = value;
+    }
+    else
+    {
+        Write(m_addrAbs, value);
+    }
+
+    return 0;
+}
+
+std::uint8_t CPU6502::INC()
+{
+    FetchData();
+    ++m_fetched;
+    Write(m_addrAbs, m_fetched);
+    UpdateZN(m_fetched);
+    return 0;
+}
+
+std::uint8_t CPU6502::DEC()
+{
+    FetchData();
+    --m_fetched;
+    Write(m_addrAbs, m_fetched);
+    UpdateZN(m_fetched);
     return 0;
 }
 
@@ -1305,7 +1416,11 @@ std::uint8_t CPU6502::Cycles() const
 
 std::uint8_t CPU6502::FetchData()
 {
-    m_fetched = Read(m_addrAbs);
+    if (GetInstructionConfig(m_opcode).addressMode != &CPU6502::IMP)
+    {
+        m_fetched = Read(m_addrAbs);
+    }
+
     return m_fetched;
 }
 

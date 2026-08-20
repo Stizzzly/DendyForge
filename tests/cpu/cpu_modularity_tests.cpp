@@ -267,3 +267,47 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
     CHECK(bus.memory[0x01FC] == 0x00);
     CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
 }
+
+TEST_CASE("CPU6502 rotates and shifts the accumulator with the carry flag")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0x18; // CLC
+    bus.memory[0x8001] = 0xA9; // LDA #$80
+    bus.memory[0x8002] = 0x80;
+    bus.memory[0x8003] = 0x2A; // ROL A
+    bus.memory[0x8004] = 0x38; // SEC
+    bus.memory[0x8005] = 0xA9; // LDA #$01
+    bus.memory[0x8006] = 0x01;
+    bus.memory[0x8007] = 0x6A; // ROR A
+    bus.memory[0x8008] = 0x4A; // LSR A
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x00);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
+
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x80);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x40);
+    CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+}
