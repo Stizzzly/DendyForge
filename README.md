@@ -44,7 +44,7 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Reset Sequence
 - ✅ Instruction Fetch
 - ✅ Instruction Decode 
-- 🟡 Instruction Execute
+- ✅ Instruction Execute
 - ✅ IRQ Handling
 - ✅ NMI Handling
 - ✅ BRK / RTI
@@ -57,14 +57,14 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ Relative addressing
 - ✅ Indirect JMP hardware bug
 - ✅ Page-crossing cycle penalties
-- ⬜ Cycle-accurate address calculation
+- 🟡 Cycle-accurate address calculation
 
 ### Official Instruction Set
 
 - ✅ Implement all 56 official instructions (mnemonics)
 - ✅ Implement all 151 official opcodes
-- 🟡 Correct processor flag behavior
-- 🟡 Correct cycle timing
+- ✅ Correct processor flag behavior
+- ✅ Correct cycle timing at instruction level
 - ✅ Accurate branch timing
 - 🟡 Accurate interrupt timing
 
