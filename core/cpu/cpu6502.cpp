@@ -422,6 +422,29 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0xD6] = {"DEC", &CPU6502::DEC, &CPU6502::ZPX, 6};
         table[0xCE] = {"DEC", &CPU6502::DEC, &CPU6502::ABS, 6};
         table[0xDE] = {"DEC", &CPU6502::DEC, &CPU6502::ABX, 7};
+
+        table[0x05] = {"ORA", &CPU6502::ORA, &CPU6502::ZP0, 3};
+        table[0x15] = {"ORA", &CPU6502::ORA, &CPU6502::ZPX, 4};
+        table[0x0D] = {"ORA", &CPU6502::ORA, &CPU6502::ABS, 4};
+        table[0x1D] = {"ORA", &CPU6502::ORA, &CPU6502::ABX, 4};
+        table[0x19] = {"ORA", &CPU6502::ORA, &CPU6502::ABY, 4};
+        table[0x01] = {"ORA", &CPU6502::ORA, &CPU6502::IZX, 6};
+        table[0x11] = {"ORA", &CPU6502::ORA, &CPU6502::IZY, 5};
+        table[0x25] = {"AND", &CPU6502::AND, &CPU6502::ZP0, 3};
+        table[0x35] = {"AND", &CPU6502::AND, &CPU6502::ZPX, 4};
+        table[0x2D] = {"AND", &CPU6502::AND, &CPU6502::ABS, 4};
+        table[0x3D] = {"AND", &CPU6502::AND, &CPU6502::ABX, 4};
+        table[0x39] = {"AND", &CPU6502::AND, &CPU6502::ABY, 4};
+        table[0x21] = {"AND", &CPU6502::AND, &CPU6502::IZX, 6};
+        table[0x31] = {"AND", &CPU6502::AND, &CPU6502::IZY, 5};
+        table[0x45] = {"EOR", &CPU6502::EOR, &CPU6502::ZP0, 3};
+        table[0x55] = {"EOR", &CPU6502::EOR, &CPU6502::ZPX, 4};
+        table[0x4D] = {"EOR", &CPU6502::EOR, &CPU6502::ABS, 4};
+        table[0x5D] = {"EOR", &CPU6502::EOR, &CPU6502::ABX, 4};
+        table[0x59] = {"EOR", &CPU6502::EOR, &CPU6502::ABY, 4};
+        table[0x41] = {"EOR", &CPU6502::EOR, &CPU6502::IZX, 6};
+        table[0x51] = {"EOR", &CPU6502::EOR, &CPU6502::IZY, 5};
+        table[0x2C] = {"BIT", &CPU6502::BIT, &CPU6502::ABS, 4};
         return table;
     }();
 

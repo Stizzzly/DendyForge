@@ -311,3 +311,48 @@ TEST_CASE("CPU6502 rotates and shifts the accumulator with the carry flag")
     CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::C));
     CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::N));
 }
+
+TEST_CASE("CPU6502 applies logical operations through indexed and indirect modes")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0xA2; // LDX #$01
+    bus.memory[0x8001] = 0x01;
+    bus.memory[0x8002] = 0xA9; // LDA #$10
+    bus.memory[0x8003] = 0x10;
+    bus.memory[0x8004] = 0x15; // ORA $0F,X
+    bus.memory[0x8005] = 0x0F;
+    bus.memory[0x0010] = 0x81;
+    bus.memory[0x8006] = 0x3D; // AND $0200,X
+    bus.memory[0x8007] = 0x00;
+    bus.memory[0x8008] = 0x02;
+    bus.memory[0x0201] = 0x91;
+    bus.memory[0x8009] = 0x41; // EOR ($1F,X)
+    bus.memory[0x800A] = 0x1F;
+    bus.memory[0x0020] = 0x00;
+    bus.memory[0x0021] = 0x03;
+    bus.memory[0x0300] = 0x11;
+    bus.memory[0x800B] = 0x2C; // BIT $0400
+    bus.memory[0x800C] = 0x00;
+    bus.memory[0x800D] = 0x04;
+    bus.memory[0x0400] = 0xC0;
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+    while (cpu.Cycles() > 0) cpu.Clock();
+
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x91);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x91);
+    CompleteInstruction(cpu);
+    CHECK(cpu.Accumulator() == 0x80);
+    CompleteInstruction(cpu);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::V));
+    CHECK_FALSE(cpu.GetFlag(dendyforge::CPU6502::Flags::Z));
+}
