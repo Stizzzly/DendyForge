@@ -8,8 +8,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(DendyForgeCore
+add_library(DendyForgeCpu
     core/cpu/cpu6502.cpp
+)
+
+target_include_directories(DendyForgeCpu PUBLIC
+    core
+)
+
+add_library(DendyForgeCore
     core/ines/ines_reader.cpp
     core/cartridge/cartridge.cpp
     core/cartridge/cartridge_info.cpp
@@ -21,6 +28,8 @@ add_library(DendyForgeCore
 target_include_directories(DendyForgeCore PUBLIC
     core
 )
+
+target_link_libraries(DendyForgeCore PUBLIC DendyForgeCpu)
 
 add_executable(DendyForgeTests
     tests/test_main.cpp

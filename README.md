@@ -39,6 +39,7 @@ A modern Dendy/NES emulator written in C++20.
 - ✅ CPU Registers (A, X, Y, SP, PC)
 - ✅ Processor Status Register
 - ✅ Bus Interface
+- ✅ Standalone CPU6502 library
 - ✅ Stack Operations
 - ✅ Reset Sequence
 - ✅ Instruction Fetch
@@ -180,6 +181,10 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 
 * ⬜ Libretro Core
 * ⬜ RetroArch Integration
+
+### Android
+
+* ⬜ Android application
 
 ---
 
