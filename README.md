@@ -52,21 +52,21 @@ A modern Dendy/NES emulator written in C++20.
 
 ### Addressing Modes
 
-- 🟡 Implement all official addressing modes
+- ✅ Implement all official addressing modes
 - ✅ Zero-page wrapping
-- ⬜ Relative addressing
-- ⬜ Indirect JMP hardware bug
-- ⬜ Page-crossing cycle penalties
+- ✅ Relative addressing
+- ✅ Indirect JMP hardware bug
+- ✅ Page-crossing cycle penalties
 - ⬜ Cycle-accurate address calculation
 
 ### Official Instruction Set
 
-- ⬜ Implement all 56 official instructions (mnemonics)
-- ⬜ Implement all 151 official opcodes
-- ⬜ Correct processor flag behavior
-- ⬜ Correct cycle timing
-- ⬜ Accurate branch timing
-- ⬜ Accurate interrupt timing
+- 🟡 Implement all 56 official instructions (mnemonics)
+- 🟡 Implement all 151 official opcodes
+- 🟡 Correct processor flag behavior
+- 🟡 Correct cycle timing
+- ✅ Accurate branch timing
+- 🟡 Accurate interrupt timing
 
 ### Validation
 
