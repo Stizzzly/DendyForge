@@ -330,3 +330,19 @@ TEST_CASE("CPU supports indexed, indirect, and relative addressing modes")
     CHECK(machine->bus.CpuRead(0x0207) == 0xF6);
     CHECK(machine->bus.CpuRead(0x0208) == 0xA7);
 }
+
+TEST_CASE("CPU executes stack and subroutine instructions")
+{
+    const auto path = RomPath("stack/stack_test.nes");
+    auto machine = LoadCpuMachine("stack/stack_test.nes");
+    REQUIRE_MESSAGE(machine != nullptr, "Unable to load ROM: " << path.string());
+
+    REQUIRE_MESSAGE(BootAndRun(*machine), "ROM did not reach its terminal self-jump");
+
+    CHECK(machine->bus.CpuRead(0x0200) == 0x42);
+    CHECK(machine->bus.CpuRead(0x0201) == 0x01);
+    CHECK(machine->bus.CpuRead(0x0202) == 0x55);
+    CHECK_FALSE(machine->cpu.GetFlag(CPU6502::Flags::C));
+    CHECK_FALSE(machine->cpu.GetFlag(CPU6502::Flags::D));
+    CHECK(machine->cpu.StackPointer() == 0xFF);
+}

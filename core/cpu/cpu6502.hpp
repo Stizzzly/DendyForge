@@ -131,10 +131,18 @@ private:
     std::uint8_t TSX(); // Transfer Stack Pointer to X
     std::uint8_t TXS(); // Transfer X to Stack Pointer
 
+    // Стек (Stack)
+    std::uint8_t PHA(); // Push Accumulator
+    std::uint8_t PHP(); // Push Processor Status
+    std::uint8_t PLA(); // Pull Accumulator
+    std::uint8_t PLP(); // Pull Processor Status
+
     std::uint8_t ASL();
 
     // Переходы и ветвления (Jumps & Branches)
     std::uint8_t JMP(); // Jump
+    std::uint8_t JSR(); // Jump to Subroutine
+    std::uint8_t RTS(); // Return from Subroutine
     std::uint8_t BCC();
     std::uint8_t BCS();
     std::uint8_t BEQ();

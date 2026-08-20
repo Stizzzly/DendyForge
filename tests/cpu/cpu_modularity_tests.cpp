@@ -152,3 +152,49 @@ TEST_CASE("CPU6502 gives unknown opcodes a finite execution time")
     CHECK(cpu.ProgramCounter() == 0x8001);
     CHECK(cpu.Cycles() == 1);
 }
+
+TEST_CASE("CPU6502 stack and subroutine instructions preserve their stack contract")
+{
+    MemoryCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x80;
+    bus.memory[0x8000] = 0xA9; // LDA #$42
+    bus.memory[0x8001] = 0x42;
+    bus.memory[0x8002] = 0x48; // PHA
+    bus.memory[0x8003] = 0x08; // PHP
+    bus.memory[0x8004] = 0x20; // JSR $800A
+    bus.memory[0x8005] = 0x0A;
+    bus.memory[0x8006] = 0x80;
+    bus.memory[0x8007] = 0xEA; // NOP
+    bus.memory[0x800A] = 0x60; // RTS
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
+
+    CompleteInstruction(cpu);
+
+    cpu.Clock();
+    CHECK(cpu.Cycles() == 2);
+    CHECK(bus.memory[0x01FD] == 0x42);
+    CompleteInstruction(cpu);
+
+    CompleteInstruction(cpu);
+    CHECK((bus.memory[0x01FC] & 0x30) == 0x30);
+
+    cpu.Clock();
+    CHECK(cpu.Cycles() == 5);
+    CHECK(bus.memory[0x01FB] == 0x80);
+    CHECK(bus.memory[0x01FA] == 0x06);
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x800A);
+
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x8007);
+    CHECK(cpu.StackPointer() == 0xFB);
+}

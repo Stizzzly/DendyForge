@@ -384,6 +384,13 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0xF9] = {"SBC", &CPU6502::SBC, &CPU6502::ABY, 4};
         table[0xE1] = {"SBC", &CPU6502::SBC, &CPU6502::IZX, 6};
         table[0xF1] = {"SBC", &CPU6502::SBC, &CPU6502::IZY, 5};
+
+        table[0x08] = {"PHP", &CPU6502::PHP, &CPU6502::IMP, 3};
+        table[0x28] = {"PLP", &CPU6502::PLP, &CPU6502::IMP, 4};
+        table[0x48] = {"PHA", &CPU6502::PHA, &CPU6502::IMP, 3};
+        table[0x68] = {"PLA", &CPU6502::PLA, &CPU6502::IMP, 4};
+        table[0x20] = {"JSR", &CPU6502::JSR, &CPU6502::ABS, 6};
+        table[0x60] = {"RTS", &CPU6502::RTS, &CPU6502::IMP, 6};
         return table;
     }();
 
@@ -927,6 +934,34 @@ std::uint8_t CPU6502::TXS()
     return 0;
 }
 
+std::uint8_t CPU6502::PHA()
+{
+    Push(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::PHP()
+{
+    Push(m_status | static_cast<std::uint8_t>(Flags::B) |
+         static_cast<std::uint8_t>(Flags::U));
+    return 0;
+}
+
+std::uint8_t CPU6502::PLA()
+{
+    m_a = Pop();
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::PLP()
+{
+    m_status = Pop();
+    SetFlag(Flags::B, false);
+    SetFlag(Flags::U, true);
+    return 0;
+}
+
 std::uint8_t CPU6502::LDX()
 {
     FetchData();
@@ -1112,6 +1147,24 @@ std::uint8_t CPU6502::ZP0()
 std::uint8_t CPU6502::JMP()
 {
     m_pc = m_addrAbs;
+    return 0;
+}
+
+std::uint8_t CPU6502::JSR()
+{
+    const std::uint16_t returnAddress = m_pc - 1;
+    Push((returnAddress >> 8) & 0x00FF);
+    Push(returnAddress & 0x00FF);
+    m_pc = m_addrAbs;
+    return 0;
+}
+
+std::uint8_t CPU6502::RTS()
+{
+    const std::uint16_t lo = Pop();
+    const std::uint16_t hi = Pop();
+    m_pc = (hi << 8) | lo;
+    ++m_pc;
     return 0;
 }
 
