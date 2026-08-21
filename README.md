@@ -129,8 +129,11 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 
 ### Controller
 
-* ⬜ Controller Port
-* ⬜ Input Latching
+* ✅ Controller Port
+* ✅ Input Latching
+
+Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
+`Enter` — Start, `K` — A, `L` — B.
 
 ### APU
 

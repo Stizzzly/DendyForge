@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "../cpu/cpu_bus.hpp"
+#include "../controller/controller.hpp"
 #include "../ppu/ppu.hpp"
 
 namespace dendyforge
@@ -25,10 +26,12 @@ public:
     bool PollPpuNmi();
 
     PPU& VideoProcessor();
+    Controller& PrimaryController();
 
 private:
     Cartridge* m_cartridge{nullptr};
     PPU m_ppu;
+    Controller m_controller1;
 
     std::array<std::uint8_t, 2048> m_cpuRam{};
 };

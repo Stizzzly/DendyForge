@@ -21,6 +21,11 @@ PPU& Bus::VideoProcessor()
     return m_ppu;
 }
 
+Controller& Bus::PrimaryController()
+{
+    return m_controller1;
+}
+
 std::uint8_t Bus::CpuRead(std::uint16_t address)
 {
     std::uint8_t data = 0x00;
@@ -45,6 +50,11 @@ std::uint8_t Bus::CpuRead(std::uint16_t address)
     if (address >= 0x2000 && address <= 0x3FFF)
     {
         return m_ppu.CpuRead(address);
+    }
+
+    if (address == 0x4016)
+    {
+        return m_controller1.Read();
     }
 
     // $4000-$4017
@@ -90,6 +100,12 @@ void Bus::CpuWrite(
         {
             m_ppu.CpuWrite(0x2004, CpuRead(baseAddress + offset));
         }
+        return;
+    }
+
+    if (address == 0x4016)
+    {
+        m_controller1.Write(data);
         return;
     }
 

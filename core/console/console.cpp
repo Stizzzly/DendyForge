@@ -61,4 +61,9 @@ PPU& Console::VideoProcessor()
     return m_bus.VideoProcessor();
 }
 
+Controller& Console::PrimaryController()
+{
+    return m_bus.PrimaryController();
+}
+
 } // namespace dendyforge

@@ -26,6 +26,7 @@ add_library(DendyForgeCore
     core/mapper/mapper0.cpp
     core/bus/bus.cpp
     core/console/console.cpp
+    core/controller/controller.cpp
     core/ppu/ppu.cpp
 )
 
@@ -42,6 +43,7 @@ add_executable(DendyForgeTests
     tests/bus/bus_tests.cpp
     tests/ppu/ppu_tests.cpp
     tests/console/console_tests.cpp
+    tests/controller/controller_tests.cpp
     tests/cartridge/cartridge_tests.cpp
 )
 

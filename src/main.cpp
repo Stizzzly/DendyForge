@@ -27,6 +27,24 @@ void PrepareDemoFrame(dendyforge::PPU& ppu)
     ppu.RenderBackground();
 }
 
+void SetControllerButton(dendyforge::Console& console, SDL_Keycode key, bool pressed)
+{
+    using Button = dendyforge::Controller::Button;
+
+    switch (key)
+    {
+    case SDLK_W: console.PrimaryController().SetButton(Button::Up, pressed); break;
+    case SDLK_A: console.PrimaryController().SetButton(Button::Left, pressed); break;
+    case SDLK_S: console.PrimaryController().SetButton(Button::Down, pressed); break;
+    case SDLK_D: console.PrimaryController().SetButton(Button::Right, pressed); break;
+    case SDLK_BACKSPACE: console.PrimaryController().SetButton(Button::Select, pressed); break;
+    case SDLK_RETURN: console.PrimaryController().SetButton(Button::Start, pressed); break;
+    case SDLK_K: console.PrimaryController().SetButton(Button::A, pressed); break;
+    case SDLK_L: console.PrimaryController().SetButton(Button::B, pressed); break;
+    default: break;
+    }
+}
+
 }
 
 int main(int argc, char* argv[])
@@ -79,6 +97,12 @@ int main(int argc, char* argv[])
             if (event.type == SDL_EVENT_QUIT)
             {
                 running = false;
+            }
+            else if (romLoaded &&
+                     (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP))
+            {
+                SetControllerButton(console, event.key.key,
+                                    event.type == SDL_EVENT_KEY_DOWN);
             }
         }
 

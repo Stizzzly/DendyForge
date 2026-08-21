@@ -23,6 +23,7 @@ public:
 
     CPU6502& Cpu();
     PPU& VideoProcessor();
+    Controller& PrimaryController();
 
 private:
     Bus m_bus;
