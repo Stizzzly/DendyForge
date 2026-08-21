@@ -182,9 +182,10 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 ### Games
 
 * ✅ Battle City
+* ⬜ Jackal
 * ✅ Pac-Man
 * ✅ Super Mario Bros.
-* ⬜ Contra
+* ✅ Contra
 * ⬜ Duck Hunt (without Zapper)
 * ⬜ Mega Man
 * ⬜ Kirby's Adventure
