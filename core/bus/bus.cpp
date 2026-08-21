@@ -81,6 +81,18 @@ void Bus::CpuWrite(
         return;
     }
 
+    // $4014
+    // OAM DMA transfers one CPU memory page into PPU sprite memory.
+    if (address == 0x4014)
+    {
+        const std::uint16_t baseAddress = static_cast<std::uint16_t>(data) << 8;
+        for (std::uint16_t offset = 0; offset < 256; ++offset)
+        {
+            m_ppu.CpuWrite(0x2004, CpuRead(baseAddress + offset));
+        }
+        return;
+    }
+
     // $4000-$4017
     // APU + Controllers (TODO)
 }

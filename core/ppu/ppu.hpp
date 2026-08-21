@@ -18,6 +18,7 @@ public:
     void Clock();
     bool PollNmi();
     void RenderBackground();
+    void RenderSprites();
 
     const std::array<std::uint32_t, 256 * 240>& FrameBuffer() const;
 
@@ -42,6 +43,7 @@ private:
     std::array<std::uint8_t, 256> m_oam{};
     std::array<std::uint8_t, 8192> m_chrRam{};
     std::array<std::uint32_t, 256 * 240> m_frameBuffer{};
+    std::array<bool, 256 * 240> m_backgroundOpaque{};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};

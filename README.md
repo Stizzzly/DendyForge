@@ -119,10 +119,11 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ Name Tables
 * ✅ Palette RAM
 * 🟡 Background Rendering
-* ⬜ Sprite Rendering
+* ✅ OAM DMA ($4014)
+* 🟡 Sprite Rendering
 * 🟡 Scrolling
 * ✅ VBlank and NMI signal
-* ⬜ Sprite Zero Hit
+* 🟡 Sprite Zero Hit
 
 ### Controller
 

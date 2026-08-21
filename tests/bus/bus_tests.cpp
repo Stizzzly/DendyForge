@@ -20,3 +20,18 @@ TEST_CASE("Bus mirrors CPU RAM across the 0x0000-0x1FFF range")
     CHECK(bus.CpuRead(0x17FF) == 0x55);
     CHECK(bus.CpuRead(0x1FFF) == 0x55);
 }
+
+TEST_CASE("Bus transfers a CPU memory page into PPU OAM through DMA")
+{
+    dendyforge::Bus bus;
+    bus.CpuWrite(0x0200, 0x12);
+    bus.CpuWrite(0x02FF, 0x34);
+
+    bus.CpuWrite(0x2003, 0x00);
+    bus.CpuWrite(0x4014, 0x02);
+
+    bus.CpuWrite(0x2003, 0x00);
+    CHECK(bus.CpuRead(0x2004) == 0x12);
+    bus.CpuWrite(0x2003, 0xFF);
+    CHECK(bus.CpuRead(0x2004) == 0x34);
+}

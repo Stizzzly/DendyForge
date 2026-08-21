@@ -32,12 +32,13 @@ void PPU::Clock()
 {
     if (m_scanline == -1 && m_cycle == 1)
     {
-        m_status &= ~0x80;
+        m_status &= ~0xE0;
         m_nmiPending = false;
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
         RenderBackground();
+        RenderSprites();
         m_status |= 0x80;
         m_nmiPending = (m_control & 0x80) != 0;
     }
@@ -65,6 +66,7 @@ void PPU::RenderBackground()
 {
     const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
     m_frameBuffer.fill(backdrop);
+    m_backgroundOpaque.fill(false);
 
     if ((m_mask & 0x08) == 0)
     {
@@ -109,8 +111,73 @@ void PPU::RenderBackground()
                 ? 0x3F00
                 : 0x3F00 + palette * 4 + color;
 
-            m_frameBuffer[y * 256 + x] =
-                ColorFromPaletteIndex(PpuRead(paletteAddress));
+            const std::size_t pixel = y * 256 + x;
+            m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
+            m_backgroundOpaque[pixel] = color != 0;
+        }
+    }
+}
+
+void PPU::RenderSprites()
+{
+    if ((m_mask & 0x10) == 0)
+    {
+        return;
+    }
+
+    const std::uint16_t patternBase = (m_control & 0x08) ? 0x1000 : 0x0000;
+
+    for (std::size_t sprite = 0; sprite < 64; ++sprite)
+    {
+        const std::size_t offset = sprite * 4;
+        const std::uint8_t spriteY = m_oam[offset];
+        const std::uint8_t tileIndex = m_oam[offset + 1];
+        const std::uint8_t attributes = m_oam[offset + 2];
+        const std::uint8_t spriteX = m_oam[offset + 3];
+
+        for (std::uint16_t row = 0; row < 8; ++row)
+        {
+            const std::uint16_t screenY = spriteY + row + 1;
+            if (screenY >= 240)
+            {
+                continue;
+            }
+
+            const std::uint8_t patternRow = (attributes & 0x80) ? 7 - row : row;
+            const std::uint16_t tileAddress = patternBase + tileIndex * 16 + patternRow;
+            const std::uint8_t lowPlane = PpuRead(tileAddress);
+            const std::uint8_t highPlane = PpuRead(tileAddress + 8);
+
+            for (std::uint16_t column = 0; column < 8; ++column)
+            {
+                const std::uint16_t screenX = spriteX + column;
+                if (screenX >= 256)
+                {
+                    continue;
+                }
+
+                const std::uint8_t bit = (attributes & 0x40) ? column : 7 - column;
+                const std::uint8_t color =
+                    ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
+                if (color == 0)
+                {
+                    continue;
+                }
+
+                const std::size_t pixel = screenY * 256 + screenX;
+                if (sprite == 0 && m_backgroundOpaque[pixel] && screenX < 255)
+                {
+                    m_status |= 0x40;
+                }
+                if ((attributes & 0x20) != 0 && m_backgroundOpaque[pixel])
+                {
+                    continue;
+                }
+
+                const std::uint16_t paletteAddress =
+                    0x3F10 + (attributes & 0x03) * 4 + color;
+                m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
+            }
         }
     }
 }

@@ -109,3 +109,30 @@ TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")
 
     CHECK(ppu.FrameBuffer()[0] != beforeScroll);
 }
+
+TEST_CASE("PPU renders an OAM sprite and records a Sprite Zero Hit")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x18);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0001, 0x80);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x0010, 0x80);
+    ppu.PpuWrite(0x0018, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x3F01, 0x21);
+    ppu.PpuWrite(0x3F11, 0x31);
+
+    ppu.CpuWrite(0x2003, 0x00);
+    ppu.CpuWrite(0x2004, 0x00);
+    ppu.CpuWrite(0x2004, 0x01);
+    ppu.CpuWrite(0x2004, 0x00);
+    ppu.CpuWrite(0x2004, 0x00);
+
+    ppu.RenderBackground();
+    const auto backgroundPixel = ppu.FrameBuffer()[256];
+    ppu.RenderSprites();
+
+    CHECK(ppu.FrameBuffer()[256] != backgroundPixel);
+    CHECK((ppu.CpuRead(0x2002) & 0x40) != 0);
+}
