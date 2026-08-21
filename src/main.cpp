@@ -84,6 +84,11 @@ int main(int argc, char* argv[])
 
     SDL_SetRenderLogicalPresentation(
         renderer, ScreenWidth, ScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+    if (!SDL_SetRenderVSync(renderer, 1))
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Could not enable renderer VSync: %s", SDL_GetError());
+    }
 
     dendyforge::Console console;
     const bool romLoaded = argc > 1 && console.LoadRom(argv[1]);
