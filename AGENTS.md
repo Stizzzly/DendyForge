@@ -123,17 +123,17 @@ Important CPU rules:
 
 ## Cartridge, mapper, and bus status
 
-Only Mapper 0 is implemented. It maps 16 KiB or 32 KiB PRG and maps CHR ROM;
-when there are zero CHR ROM banks it allows CHR RAM writes. Mapper 0 is enough
-for the currently demonstrated games, but no other mapper must be assumed to
-work.
+Mapper 0 and Mapper 2 (UxROM/UNROM) are implemented. Mapper 0 maps 16 KiB or
+32 KiB PRG. Mapper 2 selects a 16 KiB PRG bank at `$8000-$BFFF` and fixes the
+last PRG bank at `$C000-$FFFF`. Both use CHR ROM when supplied and otherwise
+provide 8 KiB of CHR RAM. No other mapper must be assumed to work.
 
 The current CPU map implemented by `Bus` is:
 
 * `$0000-$1FFF`: 2 KiB internal RAM, mirrored by `address & $07FF`.
 * `$2000-$3FFF`: PPU register interface, mirrored every eight bytes.
-* `$4014`: immediate 256-byte OAM DMA copy. It does **not** yet model CPU
-  stalling or DMA parity timing.
+* `$4014`: immediate 256-byte OAM DMA copy with a 513/514-cycle CPU stall,
+  selected by CPU-cycle parity. The PPU continues to clock during that stall.
 * `$4016`: controller 1 serial port.
 * cartridge reads/writes are tried first, then the built-in map.
 * APU and the rest of `$4000-$4017` are still absent.
@@ -184,26 +184,17 @@ misplaced world elements is expected for the current implementation. It proves
 that ROM loading, CPU execution, basic background/sprite rendering, palette,
 and controller input are alive. It does **not** mean the game is supported.
 
-The renderer in `core/ppu/ppu.cpp` is a simplified direct framebuffer renderer:
+The renderer has live `v`, `t`, and fine-X scrolling; coarse-X/Y progression;
+background name-table/attribute/pattern fetch latches and 16-bit shifters; and
+a scanline sprite pipeline. It is still not fully cycle-accurate:
 
-* It derives each background pixel from persistent `m_scrollX/m_scrollY`.
-  It does not use the PPU's live rendering address (`v`), temporary address
-  (`t`), fine X, and their scheduled transfers/increments.
-* `RenderBackgroundPixel()` calculates `worldX`, but selects the pattern bit
-  from `screenX & 7`. This is wrong once fine horizontal scroll is non-zero;
-  the bit must follow the scrolled pixel position as part of the eventual
-  correct fetch pipeline. Do not patch only that expression without tests and
-  without deciding how live scroll state will work.
-* It manually crosses name tables from coarse scroll but cannot correctly
-  emulate writes to `$2000/$2005/$2006/$2007` during rendering, split scroll,
-  the hardware fetch sequence, or proper vertical increment/copy behavior.
-* Background pixels are emitted as cycles advance, but sprite pixels are
-  overlaid only at cycle 256 of the scanline. Sprite evaluation/fetch timing,
-  overflow behavior, and sprite-zero timing are approximate.
-* The renderer does not model background/sprite fetches, dummy fetches,
-  sprite fetches, odd-frame skipped cycle, or bus-visible PPU timing.
-* OAM DMA has no CPU stall; PPU register open-bus behavior and many timing
-  races are also not modeled.
+* Mid-frame `$2000/$2005/$2006/$2007` races and split-scroll timing remain
+  approximate.
+* Sprite evaluation/fetch is scanline-based, but does not yet reproduce the
+  hardware overflow bug, per-cycle OAM accesses, or exact sprite-zero timing.
+* Background/sprite dummy fetches and bus-visible PPU timing are absent.
+* The odd-frame skipped cycle and OAM DMA CPU stall are modeled, but PPU
+  open-bus behavior and many VBlank/NMI timing races are still not.
 
 These are the main reason a simple Mapper 0 game can be playable while a more
 demanding scrolling game visibly breaks apart. Do not mark Super Mario Bros.
@@ -213,23 +204,11 @@ as supported until it is actually stable in normal play.
 
 Work in small, independently testable commits. The order below is intentional:
 
-1. Add tests around the PPU scroll/address registers (`v`, `t`, fine X and the
-   write latch) and make the distinction explicit in PPU state. Keep existing
-   CPU-facing `$2005/$2006/$2007` behavior passing.
-2. Replace the direct `m_scrollX/m_scrollY` sampling with background address
-   progression during visible rendering: coarse-X increment and horizontal
-   name-table switch, vertical increment, and the scheduled horizontal/vertical
-   copies from `t` to `v`. Start with correctness visible in framebuffer tests,
-   then place them at the proper cycle ranges.
-3. Introduce explicit background fetch latches (name-table byte, attribute,
-   low plane, high plane, pattern shifters) and render one pixel from them.
-   This is the foundation for correct fine scroll and mid-frame register writes.
-4. Rework sprite evaluation/fetch into scanline state, preserving first-eight
-   sprite priority, clipping, transparency, background priority, and
-   sprite-zero-hit. Add focused unit tests before relying on a game screenshot.
-5. Tighten timing details: pre-render flag clearing, VBlank/NMI edge cases,
-   odd-frame behavior, OAM DMA stalls, and PPU register timing.
-6. Validate with small PPU test ROMs and real-game checkpoints; only then
+1. Tighten the existing background and sprite pipelines: split-scroll register
+   races, sprite overflow behavior, and exact sprite-zero timing.
+2. Add remaining bus-visible timing: dummy fetches, PPU open bus, and VBlank/
+   NMI edge cases.
+3. Validate with small PPU test ROMs and real-game checkpoints; only then
    update README roadmap checks.
 
 When choosing between a broad rewrite and a small change, preserve the existing

@@ -1,5 +1,6 @@
 #include "cartridge.hpp"
 #include "../mapper/mapper0.hpp"
+#include "../mapper/mapper2.hpp"
 
 #include <utility>
 #include <stdexcept>
@@ -23,8 +24,19 @@ Cartridge::Cartridge(
             CHRRomBanks());
         break;
 
+    case 2:
+        m_mapper = std::make_unique<Mapper2>(
+            PRGRomBanks(),
+            CHRRomBanks());
+        break;
+
     default:
         throw std::runtime_error("Unsupported mapper");
+    }
+
+    if (m_chrRom.empty())
+    {
+        m_chrRam.resize(8 * 1024);
     }
 }
 
@@ -69,9 +81,14 @@ bool Cartridge::CpuWrite(
 {
     std::uint32_t mappedAddress;
 
-    if (!m_mapper->CpuWrite(address, mappedAddress))
+    if (!m_mapper->CpuWrite(address, data, mappedAddress))
     {
         return false;
+    }
+
+    if (mappedAddress == Mapper::NoMappedAddress)
+    {
+        return true;
     }
 
     if (mappedAddress >= m_prgRom.size())
@@ -94,12 +111,14 @@ bool Cartridge::PpuRead(
         return false;
     }
 
-    if (mappedAddress >= m_chrRom.size())
+    const std::vector<std::uint8_t>& chrMemory =
+        m_chrRom.empty() ? m_chrRam : m_chrRom;
+    if (mappedAddress >= chrMemory.size())
     {
         return false;
     }
 
-    data = m_chrRom[mappedAddress];
+    data = chrMemory[mappedAddress];
     return true;
 }
 
@@ -114,12 +133,14 @@ bool Cartridge::PpuWrite(
         return false;
     }
 
-    if (mappedAddress >= m_chrRom.size())
+    std::vector<std::uint8_t>& chrMemory =
+        m_chrRom.empty() ? m_chrRam : m_chrRom;
+    if (mappedAddress >= chrMemory.size())
     {
         return false;
     }
 
-    m_chrRom[mappedAddress] = data;
+    chrMemory[mappedAddress] = data;
     return true;
 }
 

@@ -24,6 +24,7 @@ add_library(DendyForgeCore
     core/cartridge/cartridge_info.cpp
     core/mapper/mapper.cpp
     core/mapper/mapper0.cpp
+    core/mapper/mapper2.cpp
     core/bus/bus.cpp
     core/console/console.cpp
     core/controller/controller.cpp

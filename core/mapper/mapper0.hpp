@@ -18,6 +18,7 @@ public:
 
     bool CpuWrite(
         std::uint16_t address,
+        std::uint8_t data,
         std::uint32_t& mappedAddress) override;
 
     bool PpuRead(

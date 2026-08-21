@@ -33,22 +33,9 @@ bool Mapper0::CpuRead(
 
 bool Mapper0::CpuWrite(
     std::uint16_t address,
+    std::uint8_t data,
     std::uint32_t& mappedAddress)
 {
-    if (address >= 0x8000)
-    {
-        if (m_prgBanks > 1)
-        {
-            mappedAddress = address & 0x7FFF;
-        }
-        else
-        {
-            mappedAddress = address & 0x3FFF;
-        }
-
-        return true;
-    }
-
     return false;
 }
 
