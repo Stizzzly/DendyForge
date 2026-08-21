@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "../cpu/cpu_bus.hpp"
+#include "../ppu/ppu.hpp"
 
 namespace dendyforge
 {
@@ -20,8 +21,11 @@ public:
     std::uint8_t CpuRead(std::uint16_t address) override;
     void CpuWrite(std::uint16_t address, std::uint8_t data) override;
 
+    PPU& VideoProcessor();
+
 private:
     Cartridge* m_cartridge{nullptr};
+    PPU m_ppu;
 
     std::array<std::uint8_t, 2048> m_cpuRam{};
 };
