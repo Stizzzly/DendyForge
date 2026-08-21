@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "apu/apu.hpp"
 
@@ -21,8 +22,9 @@ TEST_CASE("APU pulse channel produces samples after its registers are enabled")
     CHECK_FALSE(samples.empty());
     CHECK(std::any_of(samples.begin(), samples.end(),
                       [](float sample) { return sample > 0.0F; }));
-    CHECK(std::all_of(samples.begin(), samples.end(),
-                      [](float sample) { return sample >= 0.0F && sample <= 1.0F; }));
+    CHECK(std::all_of(samples.begin(), samples.end(), [](float sample) {
+        return std::isfinite(sample) && std::abs(sample) <= 1.0F;
+    }));
     CHECK((apu.CpuRead(0x4015) & 0x01) != 0);
 }
 

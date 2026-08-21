@@ -134,6 +134,7 @@ private:
     void ClockFrameCounter();
     void ClockQuarterFrame();
     void ClockHalfFrame();
+    float ApplyOutputFilters(float sample);
     void QueueSample();
 
     PulseChannel m_pulse1;
@@ -150,6 +151,11 @@ private:
     bool m_pendingFrameIrqInhibit{false};
     bool m_cpuCycleOdd{false};
     std::uint8_t m_frameResetDelay{0};
+    float m_highPass90PreviousInput{0.0F};
+    float m_highPass90Output{0.0F};
+    float m_highPass440PreviousInput{0.0F};
+    float m_highPass440Output{0.0F};
+    float m_lowPass14kOutput{0.0F};
     std::uint32_t m_samplePhase{0};
     std::vector<float> m_samples;
 };

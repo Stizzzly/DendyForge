@@ -247,7 +247,14 @@ uses the 3/4-cycle delay and the 4-step/5-step mode distinction.
 The SDL3 frontend keeps the device paused until a 50 ms PCM prebuffer has been
 queued. It caps SDL's queued input at 100 ms and retains excess generated
 samples locally instead of dropping them; this prevents startup underruns and
-audio discontinuities during a transient queue backlog.
+audio discontinuities during a transient queue backlog. The APU is not yet
+verified against game audio; do not mark its Roadmap items complete until the
+audible metallic artifacts have been diagnosed and removed.
+
+The mixer output passes through the standard NES-style 90 Hz and 440 Hz
+high-pass filters plus a 14 kHz low-pass filter before reaching SDL. These
+filters remove the DC component produced by the raw digital mixer and reduce
+high-frequency aliasing; keep them in the APU rather than the SDL frontend.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.

@@ -672,6 +672,27 @@ void APU::ClockHalfFrame()
     m_pulse2.ClockSweep(false);
 }
 
+float APU::ApplyOutputFilters(float sample)
+{
+    constexpr float HighPass90Coefficient = 0.98734F;
+    constexpr float HighPass440Coefficient = 0.94100F;
+    constexpr float LowPass14kCoefficient = 0.66600F;
+
+    const float afterHighPass90 = HighPass90Coefficient *
+        (m_highPass90Output + sample - m_highPass90PreviousInput);
+    m_highPass90PreviousInput = sample;
+    m_highPass90Output = afterHighPass90;
+
+    const float afterHighPass440 = HighPass440Coefficient *
+        (m_highPass440Output + afterHighPass90 - m_highPass440PreviousInput);
+    m_highPass440PreviousInput = afterHighPass90;
+    m_highPass440Output = afterHighPass440;
+
+    m_lowPass14kOutput += LowPass14kCoefficient *
+        (afterHighPass440 - m_lowPass14kOutput);
+    return m_lowPass14kOutput;
+}
+
 void APU::QueueSample()
 {
     constexpr std::size_t MaximumQueuedSamples = SampleRate / 5;
@@ -695,7 +716,7 @@ void APU::QueueSample()
     const float tndMix = tndInput == 0.0F
                              ? 0.0F
                              : 159.79F / ((1.0F / tndInput) + 100.0F);
-    m_samples.push_back(pulseMix + tndMix);
+    m_samples.push_back(ApplyOutputFilters(pulseMix + tndMix));
 }
 
 } // namespace dendyforge
