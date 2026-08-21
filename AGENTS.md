@@ -1,0 +1,271 @@
+# DendyForge: working context for future sessions
+
+This file is the authoritative handoff for work in this repository. Read it
+before changing emulator code. It describes the code as it exists now, not an
+aspirational design.
+
+## Project purpose and language
+
+DendyForge is a C++20 emulator for the Dendy/NES platform. The project is
+deliberately split into reusable components. In particular, `CPU6502` must
+remain a standalone CPU core with only the small `CpuBus` interface as its
+hardware dependency. It must not acquire Dendy-specific registers, cartridge
+logic, PPU knowledge, or controller logic. `Console` is the platform-specific
+composition root and creates `CPU6502` with decimal arithmetic disabled.
+
+Use the names already established in the code:
+
+* `CPU6502` for the reusable CPU core.
+* `CPU2A03` only when referring to the Dendy/NES configuration in prose.
+* Do not introduce names for other CPU variants unless the user explicitly
+  asks for them.
+
+The user prefers incremental emulator development: one coherent change, tests,
+commit, and push. Update `README.md` when a roadmap checkbox is genuinely
+complete. The user has explicitly authorized committing and pushing each
+logical change directly to `main`; do not create a feature branch for this
+project unless they revoke that instruction.
+
+## Repository map
+
+```text
+core/
+  cpu/          reusable CPU6502 and CpuBus interface
+  bus/          CPU address map, PPU register mapping, DMA, controller port
+  console/      joins CPU, Bus, Cartridge; clocks CPU and PPU
+  ppu/          PPU registers, memory and current software renderer
+  controller/   serial controller-port implementation
+  ines/         iNES header types and reader
+  cartridge/    cartridge data plus mapper dispatch
+  mapper/       mapper abstraction and Mapper 0
+src/main.cpp    SDL3 window, event loop, texture upload and keyboard mapping
+tests/          doctest tests and versioned CPU test ROM fixtures
+roms/           user-local game ROMs; ignored by Git
+```
+
+`CMakeLists.txt` builds:
+
+* `DendyForgeCpu`: only `core/cpu/cpu6502.cpp`.
+* `DendyForgeCore`: CPU plus cartridge, bus, console, controller, mapper, and
+  PPU.
+* `DendyForgeTests`: doctest executable.
+* `DendyForgeApp`: SDL3 frontend executable.
+
+## Build and test on this machine
+
+The supported Windows configuration is MinGW64 + Clang + Ninja via CMake
+presets. SDL3 must be installed in that MinGW environment:
+
+```powershell
+C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3
+cmake --preset mingw-clang-debug
+cmake --build --preset mingw-clang-debug
+ctest --test-dir out/build/mingw-clang-debug --output-on-failure
+```
+
+The active build directory is `out/build/mingw-clang-debug`. Do not rely on
+the legacy `build/` directory: it can contain a cache made in another
+environment (`/home/...`) and is not a valid Windows build tree.
+
+Run a local ROM by passing its path as the first argument. The ROM is not
+loaded merely by placing it in `roms/`:
+
+```powershell
+.\out\build\mingw-clang-debug\DendyForgeApp.exe ".\roms\game.nes"
+```
+
+With no argument, the app shows a generated PPU demo frame. A blank/checkered
+window while testing a game commonly means the executable was launched without
+the ROM path.
+
+Tests use doctest. CPU ROM fixtures are intentionally versioned under
+`tests/cpu/roms/`; arbitrary `*.nes` files and `roms/` are ignored. The
+temporary nestest trace `tests/cpu/roms/nestestres.log` is ignored.
+
+## Current architecture and data flow
+
+```text
+SDL3 main loop
+  -> Console::Clock()
+       -> CPU6502::Clock() once
+       -> Bus::ClockPpu() three times
+       -> deliver a pending PPU NMI to CPU6502::NMI()
+  -> at completed PPU frame: SDL texture upload + RenderPresent
+
+CPU6502 -> CpuBus (implemented by Bus)
+Bus -> CPU RAM / PPU registers / controller / Cartridge
+Cartridge -> Mapper -> PRG ROM or CHR ROM/RAM mapping
+```
+
+`Bus` owns the PPU and controller. `Console` owns `Bus`, `CPU6502`, and the
+loaded `Cartridge`. `Console::LoadRom()` parses iNES, constructs the cartridge,
+inserts it into the bus, and resets the CPU. The current PPU receives the
+cartridge from `Bus::InsertCartridge()`.
+
+## CPU6502 status
+
+The CPU has all 56 official mnemonics and all 151 official opcodes. Its normal
+instruction-level cycle accounting, page-cross penalties, branch timing,
+interrupt handling, decimal-mode configuration, and the JMP indirect wrapping
+behavior are covered by tests. The local `nestest` trace test has passed for
+PC, registers, and cycle count. It is intentionally instruction-timed, not
+yet a micro-operation/cycle-accurate CPU implementation.
+
+Important CPU rules:
+
+* Preserve modularity. `cpu6502.hpp/.cpp` may depend on `cpu_bus.hpp`, never
+  on `Bus`, `PPU`, `Console`, SDL, iNES, or a mapper.
+* `CPU6502::Configuration::decimalModeEnabled` exists because the standalone
+  core supports decimal arithmetic. `Console` passes `false`; its D flag can
+  exist but arithmetic remains binary.
+* Do not change CPU code while fixing PPU rendering unless a failing,
+  evidence-backed CPU issue requires it.
+
+## Cartridge, mapper, and bus status
+
+Only Mapper 0 is implemented. It maps 16 KiB or 32 KiB PRG and maps CHR ROM;
+when there are zero CHR ROM banks it allows CHR RAM writes. Mapper 0 is enough
+for the currently demonstrated games, but no other mapper must be assumed to
+work.
+
+The current CPU map implemented by `Bus` is:
+
+* `$0000-$1FFF`: 2 KiB internal RAM, mirrored by `address & $07FF`.
+* `$2000-$3FFF`: PPU register interface, mirrored every eight bytes.
+* `$4014`: immediate 256-byte OAM DMA copy. It does **not** yet model CPU
+  stalling or DMA parity timing.
+* `$4016`: controller 1 serial port.
+* cartridge reads/writes are tried first, then the built-in map.
+* APU and the rest of `$4000-$4017` are still absent.
+
+Controller order is A, B, Select, Start, Up, Down, Left, Right. A write to
+`$4016` latches it on strobe or the high-to-low transition; reads shift one bit
+and then return ones. SDL maps `W/A/S/D` to D-pad, Backspace to Select, Enter
+to Start, K to A, and L to B.
+
+## PPU: what is implemented
+
+The PPU currently has a useful renderer, but it is not cycle-accurate.
+
+Implemented and tested foundations:
+
+* CPU-visible registers `$2000-$2007`, including mirrored access through Bus.
+* `$2002` status read side effects: VBlank clear, NMI pending clear, write
+  latch clear.
+* `$2005` two-write scroll state; `$2006` two-write PPU address; `$2007`
+  buffered reads, palette-read behavior, and address increment by 1 or 32.
+* Pattern-table reads from cartridge CHR with 8 KiB fallback CHR RAM.
+* 2 KiB name-table RAM, horizontal/vertical mirroring and `$3000-$3EFF`
+  mirroring.
+* 32-byte palette RAM and special palette mirroring (`$3F10/$14/$18/$1C`).
+* PPUMASK background/sprite enable, left-edge clipping, grayscale and simple
+  colour-emphasis transform.
+* OAM registers, immediate `$4014` DMA, 8x8 and 8x16 sprites, sprite flips,
+  palette selection, sprite/background priority, a rough sprite-zero-hit
+  condition, and an 8-sprite-per-scanline limit with overflow flag.
+* 256x240 ARGB framebuffer.
+* PPU timing counters: scanline `-1` pre-render through `260`, cycle `0..340`.
+  Visible pixels are written at visible scanlines, cycles `1..256`. VBlank is
+  raised at scanline 241, cycle 1; an enabled NMI becomes pending there.
+* `m_frameComplete` is set at that same VBlank point. `ConsumeFrameComplete()`
+  returns the event once and clears it. The frontend uses this to upload and
+  present only whole frames, never the framebuffer while visible scanlines are
+  being drawn.
+
+`main.cpp` intentionally clocks in batches of 1,000 console clocks to avoid an
+event-loop-dependent one-clock UI. This is only a frontend scheduling choice;
+presentation is still gated by `ConsumeFrameComplete()`. Do not reintroduce a
+texture upload and `SDL_RenderPresent()` on every outer loop iteration.
+
+## PPU: known gaps exposed by Super Mario Bros.
+
+The screenshot with a mostly correct HUD, ground, and player but missing or
+misplaced world elements is expected for the current implementation. It proves
+that ROM loading, CPU execution, basic background/sprite rendering, palette,
+and controller input are alive. It does **not** mean the game is supported.
+
+The renderer in `core/ppu/ppu.cpp` is a simplified direct framebuffer renderer:
+
+* It derives each background pixel from persistent `m_scrollX/m_scrollY`.
+  It does not use the PPU's live rendering address (`v`), temporary address
+  (`t`), fine X, and their scheduled transfers/increments.
+* `RenderBackgroundPixel()` calculates `worldX`, but selects the pattern bit
+  from `screenX & 7`. This is wrong once fine horizontal scroll is non-zero;
+  the bit must follow the scrolled pixel position as part of the eventual
+  correct fetch pipeline. Do not patch only that expression without tests and
+  without deciding how live scroll state will work.
+* It manually crosses name tables from coarse scroll but cannot correctly
+  emulate writes to `$2000/$2005/$2006/$2007` during rendering, split scroll,
+  the hardware fetch sequence, or proper vertical increment/copy behavior.
+* Background pixels are emitted as cycles advance, but sprite pixels are
+  overlaid only at cycle 256 of the scanline. Sprite evaluation/fetch timing,
+  overflow behavior, and sprite-zero timing are approximate.
+* The renderer does not model background/sprite fetches, dummy fetches,
+  sprite fetches, odd-frame skipped cycle, or bus-visible PPU timing.
+* OAM DMA has no CPU stall; PPU register open-bus behavior and many timing
+  races are also not modeled.
+
+These are the main reason a simple Mapper 0 game can be playable while a more
+demanding scrolling game visibly breaks apart. Do not mark Super Mario Bros.
+as supported until it is actually stable in normal play.
+
+## Recommended next PPU plan
+
+Work in small, independently testable commits. The order below is intentional:
+
+1. Add tests around the PPU scroll/address registers (`v`, `t`, fine X and the
+   write latch) and make the distinction explicit in PPU state. Keep existing
+   CPU-facing `$2005/$2006/$2007` behavior passing.
+2. Replace the direct `m_scrollX/m_scrollY` sampling with background address
+   progression during visible rendering: coarse-X increment and horizontal
+   name-table switch, vertical increment, and the scheduled horizontal/vertical
+   copies from `t` to `v`. Start with correctness visible in framebuffer tests,
+   then place them at the proper cycle ranges.
+3. Introduce explicit background fetch latches (name-table byte, attribute,
+   low plane, high plane, pattern shifters) and render one pixel from them.
+   This is the foundation for correct fine scroll and mid-frame register writes.
+4. Rework sprite evaluation/fetch into scanline state, preserving first-eight
+   sprite priority, clipping, transparency, background priority, and
+   sprite-zero-hit. Add focused unit tests before relying on a game screenshot.
+5. Tighten timing details: pre-render flag clearing, VBlank/NMI edge cases,
+   odd-frame behavior, OAM DMA stalls, and PPU register timing.
+6. Validate with small PPU test ROMs and real-game checkpoints; only then
+   update README roadmap checks.
+
+When choosing between a broad rewrite and a small change, preserve the existing
+public PPU interface where possible and land the smallest test-backed layer.
+It is acceptable to add private structures for rendering state. Avoid adding
+Dendy-specific behavior to `CPU6502` to work around PPU issues.
+
+## Test guidance
+
+* Keep unit tests beside the component: `tests/ppu/ppu_tests.cpp`,
+  `tests/controller/controller_tests.cpp`, `tests/bus/bus_tests.cpp`, etc.
+* New PPU behavior needs deterministic framebuffer/register assertions. A game
+  screenshot is excellent integration evidence but not a replacement for a
+  test.
+* Run the full CTest command after C++ changes. For documentation-only changes,
+  a build is not required.
+* Preserve the `nestest` fixtures and the ignored generated trace. The CPU
+  regression coverage is valuable even during PPU work.
+
+## Git and workspace hygiene
+
+* Check `git status --short` before editing and before staging. The worktree
+  may contain user changes; never overwrite or stage unrelated files.
+* Use `apply_patch` for source/documentation edits. Stage exact file paths;
+  never use `git add .` or `git add -A`.
+* Do not use `git reset --hard` or destructive checkout. If a commit must be
+  undone on shared `main`, use `git revert` so history remains intact.
+* Commit each logical layer and push it to `origin main` immediately after its
+  tests pass. Use clear imperative commit subjects.
+* `out/`, `build/`, local ROMs, and generated logs are not source changes.
+  Do not commit them.
+
+## README discipline
+
+`README.md` is both the roadmap and the project-facing status. It currently
+marks SDL3 window, framebuffer renderer, keyboard input, controller port,
+input latching, and Battle City as complete. Game Loop, most PPU areas, APU,
+additional mappers, debugger, Libretro, and Android remain unfinished. Update
+checkboxes only after the corresponding capability is implemented and verified.
