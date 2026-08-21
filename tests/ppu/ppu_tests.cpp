@@ -68,3 +68,21 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
     CHECK_FALSE(ppu.PollNmi());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
 }
+
+TEST_CASE("PPU renders a background tile into the frame buffer")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08);
+
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x23C0, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+
+    ppu.RenderBackground();
+
+    CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
+    CHECK(ppu.FrameBuffer()[1] == ppu.FrameBuffer()[256]);
+}

@@ -99,10 +99,10 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 
 * ✅ PPU register interface ($2000-$2007)
 * 🟡 VRAM
-* ⬜ Pattern Tables
+* ✅ Pattern Tables
 * ✅ Name Tables
 * ✅ Palette RAM
-* ⬜ Background Rendering
+* 🟡 Background Rendering
 * ⬜ Sprite Rendering
 * ⬜ Scrolling
 * ✅ VBlank and NMI signal

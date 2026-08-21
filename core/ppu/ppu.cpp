@@ -5,6 +5,22 @@
 namespace dendyforge
 {
 
+namespace
+{
+
+constexpr std::array<std::uint32_t, 64> SystemPalette{
+    0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600, 0x561D00,
+    0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D, 0x000000, 0x000000, 0x000000,
+    0xADADAD, 0x155FD9, 0x4240FF, 0x7527FE, 0xA01ACC, 0xB71E7B, 0xB53120, 0x994E00,
+    0x6B6D00, 0x388700, 0x0C9300, 0x008F32, 0x007C8D, 0x000000, 0x000000, 0x000000,
+    0xFFFEFF, 0x64B0FF, 0x9290FF, 0xC676FF, 0xF36AFF, 0xFE6ECC, 0xFE8170, 0xEA9E22,
+    0xBCBE00, 0x88D800, 0x5CE430, 0x45E082, 0x48CDDE, 0x4F4F4F, 0x000000, 0x000000,
+    0xFFFEFF, 0xC0DFFF, 0xD3D2FF, 0xE8C8FF, 0xFBC2FF, 0xFEC4EA, 0xFECCC5, 0xF7D8A5,
+    0xE4E594, 0xCFEE96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000, 0x000000,
+};
+
+}
+
 void PPU::ConnectCartridge(Cartridge* cartridge)
 {
     m_cartridge = cartridge;
@@ -21,6 +37,7 @@ void PPU::Clock()
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
+        RenderBackground();
         m_status |= 0x80;
         m_nmiPending = (m_control & 0x80) != 0;
     }
@@ -36,6 +53,56 @@ void PPU::Clock()
     if (m_scanline == 261)
     {
         m_scanline = -1;
+    }
+}
+
+const std::array<std::uint32_t, 256 * 240>& PPU::FrameBuffer() const
+{
+    return m_frameBuffer;
+}
+
+void PPU::RenderBackground()
+{
+    const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
+    m_frameBuffer.fill(backdrop);
+
+    if ((m_mask & 0x08) == 0)
+    {
+        return;
+    }
+
+    const std::uint16_t nametableBase = 0x2000 | ((m_control & 0x03) << 10);
+    const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
+
+    for (std::uint16_t y = 0; y < 240; ++y)
+    {
+        const std::uint16_t tileRow = y / 8;
+        const std::uint16_t rowInTile = y & 0x07;
+
+        for (std::uint16_t x = 0; x < 256; ++x)
+        {
+            const std::uint16_t tileColumn = x / 8;
+            const std::uint8_t tileIndex = PpuRead(
+                nametableBase + tileRow * 32 + tileColumn);
+            const std::uint8_t attribute = PpuRead(
+                nametableBase + 0x03C0 + (tileRow / 4) * 8 + (tileColumn / 4));
+            const std::uint8_t attributeShift =
+                ((tileRow & 0x02) ? 4 : 0) | ((tileColumn & 0x02) ? 2 : 0);
+            const std::uint8_t palette = (attribute >> attributeShift) & 0x03;
+
+            const std::uint16_t tileAddress = patternBase + tileIndex * 16 + rowInTile;
+            const std::uint8_t lowPlane = PpuRead(tileAddress);
+            const std::uint8_t highPlane = PpuRead(tileAddress + 8);
+            const std::uint8_t bit = 7 - (x & 0x07);
+            const std::uint8_t color =
+                ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
+            const std::uint16_t paletteAddress = color == 0
+                ? 0x3F00
+                : 0x3F00 + palette * 4 + color;
+
+            m_frameBuffer[y * 256 + x] =
+                ColorFromPaletteIndex(PpuRead(paletteAddress));
+        }
     }
 }
 
@@ -145,9 +212,13 @@ std::uint8_t PPU::PpuRead(std::uint16_t address)
     address = NormalizeAddress(address);
     std::uint8_t data = 0;
 
-    if (address <= 0x1FFF && m_cartridge && m_cartridge->PpuRead(address, data))
+    if (address <= 0x1FFF)
     {
-        return data;
+        if (m_cartridge && m_cartridge->PpuRead(address, data))
+        {
+            return data;
+        }
+        return m_chrRam[address];
     }
     if (address <= 0x3EFF)
     {
@@ -160,8 +231,14 @@ void PPU::PpuWrite(std::uint16_t address, std::uint8_t data)
 {
     address = NormalizeAddress(address);
 
-    if (address <= 0x1FFF && m_cartridge && m_cartridge->PpuWrite(address, data))
+    if (address <= 0x1FFF)
     {
+        if (m_cartridge)
+        {
+            m_cartridge->PpuWrite(address, data);
+            return;
+        }
+        m_chrRam[address] = data;
         return;
     }
     if (address <= 0x3EFF)
@@ -204,6 +281,11 @@ void PPU::IncrementVramAddress()
 {
     m_vramAddress += (m_control & 0x04) ? 32 : 1;
     m_vramAddress &= 0x3FFF;
+}
+
+std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index)
+{
+    return SystemPalette[index & 0x3F];
 }
 
 } // namespace dendyforge
