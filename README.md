@@ -137,11 +137,11 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 ### APU
 
-* 🟡 Pulse Channels (envelope/sweep)
-* 🟡 Triangle Channel
-* 🟡 Noise Channel
-* 🟡 DMC Channel
-* 🟡 Audio Mixer (nonlinear 2A03 mix)
+* ✅ Pulse Channels (envelope/sweep)
+* ✅ Triangle Channel
+* ✅ Noise Channel
+* ✅ DMC Channel
+* ✅ Audio Mixer (nonlinear 2A03 mix)
 
 ---
 
@@ -151,7 +151,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 * ✅ SDL3 Window
 * ✅ Frame Buffer Renderer
-* 🟡 Audio Output
+* ✅ Audio Output
 * ✅ Keyboard Input
 * 🟡 Game Loop
 
@@ -199,8 +199,8 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 ## Phase 7 — Platform Support
 
-* ⬜ Linux
-* ⬜ Windows
+* 🟡 Linux
+* 🟡 Windows
 
 ### Libretro
 
