@@ -1,5 +1,6 @@
 #include <SDL3/SDL.h>
 
+#include "console/console.hpp"
 #include "ppu/ppu.hpp"
 
 namespace
@@ -28,7 +29,7 @@ void PrepareDemoFrame(dendyforge::PPU& ppu)
 
 }
 
-int main()
+int main(int argc, char* argv[])
 {
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -60,8 +61,14 @@ int main()
     SDL_SetRenderLogicalPresentation(
         renderer, ScreenWidth, ScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 
-    dendyforge::PPU ppu;
-    PrepareDemoFrame(ppu);
+    dendyforge::Console console;
+    const bool romLoaded = argc > 1 && console.LoadRom(argv[1]);
+
+    dendyforge::PPU demoPpu;
+    if (!romLoaded)
+    {
+        PrepareDemoFrame(demoPpu);
+    }
 
     bool running = true;
     while (running)
@@ -75,7 +82,18 @@ int main()
             }
         }
 
-        SDL_UpdateTexture(texture, nullptr, ppu.FrameBuffer().data(),
+        if (romLoaded)
+        {
+            for (int cycle = 0; cycle < 1'000; ++cycle)
+            {
+                console.Clock();
+            }
+        }
+
+        const auto& frameBuffer = romLoaded
+            ? console.VideoProcessor().FrameBuffer()
+            : demoPpu.FrameBuffer();
+        SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
                           ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
         SDL_RenderClear(renderer);
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);

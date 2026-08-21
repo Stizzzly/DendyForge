@@ -113,6 +113,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 ### PPU
 
 * ✅ PPU register interface ($2000-$2007)
+* ✅ CPU-to-PPU clock synchronization
 * 🟡 VRAM
 * ✅ Pattern Tables
 * ✅ Name Tables
@@ -146,7 +147,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ Frame Buffer Renderer
 * ⬜ Audio Output
 * ⬜ Keyboard Input
-* ⬜ Game Loop
+* 🟡 Game Loop
 
 ### Debugger
 

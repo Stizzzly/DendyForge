@@ -1,0 +1,64 @@
+#include "console.hpp"
+
+#include <utility>
+
+#include "cartridge/cartridge.hpp"
+#include "ines/ines_reader.hpp"
+
+namespace dendyforge
+{
+
+Console::Console()
+    : m_cpu(CPU6502::Configuration{.decimalModeEnabled = false})
+{
+    m_cpu.ConnectBus(&m_bus);
+}
+
+Console::~Console() = default;
+
+bool Console::LoadRom(const std::string& path)
+{
+    INesReader reader;
+    if (!reader.Load(path))
+    {
+        return false;
+    }
+
+    m_cartridge = std::make_unique<Cartridge>(
+        reader.Header(), reader.TakePRGRom(), reader.TakeCHRRom());
+    m_bus.InsertCartridge(m_cartridge.get());
+    Reset();
+    return true;
+}
+
+void Console::Reset()
+{
+    m_cpu.Reset();
+}
+
+void Console::Clock()
+{
+    m_cpu.Clock();
+
+    for (int index = 0; index < 3; ++index)
+    {
+        m_bus.ClockPpu();
+    }
+
+    if (m_bus.PollPpuNmi())
+    {
+        m_cpu.NMI();
+    }
+}
+
+CPU6502& Console::Cpu()
+{
+    return m_cpu;
+}
+
+PPU& Console::VideoProcessor()
+{
+    return m_bus.VideoProcessor();
+}
+
+} // namespace dendyforge
