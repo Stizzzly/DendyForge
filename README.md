@@ -137,10 +137,10 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 ### APU
 
-* 🟡 Pulse Channels (envelope/sweep)
-* 🟡 Triangle Channel
-* 🟡 Noise Channel
-* 🟡 DMC Channel
+* ✅ Pulse Channels (envelope/sweep)
+* ✅ Triangle Channel
+* ✅ Noise Channel
+* ✅ DMC Channel
 * ✅ Audio Mixer (nonlinear 2A03 mix)
 
 ---
