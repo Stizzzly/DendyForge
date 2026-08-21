@@ -35,3 +35,26 @@ TEST_CASE("Bus transfers a CPU memory page into PPU OAM through DMA")
     bus.CpuWrite(0x2003, 0xFF);
     CHECK(bus.CpuRead(0x2004) == 0x34);
 }
+
+TEST_CASE("OAM DMA stalls the CPU for 513 or 514 cycles based on parity")
+{
+    dendyforge::Bus bus;
+
+    bus.CpuWrite(0x4014, 0x00);
+    bus.BeginPendingDma(false);
+    int evenCycleStall = 0;
+    while (bus.ConsumeDmaStallCycle())
+    {
+        ++evenCycleStall;
+    }
+    CHECK(evenCycleStall == 513);
+
+    bus.CpuWrite(0x4014, 0x00);
+    bus.BeginPendingDma(true);
+    int oddCycleStall = 0;
+    while (bus.ConsumeDmaStallCycle())
+    {
+        ++oddCycleStall;
+    }
+    CHECK(oddCycleStall == 514);
+}

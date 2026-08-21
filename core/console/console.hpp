@@ -29,6 +29,7 @@ private:
     Bus m_bus;
     CPU6502 m_cpu;
     std::unique_ptr<Cartridge> m_cartridge;
+    bool m_cpuCycleIsOdd{false};
 };
 
 } // namespace dendyforge

@@ -34,11 +34,16 @@ bool Console::LoadRom(const std::string& path)
 void Console::Reset()
 {
     m_cpu.Reset();
+    m_cpuCycleIsOdd = false;
 }
 
 void Console::Clock()
 {
-    m_cpu.Clock();
+    if (!m_bus.ConsumeDmaStallCycle())
+    {
+        m_cpu.Clock();
+        m_bus.BeginPendingDma(m_cpuCycleIsOdd);
+    }
 
     for (int index = 0; index < 3; ++index)
     {
@@ -49,6 +54,8 @@ void Console::Clock()
     {
         m_cpu.NMI();
     }
+
+    m_cpuCycleIsOdd = !m_cpuCycleIsOdd;
 }
 
 CPU6502& Console::Cpu()

@@ -24,6 +24,8 @@ public:
 
     void ClockPpu();
     bool PollPpuNmi();
+    void BeginPendingDma(bool cpuCycleIsOdd);
+    bool ConsumeDmaStallCycle();
 
     PPU& VideoProcessor();
     Controller& PrimaryController();
@@ -32,6 +34,8 @@ private:
     Cartridge* m_cartridge{nullptr};
     PPU m_ppu;
     Controller m_controller1;
+    bool m_dmaPending{false};
+    std::uint16_t m_dmaStallCycles{0};
 
     std::array<std::uint8_t, 2048> m_cpuRam{};
 };

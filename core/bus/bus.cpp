@@ -100,6 +100,7 @@ void Bus::CpuWrite(
         {
             m_ppu.CpuWrite(0x2004, CpuRead(baseAddress + offset));
         }
+        m_dmaPending = true;
         return;
     }
 
@@ -121,6 +122,28 @@ void Bus::ClockPpu()
 bool Bus::PollPpuNmi()
 {
     return m_ppu.PollNmi();
+}
+
+void Bus::BeginPendingDma(bool cpuCycleIsOdd)
+{
+    if (!m_dmaPending)
+    {
+        return;
+    }
+
+    m_dmaStallCycles = cpuCycleIsOdd ? 514 : 513;
+    m_dmaPending = false;
+}
+
+bool Bus::ConsumeDmaStallCycle()
+{
+    if (m_dmaStallCycles == 0)
+    {
+        return false;
+    }
+
+    --m_dmaStallCycles;
+    return true;
 }
 
 } // namespace dendyforge
