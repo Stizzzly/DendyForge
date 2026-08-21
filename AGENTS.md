@@ -211,6 +211,23 @@ Work in small, independently testable commits. The order below is intentional:
 3. Validate with small PPU test ROMs and real-game checkpoints; only then
    update README roadmap checks.
 
+## PPU handoff point
+
+PPU work is intentionally paused here while APU development begins. The last
+completed PPU layers are background fetch latches/shifters, scanline sprite
+selection/fetch, odd-frame skipping, VBlank frame presentation, and OAM DMA
+CPU stalls. Resume from the three-item PPU plan above; do not reopen the
+background renderer without a focused regression test and a Mario checkpoint.
+
+## Recommended APU plan
+
+Start with a standalone `APU` component owned by `Bus`, keeping SDL audio in
+the frontend. Land one sound source at a time: pulse channels and their CPU
+registers first, then triangle, noise, DMC, frame counter/length counters, the
+NES nonlinear mixer, and finally a bounded audio-sample queue consumed by
+SDL. Test register writes, timers, envelopes, and sample generation before
+claiming that a game has sound.
+
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
 It is acceptable to add private structures for rendering state. Avoid adding
