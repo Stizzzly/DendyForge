@@ -12,6 +12,40 @@ void PPU::ConnectCartridge(Cartridge* cartridge)
                             : Mirroring::Horizontal;
 }
 
+void PPU::Clock()
+{
+    if (m_scanline == -1 && m_cycle == 1)
+    {
+        m_status &= ~0x80;
+        m_nmiPending = false;
+    }
+    else if (m_scanline == 241 && m_cycle == 1)
+    {
+        m_status |= 0x80;
+        m_nmiPending = (m_control & 0x80) != 0;
+    }
+
+    ++m_cycle;
+    if (m_cycle < 341)
+    {
+        return;
+    }
+
+    m_cycle = 0;
+    ++m_scanline;
+    if (m_scanline == 261)
+    {
+        m_scanline = -1;
+    }
+}
+
+bool PPU::PollNmi()
+{
+    const bool pending = m_nmiPending;
+    m_nmiPending = false;
+    return pending;
+}
+
 std::uint8_t PPU::CpuRead(std::uint16_t address)
 {
     switch (address & 0x0007)
@@ -20,6 +54,7 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
     {
         const std::uint8_t data = (m_status & 0xE0) | (m_dataBuffer & 0x1F);
         m_status &= ~0x80;
+        m_nmiPending = false;
         m_writeLatch = false;
         return data;
     }
@@ -54,6 +89,10 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         m_control = data;
         m_temporaryAddress = (m_temporaryAddress & 0xF3FF) |
                              ((static_cast<std::uint16_t>(data) & 0x03) << 10);
+        if ((m_status & 0x80) != 0 && (m_control & 0x80) != 0)
+        {
+            m_nmiPending = true;
+        }
         break;
     case 0x0001:
         m_mask = data;

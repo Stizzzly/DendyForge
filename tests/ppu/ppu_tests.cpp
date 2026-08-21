@@ -53,3 +53,18 @@ TEST_CASE("PPU mirrors nametable and palette memory")
     CHECK(ppu.PpuRead(0x3F00) == 0x0C);
     CHECK(ppu.PpuRead(0x3F30) == 0x0C);
 }
+
+TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2000, 0x80);
+
+    for (int cycle = 0; cycle < 242 * 341 + 2; ++cycle)
+    {
+        ppu.Clock();
+    }
+
+    CHECK(ppu.PollNmi());
+    CHECK_FALSE(ppu.PollNmi());
+    CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
+}

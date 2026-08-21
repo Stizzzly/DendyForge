@@ -15,6 +15,9 @@ class PPU
 public:
     void ConnectCartridge(Cartridge* cartridge);
 
+    void Clock();
+    bool PollNmi();
+
     std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
 
@@ -43,6 +46,9 @@ private:
     std::uint16_t m_temporaryAddress{0};
     std::uint8_t m_fineX{0};
     bool m_writeLatch{false};
+    bool m_nmiPending{false};
+    std::int16_t m_scanline{-1};
+    std::int16_t m_cycle{0};
 };
 
 } // namespace dendyforge

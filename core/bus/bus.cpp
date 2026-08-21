@@ -85,4 +85,14 @@ void Bus::CpuWrite(
     // APU + Controllers (TODO)
 }
 
+void Bus::ClockPpu()
+{
+    m_ppu.Clock();
+}
+
+bool Bus::PollPpuNmi()
+{
+    return m_ppu.PollNmi();
+}
+
 } // namespace dendyforge

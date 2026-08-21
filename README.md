@@ -105,7 +105,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ⬜ Background Rendering
 * ⬜ Sprite Rendering
 * ⬜ Scrolling
-* ⬜ VBlank
+* ✅ VBlank and NMI signal
 * ⬜ Sprite Zero Hit
 
 ### Controller
