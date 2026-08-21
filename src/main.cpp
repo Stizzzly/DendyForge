@@ -8,6 +8,7 @@ namespace
 
 constexpr int ScreenWidth = 256;
 constexpr int ScreenHeight = 240;
+constexpr int CpuCyclesPerFrameSlice = 28'600;
 
 void PrepareDemoFrame(dendyforge::PPU& ppu)
 {
@@ -78,6 +79,9 @@ int main(int argc, char* argv[])
 
     SDL_SetRenderLogicalPresentation(
         renderer, ScreenWidth, ScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_RenderPresent(renderer);
 
     dendyforge::Console console;
     const bool romLoaded = argc > 1 && console.LoadRom(argv[1]);
@@ -109,7 +113,7 @@ int main(int argc, char* argv[])
         bool frameReady = true;
         if (romLoaded)
         {
-            while (!console.VideoProcessor().FrameReady())
+            for (int cycle = 0; cycle < CpuCyclesPerFrameSlice; ++cycle)
             {
                 console.Clock();
             }
@@ -121,8 +125,14 @@ int main(int argc, char* argv[])
             : demoPpu.FrameBuffer();
         if (frameReady)
         {
-            SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
-                              ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
+            if (!SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
+                                   ScreenWidth * static_cast<int>(sizeof(std::uint32_t))))
+            {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                             "Could not update frame texture: %s", SDL_GetError());
+                running = false;
+                continue;
+            }
             SDL_RenderClear(renderer);
             SDL_RenderTexture(renderer, texture, nullptr, nullptr);
             SDL_RenderPresent(renderer);
