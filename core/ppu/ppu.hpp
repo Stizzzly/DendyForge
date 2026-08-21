@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include "ines/ines.hpp"
@@ -51,13 +52,25 @@ private:
         std::uint16_t attributeShiftHigh{0};
     };
 
+    struct ScanlineSprite
+    {
+        std::uint8_t index{0};
+        std::uint8_t x{0};
+        std::uint8_t attributes{0};
+        std::uint8_t lowPlane{0};
+        std::uint8_t highPlane{0};
+    };
+
     std::uint16_t NormalizeAddress(std::uint16_t address) const;
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
     void BeginFrame();
     void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX);
     void RenderBackgroundScanline(std::uint16_t screenY);
+    void RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX);
     void RenderSpritesScanline(std::uint16_t screenY);
+    void EvaluateSpritesForScanline(std::uint16_t screenY);
+    void FetchScanlineSprites(std::uint16_t screenY);
     void ClockBackgroundFetch();
     void PrimeBackgroundFetch();
     void FetchNametableByte();
@@ -86,6 +99,8 @@ private:
     std::array<std::uint32_t, 256 * 240> m_frameBuffer{};
     std::array<bool, 256 * 240> m_backgroundOpaque{};
     BackgroundFetchState m_backgroundFetch{};
+    std::array<ScanlineSprite, 8> m_scanlineSprites{};
+    std::size_t m_scanlineSpriteCount{0};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};

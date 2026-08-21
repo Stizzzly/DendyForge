@@ -46,6 +46,7 @@ void PPU::Clock()
         m_cycle >= 1 && m_cycle <= 256)
     {
         RenderBackgroundPixel(m_scanline, m_cycle - 1);
+        RenderSpritePixel(m_scanline, m_cycle - 1);
     }
 
     if (renderingScanline && RenderingEnabled())
@@ -68,9 +69,14 @@ void PPU::Clock()
         }
     }
 
-    if (m_scanline >= 0 && m_scanline < 240 && m_cycle == 256)
+    if (renderingScanline && RenderingEnabled() && m_cycle == 257)
     {
-        RenderSpritesScanline(m_scanline);
+        const std::uint16_t nextScanline = m_scanline + 1;
+        EvaluateSpritesForScanline(nextScanline);
+    }
+    if (renderingScanline && RenderingEnabled() && m_cycle == 321)
+    {
+        FetchScanlineSprites(m_scanline + 1);
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
@@ -281,22 +287,29 @@ void PPU::RenderSprites()
 {
     for (std::uint16_t screenY = 0; screenY < 240; ++screenY)
     {
+        EvaluateSpritesForScanline(screenY);
+        FetchScanlineSprites(screenY);
         RenderSpritesScanline(screenY);
     }
 }
 
 void PPU::RenderSpritesScanline(std::uint16_t screenY)
 {
-    if ((m_mask & 0x10) == 0)
+    for (std::uint16_t screenX = 0; screenX < 256; ++screenX)
+    {
+        RenderSpritePixel(screenY, screenX);
+    }
+}
+
+void PPU::EvaluateSpritesForScanline(std::uint16_t screenY)
+{
+    m_scanlineSpriteCount = 0;
+    if (screenY >= 240)
     {
         return;
     }
 
     const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
-    const std::uint16_t patternBase = (m_control & 0x08) ? 0x1000 : 0x0000;
-
-    std::array<std::uint8_t, 8> visibleSprites{};
-    std::size_t visibleCount = 0;
 
     for (std::uint8_t sprite = 0; sprite < 64; ++sprite)
     {
@@ -306,26 +319,33 @@ void PPU::RenderSpritesScanline(std::uint16_t screenY)
             continue;
         }
 
-        if (visibleCount == visibleSprites.size())
+        if (m_scanlineSpriteCount == m_scanlineSprites.size())
         {
             m_status |= 0x20;
             break;
         }
 
-        visibleSprites[visibleCount++] = sprite;
+        const std::size_t offset = sprite * 4;
+        m_scanlineSprites[m_scanlineSpriteCount++] = {
+            sprite, m_oam[offset + 3], m_oam[offset + 2], 0, 0};
     }
+}
 
-    for (std::size_t index = visibleCount; index > 0; --index)
+void PPU::FetchScanlineSprites(std::uint16_t screenY)
+{
+    const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
+    const std::uint16_t patternBase = (m_control & 0x08) ? 0x1000 : 0x0000;
+
+    for (std::size_t index = 0; index < m_scanlineSpriteCount; ++index)
     {
-        const std::uint8_t sprite = visibleSprites[index - 1];
+        ScanlineSprite& scanlineSprite = m_scanlineSprites[index];
+        const std::uint8_t sprite = scanlineSprite.index;
         const std::size_t offset = sprite * 4;
         const std::uint16_t spriteY = m_oam[offset];
         std::uint8_t tileIndex = m_oam[offset + 1];
-        const std::uint8_t attributes = m_oam[offset + 2];
-        const std::uint8_t spriteX = m_oam[offset + 3];
         std::uint16_t patternRow = screenY - spriteY - 1;
 
-        if ((attributes & 0x80) != 0)
+        if ((scanlineSprite.attributes & 0x80) != 0)
         {
             patternRow = spriteHeight - 1 - patternRow;
         }
@@ -346,39 +366,51 @@ void PPU::RenderSpritesScanline(std::uint16_t screenY)
         {
             tileAddress = patternBase + tileIndex * 16 + patternRow;
         }
-        const std::uint8_t lowPlane = PpuRead(tileAddress);
-        const std::uint8_t highPlane = PpuRead(tileAddress + 8);
+        scanlineSprite.lowPlane = PpuRead(tileAddress);
+        scanlineSprite.highPlane = PpuRead(tileAddress + 8);
+    }
+}
 
-        for (std::uint16_t column = 0; column < 8; ++column)
+void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
+{
+    if ((m_mask & 0x10) == 0 ||
+        (screenX < 8 && (m_mask & 0x04) == 0))
+    {
+        return;
+    }
+
+    for (std::size_t index = m_scanlineSpriteCount; index > 0; --index)
+    {
+        const ScanlineSprite& sprite = m_scanlineSprites[index - 1];
+        if (screenX < sprite.x || screenX >= sprite.x + 8)
         {
-            const std::uint16_t screenX = spriteX + column;
-            if (screenX >= 256 || (screenX < 8 && (m_mask & 0x04) == 0))
-            {
-                continue;
-            }
-
-            const std::uint8_t bit = (attributes & 0x40) ? column : 7 - column;
-            const std::uint8_t color =
-                ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
-            if (color == 0)
-            {
-                continue;
-            }
-
-            const std::size_t pixel = screenY * 256 + screenX;
-            if (sprite == 0 && m_backgroundOpaque[pixel] && screenX < 255)
-            {
-                m_status |= 0x40;
-            }
-            if ((attributes & 0x20) != 0 && m_backgroundOpaque[pixel])
-            {
-                continue;
-            }
-
-            const std::uint16_t paletteAddress =
-                0x3F10 + (attributes & 0x03) * 4 + color;
-            m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
+            continue;
         }
+
+        const std::uint8_t column = screenX - sprite.x;
+        const std::uint8_t bit =
+            (sprite.attributes & 0x40) != 0 ? column : 7 - column;
+        const std::uint8_t color =
+            ((sprite.highPlane >> bit) & 0x01) << 1 |
+            ((sprite.lowPlane >> bit) & 0x01);
+        if (color == 0)
+        {
+            continue;
+        }
+
+        const std::size_t pixel = screenY * 256 + screenX;
+        if (sprite.index == 0 && m_backgroundOpaque[pixel] && screenX < 255)
+        {
+            m_status |= 0x40;
+        }
+        if ((sprite.attributes & 0x20) != 0 && m_backgroundOpaque[pixel])
+        {
+            continue;
+        }
+
+        const std::uint16_t paletteAddress =
+            0x3F10 + (sprite.attributes & 0x03) * 4 + color;
+        m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
     }
 }
 
