@@ -224,9 +224,9 @@ background renderer without a focused regression test and a Mario checkpoint.
 ## Recommended APU plan
 
 `APU` is a standalone component owned by `Bus`, while SDL audio remains in the
-frontend. Pulse channels, their basic registers/timers/length counters, and a
-bounded SDL-fed sample queue, and a basic triangle channel are in place.
-Continue one sound source at a time: pulse envelope/sweep, noise, DMC,
+frontend. Pulse channels, including envelope/sweep units, their
+registers/timers/length counters, a bounded SDL-fed sample queue, and a basic
+triangle channel are in place. Continue one sound source at a time: noise, DMC,
 accurate frame counter, and the NES nonlinear mixer. Test register writes,
 timers, envelopes, and sample generation before claiming that a game has
 accurate sound.
@@ -235,10 +235,10 @@ accurate sound.
 
 `Bus` owns `APU`, which is clocked once per CPU cycle. The current component
 implements pulse channels 1 and 2 plus triangle with duty/waveform sequences,
-timer periods, length counters, triangle linear counter, `$4015`
-enables/status, and a bounded 44.1 kHz PCM sample queue. `main.cpp` sends that
-queue to an SDL3 audio stream. This is intentionally an initial audible layer,
-not an accurate 2A03 APU: pulse envelope/sweep, noise, DMC, exact frame-counter
+timer periods, length counters, pulse envelope/sweep units, triangle linear
+counter, `$4015` enables/status, and a bounded 44.1 kHz PCM sample queue.
+`main.cpp` sends that queue to an SDL3 audio stream. This is intentionally an
+initial audible layer, not an accurate 2A03 APU: noise, DMC, exact frame-counter
 modes, nonlinear mixing, and IRQs remain absent.
 
 When choosing between a broad rewrite and a small change, preserve the existing

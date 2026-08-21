@@ -60,9 +60,11 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
     switch (address)
     {
     case 0x4000: m_pulse1.WriteControl(data); break;
+    case 0x4001: m_pulse1.WriteSweep(data); break;
     case 0x4002: m_pulse1.WriteTimerLow(data); break;
     case 0x4003: m_pulse1.WriteTimerHigh(data); break;
     case 0x4004: m_pulse2.WriteControl(data); break;
+    case 0x4005: m_pulse2.WriteSweep(data); break;
     case 0x4006: m_pulse2.WriteTimerLow(data); break;
     case 0x4007: m_pulse2.WriteTimerHigh(data); break;
     case 0x4008: m_triangle.WriteControl(data); break;
@@ -88,6 +90,12 @@ void APU::PulseChannel::WriteControl(std::uint8_t data)
     m_control = data;
 }
 
+void APU::PulseChannel::WriteSweep(std::uint8_t data)
+{
+    m_sweep = data;
+    m_sweepReload = true;
+}
+
 void APU::PulseChannel::WriteTimerLow(std::uint8_t data)
 {
     m_timerPeriod = (m_timerPeriod & 0x0700) | data;
@@ -99,6 +107,7 @@ void APU::PulseChannel::WriteTimerHigh(std::uint8_t data)
                     ((static_cast<std::uint16_t>(data) & 0x07) << 8);
     m_timerCounter = m_timerPeriod * 2 + 1;
     m_sequenceStep = 0;
+    m_envelopeStart = true;
     if (m_enabled)
     {
         m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
@@ -134,9 +143,73 @@ void APU::PulseChannel::ClockLength()
     }
 }
 
-std::uint8_t APU::PulseChannel::Output() const
+void APU::PulseChannel::ClockEnvelope()
 {
-    if (!m_enabled || m_lengthCounter == 0 || m_timerPeriod < 8)
+    if (m_envelopeStart)
+    {
+        m_envelopeStart = false;
+        m_envelopeDecayLevel = 15;
+        m_envelopeDivider = m_control & 0x0F;
+        return;
+    }
+
+    if (m_envelopeDivider != 0)
+    {
+        --m_envelopeDivider;
+        return;
+    }
+
+    m_envelopeDivider = m_control & 0x0F;
+    if (m_envelopeDecayLevel != 0)
+    {
+        --m_envelopeDecayLevel;
+    }
+    else if ((m_control & 0x20) != 0)
+    {
+        m_envelopeDecayLevel = 15;
+    }
+}
+
+std::uint16_t APU::PulseChannel::SweepTarget(bool onesComplementNegate) const
+{
+    const std::uint8_t shift = m_sweep & 0x07;
+    const std::uint16_t change = m_timerPeriod >> shift;
+    if ((m_sweep & 0x08) == 0)
+    {
+        return m_timerPeriod + change;
+    }
+
+    return m_timerPeriod - change - (onesComplementNegate ? 1 : 0);
+}
+
+void APU::PulseChannel::ClockSweep(bool onesComplementNegate)
+{
+    const std::uint8_t shift = m_sweep & 0x07;
+    if (m_sweepDivider == 0)
+    {
+        if ((m_sweep & 0x80) != 0 && shift != 0 &&
+            m_timerPeriod >= 8 && SweepTarget(onesComplementNegate) <= 0x07FF)
+        {
+            m_timerPeriod = SweepTarget(onesComplementNegate);
+        }
+        m_sweepDivider = (m_sweep >> 4) & 0x07;
+    }
+    else
+    {
+        --m_sweepDivider;
+    }
+
+    if (m_sweepReload)
+    {
+        m_sweepDivider = (m_sweep >> 4) & 0x07;
+        m_sweepReload = false;
+    }
+}
+
+std::uint8_t APU::PulseChannel::Output(bool onesComplementNegate) const
+{
+    if (!m_enabled || m_lengthCounter == 0 || m_timerPeriod < 8 ||
+        ((m_sweep & 0x07) != 0 && SweepTarget(onesComplementNegate) > 0x07FF))
     {
         return 0;
     }
@@ -147,7 +220,7 @@ std::uint8_t APU::PulseChannel::Output() const
         return 0;
     }
 
-    return m_control & 0x0F;
+    return (m_control & 0x10) != 0 ? (m_control & 0x0F) : m_envelopeDecayLevel;
 }
 
 void APU::TriangleChannel::WriteControl(std::uint8_t data)
@@ -241,6 +314,8 @@ void APU::ClockFrameCounter()
     }
 
     m_frameCounter = 0;
+    m_pulse1.ClockEnvelope();
+    m_pulse2.ClockEnvelope();
     m_triangle.ClockLinearCounter();
     m_clockLengthCounters = !m_clockLengthCounters;
     if (m_clockLengthCounters)
@@ -248,6 +323,8 @@ void APU::ClockFrameCounter()
         m_pulse1.ClockLength();
         m_pulse2.ClockLength();
         m_triangle.ClockLength();
+        m_pulse1.ClockSweep(true);
+        m_pulse2.ClockSweep(false);
     }
 }
 
@@ -259,8 +336,8 @@ void APU::QueueSample()
         m_samples.erase(m_samples.begin());
     }
 
-    const float pulse = static_cast<float>(m_pulse1.Output() +
-                                           m_pulse2.Output());
+    const float pulse = static_cast<float>(m_pulse1.Output(true) +
+                                           m_pulse2.Output(false));
     const float triangle = static_cast<float>(m_triangle.Output());
     m_samples.push_back(pulse / 60.0F + triangle / 120.0F);
 }

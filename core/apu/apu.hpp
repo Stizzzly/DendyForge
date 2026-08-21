@@ -21,19 +21,30 @@ private:
     struct PulseChannel
     {
         void WriteControl(std::uint8_t data);
+        void WriteSweep(std::uint8_t data);
         void WriteTimerLow(std::uint8_t data);
         void WriteTimerHigh(std::uint8_t data);
         void SetEnabled(bool enabled);
         void ClockTimer();
+        void ClockEnvelope();
         void ClockLength();
-        std::uint8_t Output() const;
+        void ClockSweep(bool onesComplementNegate);
+        std::uint8_t Output(bool onesComplementNegate) const;
 
         std::uint8_t m_control{0};
+        std::uint8_t m_sweep{0};
         std::uint16_t m_timerPeriod{0};
         std::uint16_t m_timerCounter{0};
         std::uint8_t m_sequenceStep{0};
         std::uint8_t m_lengthCounter{0};
+        std::uint8_t m_envelopeDivider{0};
+        std::uint8_t m_envelopeDecayLevel{0};
+        std::uint8_t m_sweepDivider{0};
+        bool m_envelopeStart{false};
+        bool m_sweepReload{false};
         bool m_enabled{false};
+
+        std::uint16_t SweepTarget(bool onesComplementNegate) const;
     };
 
     struct TriangleChannel
