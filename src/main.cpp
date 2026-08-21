@@ -106,22 +106,29 @@ int main(int argc, char* argv[])
             }
         }
 
+        bool frameReady = true;
         if (romLoaded)
         {
-            for (int cycle = 0; cycle < 1'000; ++cycle)
+            while (!console.VideoProcessor().FrameReady())
             {
                 console.Clock();
             }
+            frameReady = console.VideoProcessor().ConsumeFrameReady();
         }
 
         const auto& frameBuffer = romLoaded
             ? console.VideoProcessor().FrameBuffer()
             : demoPpu.FrameBuffer();
-        SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
-                          ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
-        SDL_RenderClear(renderer);
-        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-        SDL_RenderPresent(renderer);
+        if (frameReady)
+        {
+            SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
+                              ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
+            SDL_RenderClear(renderer);
+            SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+            SDL_RenderPresent(renderer);
+        }
+
+        SDL_Delay(16);
     }
 
     SDL_DestroyTexture(texture);

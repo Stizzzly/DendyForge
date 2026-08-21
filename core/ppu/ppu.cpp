@@ -49,6 +49,7 @@ void PPU::Clock()
     {
         m_status |= 0x80;
         m_nmiPending = (m_control & 0x80) != 0;
+        m_frameReady = true;
     }
 
     ++m_cycle;
@@ -63,6 +64,18 @@ void PPU::Clock()
     {
         m_scanline = -1;
     }
+}
+
+bool PPU::FrameReady() const
+{
+    return m_frameReady;
+}
+
+bool PPU::ConsumeFrameReady()
+{
+    const bool ready = m_frameReady;
+    m_frameReady = false;
+    return ready;
 }
 
 const std::array<std::uint32_t, 256 * 240>& PPU::FrameBuffer() const

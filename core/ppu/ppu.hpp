@@ -17,6 +17,8 @@ public:
 
     void Clock();
     bool PollNmi();
+    bool FrameReady() const;
+    bool ConsumeFrameReady();
     void RenderBackground();
     void RenderSprites();
 
@@ -61,6 +63,7 @@ private:
     std::uint8_t m_scrollY{0};
     bool m_writeLatch{false};
     bool m_nmiPending{false};
+    bool m_frameReady{false};
     std::int16_t m_scanline{-1};
     std::int16_t m_cycle{0};
 };
