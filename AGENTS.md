@@ -244,6 +244,11 @@ This is intentionally an initial audible layer, not a fully cycle-accurate 2A03
 APU: hardware-level validation remains outstanding. The `$4017` frame reset
 uses the 3/4-cycle delay and the 4-step/5-step mode distinction.
 
+The SDL3 frontend keeps the device paused until a 50 ms PCM prebuffer has been
+queued. It caps SDL's queued input at 100 ms and retains excess generated
+samples locally instead of dropping them; this prevents startup underruns and
+audio discontinuities during a transient queue backlog.
+
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
 It is acceptable to add private structures for rendering state. Avoid adding

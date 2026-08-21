@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <vector>
 
 #include "console/console.hpp"
 #include "ppu/ppu.hpp"
@@ -14,7 +15,8 @@ constexpr int ScreenHeight = 240;
 constexpr double CpuClockHz = 1'789'773.0;
 constexpr std::uint64_t NanosecondsPerSecond = 1'000'000'000;
 constexpr std::uint64_t MaximumElapsedNanoseconds = 100'000'000;
-constexpr int AudioQueueDurationMilliseconds = 100;
+constexpr int AudioPrebufferDurationMilliseconds = 50;
+constexpr int AudioMaximumQueueDurationMilliseconds = 100;
 
 void PrepareDemoFrame(dendyforge::PPU& ppu)
 {
@@ -94,19 +96,12 @@ int main(int argc, char* argv[])
     const SDL_AudioSpec audioSpec{SDL_AUDIO_F32, 1, dendyforge::APU::SampleRate};
     SDL_AudioStream* audioStream = SDL_OpenAudioDeviceStream(
         SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &audioSpec, nullptr, nullptr);
+    bool audioPlaybackStarted = false;
     if (!audioStream)
     {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "Could not open audio output: %s", SDL_GetError());
     }
-    else if (!SDL_ResumeAudioStreamDevice(audioStream))
-    {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "Could not start audio output: %s", SDL_GetError());
-        SDL_DestroyAudioStream(audioStream);
-        audioStream = nullptr;
-    }
-
     dendyforge::Console console;
     const bool romLoaded = argc > 1 && console.LoadRom(argv[1]);
 
@@ -119,6 +114,7 @@ int main(int argc, char* argv[])
     bool running = true;
     std::uint64_t previousTicks = SDL_GetTicksNS();
     double pendingCpuCycles = 0.0;
+    std::vector<float> pendingAudio;
     while (running)
     {
         SDL_Event event;
@@ -157,17 +153,51 @@ int main(int argc, char* argv[])
         if (audioStream && romLoaded)
         {
             const auto samples = console.AudioProcessor().TakeSamples();
+            pendingAudio.insert(pendingAudio.end(), samples.begin(), samples.end());
+
+            const int prebufferBytes = dendyforge::APU::SampleRate *
+                AudioPrebufferDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
             const int maximumQueuedBytes = dendyforge::APU::SampleRate *
-                AudioQueueDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
+                AudioMaximumQueueDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
             const int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
-            const int sampleBytes = static_cast<int>(samples.size() * sizeof(float));
-            const int bytesToQueue = std::min(
-                sampleBytes, std::max(0, maximumQueuedBytes - queuedBytes));
-            if (bytesToQueue != 0 &&
-                !SDL_PutAudioStreamData(audioStream, samples.data(), bytesToQueue))
+            if (queuedBytes < 0)
             {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                            "Could not queue audio: %s", SDL_GetError());
+                            "Could not inspect queued audio: %s", SDL_GetError());
+            }
+            else
+            {
+                const int pendingBytes = static_cast<int>(
+                    pendingAudio.size() * sizeof(float));
+                const int bytesToQueue = std::min(
+                    pendingBytes, std::max(0, maximumQueuedBytes - queuedBytes));
+                if (bytesToQueue != 0 &&
+                    !SDL_PutAudioStreamData(audioStream, pendingAudio.data(), bytesToQueue))
+                {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                "Could not queue audio: %s", SDL_GetError());
+                }
+                else if (bytesToQueue != 0)
+                {
+                    pendingAudio.erase(
+                        pendingAudio.begin(),
+                        pendingAudio.begin() + bytesToQueue / static_cast<int>(sizeof(float)));
+                }
+
+                if (!audioPlaybackStarted && queuedBytes + bytesToQueue >= prebufferBytes)
+                {
+                    if (!SDL_ResumeAudioStreamDevice(audioStream))
+                    {
+                        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                    "Could not start audio output: %s", SDL_GetError());
+                        SDL_DestroyAudioStream(audioStream);
+                        audioStream = nullptr;
+                    }
+                    else
+                    {
+                        audioPlaybackStarted = true;
+                    }
+                }
             }
         }
 
