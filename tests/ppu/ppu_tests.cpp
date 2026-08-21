@@ -163,6 +163,78 @@ TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")
     CHECK(ppu.FrameBuffer()[0] != beforeScroll);
 }
 
+TEST_CASE("PPU background renderer applies fine horizontal scroll to pattern bits")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x0A);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+
+    ppu.RenderBackground();
+    const auto unscrolledPixel = ppu.FrameBuffer()[0];
+
+    ppu.CpuWrite(0x2005, 0x01);
+    ppu.CpuWrite(0x2005, 0x00);
+    ppu.RenderBackground();
+
+    CHECK(ppu.FrameBuffer()[0] != unscrolledPixel);
+    CHECK(ppu.FrameBuffer()[0] == ppu.FrameBuffer()[1]);
+}
+
+TEST_CASE("PPU rendering copies t into v and advances coarse X at fine-X boundaries")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2000, 0x03);
+    ppu.CpuWrite(0x2001, 0x08);
+    ppu.CpuWrite(0x2005, 0x1D);
+    ppu.CpuWrite(0x2005, 0xAE);
+
+    for (int cycle = 0; cycle < 341; ++cycle)
+    {
+        ppu.Clock();
+    }
+    CHECK(ppu.AddressState().vramAddress == 0x6EA3);
+
+    for (int cycle = 0; cycle < 4; ++cycle)
+    {
+        ppu.Clock();
+    }
+    CHECK(ppu.AddressState().vramAddress == 0x6EA4);
+}
+
+TEST_CASE("PPU coarse X progression switches the horizontal nametable")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08);
+    ppu.CpuWrite(0x2005, 0xF8);
+    ppu.CpuWrite(0x2005, 0x00);
+
+    for (int cycle = 0; cycle < 341 + 9; ++cycle)
+    {
+        ppu.Clock();
+    }
+
+    CHECK(ppu.AddressState().vramAddress == 0x0400);
+}
+
+TEST_CASE("PPU rendering advances Y at cycle 256 and restores horizontal t bits")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08);
+
+    for (int cycle = 0; cycle < 341 + 257; ++cycle)
+    {
+        ppu.Clock();
+    }
+    CHECK(ppu.AddressState().vramAddress == 0x1400);
+
+    ppu.Clock();
+    CHECK(ppu.AddressState().vramAddress == 0x1000);
+}
+
 TEST_CASE("PPU renders an OAM sprite and records a Sprite Zero Hit")
 {
     dendyforge::PPU ppu;

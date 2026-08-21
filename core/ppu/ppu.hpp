@@ -43,10 +43,19 @@ private:
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
     void BeginFrame();
-    void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX);
-    void RenderBackgroundScanline(std::uint16_t screenY);
+    void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX,
+                               std::uint16_t vramAddress);
+    void RenderBackgroundScanline(std::uint16_t screenY,
+                                  std::uint16_t& vramAddress);
     void RenderSpritesScanline(std::uint16_t screenY);
     void IncrementVramAddress();
+    void IncrementCoarseX(std::uint16_t& address) const;
+    void IncrementY(std::uint16_t& address) const;
+    void CopyHorizontalBits(std::uint16_t& destination,
+                            std::uint16_t source) const;
+    void CopyVerticalBits(std::uint16_t& destination,
+                          std::uint16_t source) const;
+    bool RenderingEnabled() const;
     std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
 
     Cartridge* m_cartridge{nullptr};
@@ -70,10 +79,6 @@ private:
     std::uint16_t m_vramAddress{0}; // v: current VRAM address
     std::uint16_t m_temporaryAddress{0}; // t: temporary VRAM address
     std::uint8_t m_fineX{0}; // x: fine horizontal scroll
-    // Retained for the current direct renderer until it is replaced with the
-    // live v/t/x background fetch pipeline.
-    std::uint8_t m_scrollX{0};
-    std::uint8_t m_scrollY{0};
     bool m_writeLatch{false};
     bool m_nmiPending{false};
     bool m_frameComplete{false};

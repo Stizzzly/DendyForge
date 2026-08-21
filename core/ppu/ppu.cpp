@@ -36,14 +36,37 @@ void PPU::Clock()
         m_nmiPending = false;
         BeginFrame();
     }
+    else if (m_scanline == -1 && m_cycle == 257 && RenderingEnabled())
+    {
+        CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+    }
+    else if (m_scanline == -1 && m_cycle >= 280 && m_cycle <= 304 &&
+             RenderingEnabled())
+    {
+        CopyVerticalBits(m_vramAddress, m_temporaryAddress);
+    }
     else if (m_scanline >= 0 && m_scanline < 240 &&
              m_cycle >= 1 && m_cycle <= 256)
     {
-        RenderBackgroundPixel(m_scanline, m_cycle - 1);
+        const std::uint16_t screenX = m_cycle - 1;
+        RenderBackgroundPixel(m_scanline, screenX, m_vramAddress);
+        if (((screenX + m_fineX) & 0x07) == 0x07 && RenderingEnabled())
+        {
+            IncrementCoarseX(m_vramAddress);
+        }
         if (m_cycle == 256)
         {
+            if (RenderingEnabled())
+            {
+                IncrementY(m_vramAddress);
+            }
             RenderSpritesScanline(m_scanline);
         }
+    }
+    else if (m_scanline >= 0 && m_scanline < 240 && m_cycle == 257 &&
+             RenderingEnabled())
+    {
+        CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
@@ -80,9 +103,13 @@ void PPU::RenderBackground()
 {
     BeginFrame();
 
+    std::uint16_t vramAddress = m_temporaryAddress;
+
     for (std::uint16_t screenY = 0; screenY < 240; ++screenY)
     {
-        RenderBackgroundScanline(screenY);
+        RenderBackgroundScanline(screenY, vramAddress);
+        IncrementY(vramAddress);
+        CopyHorizontalBits(vramAddress, m_temporaryAddress);
     }
 }
 
@@ -92,15 +119,21 @@ void PPU::BeginFrame()
     m_backgroundOpaque.fill(false);
 }
 
-void PPU::RenderBackgroundScanline(std::uint16_t screenY)
+void PPU::RenderBackgroundScanline(std::uint16_t screenY,
+                                   std::uint16_t& vramAddress)
 {
     for (std::uint16_t screenX = 0; screenX < 256; ++screenX)
     {
-        RenderBackgroundPixel(screenY, screenX);
+        RenderBackgroundPixel(screenY, screenX, vramAddress);
+        if (((screenX + m_fineX) & 0x07) == 0x07)
+        {
+            IncrementCoarseX(vramAddress);
+        }
     }
 }
 
-void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
+void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX,
+                                std::uint16_t vramAddress)
 {
     const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
 
@@ -110,21 +143,10 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
     }
 
     const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
-    const std::uint8_t baseNametableX = m_control & 0x01;
-    const std::uint8_t baseNametableY = (m_control >> 1) & 0x01;
-
-    const std::uint16_t worldY = screenY + m_scrollY;
-    const std::uint16_t tileRow = (worldY / 8) % 30;
-    const std::uint16_t rowInTile = worldY & 0x07;
-    const std::uint8_t nametableY =
-        baseNametableY ^ ((worldY / 240) & 0x01);
-
-    const std::uint16_t worldX = screenX + m_scrollX;
-    const std::uint16_t tileColumn = (worldX / 8) & 0x1F;
-    const std::uint8_t nametableX =
-        baseNametableX ^ ((worldX / 256) & 0x01);
-    const std::uint16_t nametableBase =
-        0x2000 | ((nametableY << 1 | nametableX) << 10);
+    const std::uint16_t nametableBase = 0x2000 | (vramAddress & 0x0C00);
+    const std::uint16_t tileRow = (vramAddress >> 5) & 0x1F;
+    const std::uint16_t tileColumn = vramAddress & 0x1F;
+    const std::uint16_t rowInTile = (vramAddress >> 12) & 0x07;
     const std::uint8_t tileIndex = PpuRead(
         nametableBase + tileRow * 32 + tileColumn);
     const std::uint8_t attribute = PpuRead(
@@ -136,7 +158,7 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
     const std::uint16_t tileAddress = patternBase + tileIndex * 16 + rowInTile;
     const std::uint8_t lowPlane = PpuRead(tileAddress);
     const std::uint8_t highPlane = PpuRead(tileAddress + 8);
-    const std::uint8_t bit = 7 - (screenX & 0x07);
+    const std::uint8_t bit = 7 - ((screenX + m_fineX) & 0x07);
     const std::uint8_t color =
         ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
     const std::uint16_t paletteAddress = color == 0
@@ -331,12 +353,10 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         if (!m_writeLatch)
         {
             m_fineX = data & 0x07;
-            m_scrollX = data;
             m_temporaryAddress = (m_temporaryAddress & 0xFFE0) | (data >> 3);
         }
         else
         {
-            m_scrollY = data;
             m_temporaryAddress = (m_temporaryAddress & 0x8FFF) |
                                  ((static_cast<std::uint16_t>(data) & 0x07) << 12);
             m_temporaryAddress = (m_temporaryAddress & 0xFC1F) |
@@ -440,6 +460,61 @@ void PPU::IncrementVramAddress()
 {
     m_vramAddress += (m_control & 0x04) ? 32 : 1;
     m_vramAddress &= 0x3FFF;
+}
+
+void PPU::IncrementCoarseX(std::uint16_t& address) const
+{
+    if ((address & 0x001F) == 31)
+    {
+        address &= ~0x001F;
+        address ^= 0x0400;
+        return;
+    }
+
+    ++address;
+}
+
+void PPU::IncrementY(std::uint16_t& address) const
+{
+    if ((address & 0x7000) != 0x7000)
+    {
+        address += 0x1000;
+        return;
+    }
+
+    address &= ~0x7000;
+    std::uint16_t coarseY = (address & 0x03E0) >> 5;
+    if (coarseY == 29)
+    {
+        coarseY = 0;
+        address ^= 0x0800;
+    }
+    else if (coarseY == 31)
+    {
+        coarseY = 0;
+    }
+    else
+    {
+        ++coarseY;
+    }
+    address = (address & ~0x03E0) | (coarseY << 5);
+}
+
+void PPU::CopyHorizontalBits(std::uint16_t& destination,
+                             std::uint16_t source) const
+{
+    destination = (destination & 0xFBE0) | (source & 0x041F);
+}
+
+void PPU::CopyVerticalBits(std::uint16_t& destination,
+                           std::uint16_t source) const
+{
+    destination = (destination & 0x841F) | (source & 0x7BE0);
+}
+
+bool PPU::RenderingEnabled() const
+{
+    return (m_mask & 0x18) != 0;
 }
 
 std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index) const
