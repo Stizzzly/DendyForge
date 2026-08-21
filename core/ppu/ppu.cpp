@@ -49,6 +49,7 @@ void PPU::Clock()
     {
         m_status |= 0x80;
         m_nmiPending = (m_control & 0x80) != 0;
+        m_frameComplete = true;
     }
 
     ++m_cycle;
@@ -255,6 +256,13 @@ bool PPU::PollNmi()
     const bool pending = m_nmiPending;
     m_nmiPending = false;
     return pending;
+}
+
+bool PPU::ConsumeFrameComplete()
+{
+    const bool frameComplete = m_frameComplete;
+    m_frameComplete = false;
+    return frameComplete;
 }
 
 std::uint8_t PPU::CpuRead(std::uint16_t address)

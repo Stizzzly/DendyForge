@@ -66,6 +66,8 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
 
     CHECK(ppu.PollNmi());
     CHECK_FALSE(ppu.PollNmi());
+    CHECK(ppu.ConsumeFrameComplete());
+    CHECK_FALSE(ppu.ConsumeFrameComplete());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
 }
 

@@ -117,11 +117,15 @@ int main(int argc, char* argv[])
         const auto& frameBuffer = romLoaded
             ? console.VideoProcessor().FrameBuffer()
             : demoPpu.FrameBuffer();
-        SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
-                          ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
-        SDL_RenderClear(renderer);
-        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-        SDL_RenderPresent(renderer);
+        const bool frameComplete = !romLoaded || console.VideoProcessor().ConsumeFrameComplete();
+        if (frameComplete)
+        {
+            SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
+                              ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
+            SDL_RenderClear(renderer);
+            SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+            SDL_RenderPresent(renderer);
+        }
     }
 
     SDL_DestroyTexture(texture);
