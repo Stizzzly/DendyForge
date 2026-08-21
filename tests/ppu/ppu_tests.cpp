@@ -86,3 +86,26 @@ TEST_CASE("PPU renders a background tile into the frame buffer")
     CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
     CHECK(ppu.FrameBuffer()[1] == ppu.FrameBuffer()[256]);
 }
+
+TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0010, 0x80);
+    ppu.PpuWrite(0x0018, 0x80);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x2001, 0x01);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+    ppu.PpuWrite(0x3F03, 0x31);
+
+    ppu.RenderBackground();
+    const auto beforeScroll = ppu.FrameBuffer()[0];
+
+    ppu.CpuWrite(0x2005, 8);
+    ppu.CpuWrite(0x2005, 0);
+    ppu.RenderBackground();
+
+    CHECK(ppu.FrameBuffer()[0] != beforeScroll);
+}

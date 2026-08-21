@@ -71,17 +71,26 @@ void PPU::RenderBackground()
         return;
     }
 
-    const std::uint16_t nametableBase = 0x2000 | ((m_control & 0x03) << 10);
     const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
+    const std::uint8_t baseNametableX = m_control & 0x01;
+    const std::uint8_t baseNametableY = (m_control >> 1) & 0x01;
 
     for (std::uint16_t y = 0; y < 240; ++y)
     {
-        const std::uint16_t tileRow = y / 8;
-        const std::uint16_t rowInTile = y & 0x07;
+        const std::uint16_t worldY = y + m_scrollY;
+        const std::uint16_t tileRow = (worldY / 8) % 30;
+        const std::uint16_t rowInTile = worldY & 0x07;
+        const std::uint8_t nametableY =
+            baseNametableY ^ ((worldY / 240) & 0x01);
 
         for (std::uint16_t x = 0; x < 256; ++x)
         {
-            const std::uint16_t tileColumn = x / 8;
+            const std::uint16_t worldX = x + m_scrollX;
+            const std::uint16_t tileColumn = (worldX / 8) & 0x1F;
+            const std::uint8_t nametableX =
+                baseNametableX ^ ((worldX / 256) & 0x01);
+            const std::uint16_t nametableBase =
+                0x2000 | ((nametableY << 1 | nametableX) << 10);
             const std::uint8_t tileIndex = PpuRead(
                 nametableBase + tileRow * 32 + tileColumn);
             const std::uint8_t attribute = PpuRead(
@@ -174,10 +183,12 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         if (!m_writeLatch)
         {
             m_fineX = data & 0x07;
+            m_scrollX = data;
             m_temporaryAddress = (m_temporaryAddress & 0xFFE0) | (data >> 3);
         }
         else
         {
+            m_scrollY = data;
             m_temporaryAddress = (m_temporaryAddress & 0x8FFF) |
                                  ((static_cast<std::uint16_t>(data) & 0x07) << 12);
             m_temporaryAddress = (m_temporaryAddress & 0xFC1F) |

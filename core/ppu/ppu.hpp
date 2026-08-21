@@ -51,6 +51,8 @@ private:
     std::uint16_t m_vramAddress{0};
     std::uint16_t m_temporaryAddress{0};
     std::uint8_t m_fineX{0};
+    std::uint8_t m_scrollX{0};
+    std::uint8_t m_scrollY{0};
     bool m_writeLatch{false};
     bool m_nmiPending{false};
     std::int16_t m_scanline{-1};
