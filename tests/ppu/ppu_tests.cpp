@@ -71,6 +71,57 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
 }
 
+TEST_CASE("PPU scroll and address writes keep v, t, fine X, and the latch distinct")
+{
+    dendyforge::PPU ppu;
+
+    ppu.CpuWrite(0x2000, 0x03);
+    ppu.CpuWrite(0x2005, 0x1D);
+    ppu.CpuWrite(0x2005, 0xAE);
+
+    const auto afterScroll = ppu.AddressState();
+    CHECK(afterScroll.vramAddress == 0x0000);
+    CHECK(afterScroll.temporaryAddress == 0x6EA3);
+    CHECK(afterScroll.fineX == 0x05);
+    CHECK_FALSE(afterScroll.writeLatch);
+
+    ppu.CpuWrite(0x2006, 0x3F);
+    const auto afterAddressHigh = ppu.AddressState();
+    CHECK(afterAddressHigh.vramAddress == 0x0000);
+    CHECK(afterAddressHigh.temporaryAddress == 0x3FA3);
+    CHECK(afterAddressHigh.writeLatch);
+
+    ppu.CpuRead(0x2002);
+    CHECK_FALSE(ppu.AddressState().writeLatch);
+
+    ppu.CpuWrite(0x2006, 0x21);
+    ppu.CpuWrite(0x2006, 0x00);
+    const auto afterAddress = ppu.AddressState();
+    CHECK(afterAddress.vramAddress == 0x2100);
+    CHECK(afterAddress.temporaryAddress == 0x2100);
+    CHECK(afterAddress.fineX == 0x05);
+    CHECK_FALSE(afterAddress.writeLatch);
+}
+
+TEST_CASE("PPUSCROLL prepares t without moving the PPUDATA address")
+{
+    dendyforge::PPU ppu;
+    ppu.PpuWrite(0x2015, 0xAA);
+    ppu.PpuWrite(0x2016, 0xBB);
+
+    ppu.CpuWrite(0x2006, 0x20);
+    ppu.CpuWrite(0x2006, 0x15);
+    CHECK(ppu.CpuRead(0x2007) == 0x00);
+    CHECK(ppu.AddressState().vramAddress == 0x2016);
+
+    ppu.CpuWrite(0x2005, 0x1D);
+    ppu.CpuWrite(0x2005, 0xAE);
+    CHECK(ppu.AddressState().vramAddress == 0x2016);
+
+    CHECK(ppu.CpuRead(0x2007) == 0xAA);
+    CHECK(ppu.CpuRead(0x2007) == 0xBB);
+}
+
 TEST_CASE("PPU renders a background tile into the frame buffer")
 {
     dendyforge::PPU ppu;

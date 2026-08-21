@@ -71,6 +71,11 @@ const std::array<std::uint32_t, 256 * 240>& PPU::FrameBuffer() const
     return m_frameBuffer;
 }
 
+PPU::ScrollAddressState PPU::AddressState() const
+{
+    return {m_vramAddress, m_temporaryAddress, m_fineX, m_writeLatch};
+}
+
 void PPU::RenderBackground()
 {
     BeginFrame();

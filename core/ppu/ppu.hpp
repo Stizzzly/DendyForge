@@ -13,6 +13,14 @@ class Cartridge;
 class PPU
 {
 public:
+    struct ScrollAddressState
+    {
+        std::uint16_t vramAddress;
+        std::uint16_t temporaryAddress;
+        std::uint8_t fineX;
+        bool writeLatch;
+    };
+
     void ConnectCartridge(Cartridge* cartridge);
 
     void Clock();
@@ -22,6 +30,7 @@ public:
     void RenderSprites();
 
     const std::array<std::uint32_t, 256 * 240>& FrameBuffer() const;
+    ScrollAddressState AddressState() const;
 
     std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
@@ -55,9 +64,14 @@ private:
     std::uint8_t m_status{0};
     std::uint8_t m_oamAddress{0};
     std::uint8_t m_dataBuffer{0};
-    std::uint16_t m_vramAddress{0};
-    std::uint16_t m_temporaryAddress{0};
-    std::uint8_t m_fineX{0};
+    // The PPU scrolling registers conventionally call these v, t, and x.
+    // CPU register writes prepare t and x; only a completed $2006 write
+    // copies t into v. The renderer will progressively take ownership of v.
+    std::uint16_t m_vramAddress{0}; // v: current VRAM address
+    std::uint16_t m_temporaryAddress{0}; // t: temporary VRAM address
+    std::uint8_t m_fineX{0}; // x: fine horizontal scroll
+    // Retained for the current direct renderer until it is replaced with the
+    // live v/t/x background fetch pipeline.
     std::uint8_t m_scrollX{0};
     std::uint8_t m_scrollY{0};
     bool m_writeLatch{false};
