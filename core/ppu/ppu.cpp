@@ -36,10 +36,14 @@ void PPU::Clock()
         m_nmiPending = false;
         BeginFrame();
     }
-    else if (m_scanline >= 0 && m_scanline < 240 && m_cycle == 256)
+    else if (m_scanline >= 0 && m_scanline < 240 &&
+             m_cycle >= 1 && m_cycle <= 256)
     {
-        RenderBackgroundScanline(m_scanline);
-        RenderSpritesScanline(m_scanline);
+        RenderBackgroundPixel(m_scanline, m_cycle - 1);
+        if (m_cycle == 256)
+        {
+            RenderSpritesScanline(m_scanline);
+        }
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
@@ -84,6 +88,14 @@ void PPU::BeginFrame()
 
 void PPU::RenderBackgroundScanline(std::uint16_t screenY)
 {
+    for (std::uint16_t screenX = 0; screenX < 256; ++screenX)
+    {
+        RenderBackgroundPixel(screenY, screenX);
+    }
+}
+
+void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
+{
     const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
 
     if ((m_mask & 0x08) == 0)
@@ -101,39 +113,36 @@ void PPU::RenderBackgroundScanline(std::uint16_t screenY)
     const std::uint8_t nametableY =
         baseNametableY ^ ((worldY / 240) & 0x01);
 
-    for (std::uint16_t x = 0; x < 256; ++x)
-    {
-        const std::uint16_t worldX = x + m_scrollX;
-        const std::uint16_t tileColumn = (worldX / 8) & 0x1F;
-        const std::uint8_t nametableX =
-            baseNametableX ^ ((worldX / 256) & 0x01);
-        const std::uint16_t nametableBase =
-            0x2000 | ((nametableY << 1 | nametableX) << 10);
-        const std::uint8_t tileIndex = PpuRead(
-            nametableBase + tileRow * 32 + tileColumn);
-        const std::uint8_t attribute = PpuRead(
-            nametableBase + 0x03C0 + (tileRow / 4) * 8 + (tileColumn / 4));
-        const std::uint8_t attributeShift =
-            ((tileRow & 0x02) ? 4 : 0) | ((tileColumn & 0x02) ? 2 : 0);
-        const std::uint8_t palette = (attribute >> attributeShift) & 0x03;
+    const std::uint16_t worldX = screenX + m_scrollX;
+    const std::uint16_t tileColumn = (worldX / 8) & 0x1F;
+    const std::uint8_t nametableX =
+        baseNametableX ^ ((worldX / 256) & 0x01);
+    const std::uint16_t nametableBase =
+        0x2000 | ((nametableY << 1 | nametableX) << 10);
+    const std::uint8_t tileIndex = PpuRead(
+        nametableBase + tileRow * 32 + tileColumn);
+    const std::uint8_t attribute = PpuRead(
+        nametableBase + 0x03C0 + (tileRow / 4) * 8 + (tileColumn / 4));
+    const std::uint8_t attributeShift =
+        ((tileRow & 0x02) ? 4 : 0) | ((tileColumn & 0x02) ? 2 : 0);
+    const std::uint8_t palette = (attribute >> attributeShift) & 0x03;
 
-        const std::uint16_t tileAddress = patternBase + tileIndex * 16 + rowInTile;
-        const std::uint8_t lowPlane = PpuRead(tileAddress);
-        const std::uint8_t highPlane = PpuRead(tileAddress + 8);
-        const std::uint8_t bit = 7 - (x & 0x07);
-        const std::uint8_t color =
-            ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
-        const std::uint16_t paletteAddress = color == 0
-            ? 0x3F00
-            : 0x3F00 + palette * 4 + color;
+    const std::uint16_t tileAddress = patternBase + tileIndex * 16 + rowInTile;
+    const std::uint8_t lowPlane = PpuRead(tileAddress);
+    const std::uint8_t highPlane = PpuRead(tileAddress + 8);
+    const std::uint8_t bit = 7 - (screenX & 0x07);
+    const std::uint8_t color =
+        ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
+    const std::uint16_t paletteAddress = color == 0
+        ? 0x3F00
+        : 0x3F00 + palette * 4 + color;
 
-        const std::size_t pixel = screenY * 256 + x;
-        const bool visible = x >= 8 || (m_mask & 0x02) != 0;
-        m_frameBuffer[pixel] = visible
-            ? ColorFromPaletteIndex(PpuRead(paletteAddress))
-            : backdrop;
-        m_backgroundOpaque[pixel] = visible && color != 0;
-    }
+    const std::size_t pixel = screenY * 256 + screenX;
+    const bool visible = screenX >= 8 || (m_mask & 0x02) != 0;
+    m_frameBuffer[pixel] = visible
+        ? ColorFromPaletteIndex(PpuRead(paletteAddress))
+        : backdrop;
+    m_backgroundOpaque[pixel] = visible && color != 0;
 }
 
 void PPU::RenderSprites()

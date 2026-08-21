@@ -33,6 +33,7 @@ private:
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
     void BeginFrame();
+    void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX);
     void RenderBackgroundScanline(std::uint16_t screenY);
     void RenderSpritesScanline(std::uint16_t screenY);
     void IncrementVramAddress();
