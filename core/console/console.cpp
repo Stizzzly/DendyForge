@@ -45,6 +45,8 @@ void Console::Clock()
         m_bus.BeginPendingDma(m_cpuCycleIsOdd);
     }
 
+    m_bus.AudioProcessor().Clock();
+
     for (int index = 0; index < 3; ++index)
     {
         m_bus.ClockPpu();
@@ -66,6 +68,11 @@ CPU6502& Console::Cpu()
 PPU& Console::VideoProcessor()
 {
     return m_bus.VideoProcessor();
+}
+
+APU& Console::AudioProcessor()
+{
+    return m_bus.AudioProcessor();
 }
 
 Controller& Console::PrimaryController()

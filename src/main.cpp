@@ -14,6 +14,7 @@ constexpr int ScreenHeight = 240;
 constexpr double CpuClockHz = 1'789'773.0;
 constexpr std::uint64_t NanosecondsPerSecond = 1'000'000'000;
 constexpr std::uint64_t MaximumElapsedNanoseconds = 100'000'000;
+constexpr int AudioQueueDurationMilliseconds = 100;
 
 void PrepareDemoFrame(dendyforge::PPU& ppu)
 {
@@ -55,7 +56,7 @@ void SetControllerButton(dendyforge::Console& console, SDL_Keycode key, bool pre
 
 int main(int argc, char* argv[])
 {
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "Could not initialize SDL3: %s", SDL_GetError());
@@ -88,6 +89,22 @@ int main(int argc, char* argv[])
     {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "Could not enable renderer VSync: %s", SDL_GetError());
+    }
+
+    const SDL_AudioSpec audioSpec{SDL_AUDIO_F32, 1, dendyforge::APU::SampleRate};
+    SDL_AudioStream* audioStream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &audioSpec, nullptr, nullptr);
+    if (!audioStream)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Could not open audio output: %s", SDL_GetError());
+    }
+    else if (!SDL_ResumeAudioStreamDevice(audioStream))
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Could not start audio output: %s", SDL_GetError());
+        SDL_DestroyAudioStream(audioStream);
+        audioStream = nullptr;
     }
 
     dendyforge::Console console;
@@ -137,6 +154,23 @@ int main(int argc, char* argv[])
             }
         }
 
+        if (audioStream && romLoaded)
+        {
+            const auto samples = console.AudioProcessor().TakeSamples();
+            const int maximumQueuedBytes = dendyforge::APU::SampleRate *
+                AudioQueueDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
+            const int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
+            const int sampleBytes = static_cast<int>(samples.size() * sizeof(float));
+            const int bytesToQueue = std::min(
+                sampleBytes, std::max(0, maximumQueuedBytes - queuedBytes));
+            if (bytesToQueue != 0 &&
+                !SDL_PutAudioStreamData(audioStream, samples.data(), bytesToQueue))
+            {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "Could not queue audio: %s", SDL_GetError());
+            }
+        }
+
         const auto& frameBuffer = romLoaded
             ? console.VideoProcessor().FrameBuffer()
             : demoPpu.FrameBuffer();
@@ -152,6 +186,7 @@ int main(int argc, char* argv[])
         SDL_Delay(1);
     }
 
+    SDL_DestroyAudioStream(audioStream);
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

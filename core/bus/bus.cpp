@@ -21,6 +21,11 @@ PPU& Bus::VideoProcessor()
     return m_ppu;
 }
 
+APU& Bus::AudioProcessor()
+{
+    return m_apu;
+}
+
 Controller& Bus::PrimaryController()
 {
     return m_controller1;
@@ -55,6 +60,11 @@ std::uint8_t Bus::CpuRead(std::uint16_t address)
     if (address == 0x4016)
     {
         return m_controller1.Read();
+    }
+
+    if (address == 0x4015)
+    {
+        return m_apu.CpuRead(address);
     }
 
     // $4000-$4017
@@ -107,6 +117,12 @@ void Bus::CpuWrite(
     if (address == 0x4016)
     {
         m_controller1.Write(data);
+        return;
+    }
+
+    if (address >= 0x4000 && address <= 0x4017)
+    {
+        m_apu.CpuWrite(address, data);
         return;
     }
 

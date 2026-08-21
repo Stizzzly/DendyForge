@@ -19,6 +19,7 @@ target_include_directories(DendyForgeCpu PUBLIC
 )
 
 add_library(DendyForgeCore
+    core/apu/apu.cpp
     core/ines/ines_reader.cpp
     core/cartridge/cartridge.cpp
     core/cartridge/cartridge_info.cpp
@@ -44,6 +45,7 @@ add_executable(DendyForgeTests
     tests/bus/bus_tests.cpp
     tests/ppu/ppu_tests.cpp
     tests/console/console_tests.cpp
+    tests/apu/apu_tests.cpp
     tests/controller/controller_tests.cpp
     tests/cartridge/cartridge_tests.cpp
 )

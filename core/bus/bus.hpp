@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "../cpu/cpu_bus.hpp"
+#include "../apu/apu.hpp"
 #include "../controller/controller.hpp"
 #include "../ppu/ppu.hpp"
 
@@ -28,11 +29,13 @@ public:
     bool ConsumeDmaStallCycle();
 
     PPU& VideoProcessor();
+    APU& AudioProcessor();
     Controller& PrimaryController();
 
 private:
     Cartridge* m_cartridge{nullptr};
     PPU m_ppu;
+    APU m_apu;
     Controller m_controller1;
     bool m_dmaPending{false};
     std::uint16_t m_dmaStallCycles{0};

@@ -23,6 +23,7 @@ public:
 
     CPU6502& Cpu();
     PPU& VideoProcessor();
+    APU& AudioProcessor();
     Controller& PrimaryController();
 
 private:
