@@ -68,12 +68,36 @@ private:
         bool m_enabled{false};
     };
 
+    struct NoiseChannel
+    {
+        void WriteControl(std::uint8_t data);
+        void WritePeriod(std::uint8_t data);
+        void WriteLength(std::uint8_t data);
+        void SetEnabled(bool enabled);
+        void ClockTimer();
+        void ClockEnvelope();
+        void ClockLength();
+        std::uint8_t Output() const;
+
+        std::uint8_t m_control{0};
+        std::uint8_t m_periodIndex{0};
+        std::uint16_t m_timerCounter{0};
+        std::uint16_t m_shiftRegister{1};
+        std::uint8_t m_lengthCounter{0};
+        std::uint8_t m_envelopeDivider{0};
+        std::uint8_t m_envelopeDecayLevel{0};
+        bool m_envelopeStart{false};
+        bool m_mode{false};
+        bool m_enabled{false};
+    };
+
     void ClockFrameCounter();
     void QueueSample();
 
     PulseChannel m_pulse1;
     PulseChannel m_pulse2;
     TriangleChannel m_triangle;
+    NoiseChannel m_noise;
     std::uint32_t m_frameCounter{0};
     bool m_clockLengthCounters{false};
     std::uint32_t m_samplePhase{0};

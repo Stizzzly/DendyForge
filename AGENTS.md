@@ -136,8 +136,8 @@ The current CPU map implemented by `Bus` is:
   selected by CPU-cycle parity. The PPU continues to clock during that stall.
 * `$4016`: controller 1 serial port.
 * cartridge reads/writes are tried first, then the built-in map.
-* `$4000-$400B` and `$4015`: initial APU pulse/triangle implementation. It
-  produces 44.1 kHz mono PCM samples; `$400C-$4013` and `$4017` are not yet
+* `$4000-$400F` and `$4015`: initial APU pulse/triangle/noise implementation.
+  It produces 44.1 kHz mono PCM samples; `$4010-$4013` and `$4017` are not yet
   implemented as APU registers. `$4016` remains controller 1.
 
 Controller order is A, B, Select, Start, Up, Down, Left, Right. A write to
@@ -224,22 +224,21 @@ background renderer without a focused regression test and a Mario checkpoint.
 ## Recommended APU plan
 
 `APU` is a standalone component owned by `Bus`, while SDL audio remains in the
-frontend. Pulse channels, including envelope/sweep units, their
-registers/timers/length counters, a bounded SDL-fed sample queue, and a basic
-triangle channel are in place. Continue one sound source at a time: noise, DMC,
-accurate frame counter, and the NES nonlinear mixer. Test register writes,
+frontend. Pulse channels, including envelope/sweep units, triangle, noise, and
+a bounded SDL-fed sample queue are in place. Continue one sound source at a
+time: DMC, accurate frame counter, and the NES nonlinear mixer. Test register writes,
 timers, envelopes, and sample generation before claiming that a game has
 accurate sound.
 
 ## APU: current status
 
 `Bus` owns `APU`, which is clocked once per CPU cycle. The current component
-implements pulse channels 1 and 2 plus triangle with duty/waveform sequences,
-timer periods, length counters, pulse envelope/sweep units, triangle linear
-counter, `$4015` enables/status, and a bounded 44.1 kHz PCM sample queue.
-`main.cpp` sends that queue to an SDL3 audio stream. This is intentionally an
-initial audible layer, not an accurate 2A03 APU: noise, DMC, exact frame-counter
-modes, nonlinear mixing, and IRQs remain absent.
+implements pulse channels 1 and 2, triangle, and noise with duty/waveform
+sequences, timer periods, length counters, pulse/noise envelope units,
+triangle linear counter, `$4015` enables/status, and a bounded 44.1 kHz PCM
+sample queue. `main.cpp` sends that queue to an SDL3 audio stream. This is
+intentionally an initial audible layer, not an accurate 2A03 APU: DMC, exact
+frame-counter modes, nonlinear mixing, and IRQs remain absent.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.

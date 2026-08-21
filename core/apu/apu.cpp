@@ -25,6 +25,10 @@ constexpr std::array<std::uint8_t, 32> TriangleSequence{
     15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 };
+constexpr std::array<std::uint16_t, 16> NoisePeriodTable{
+    4, 8, 16, 32, 64, 96, 128, 160,
+    202, 254, 380, 508, 762, 1016, 2034, 4068,
+};
 
 }
 
@@ -33,6 +37,7 @@ void APU::Clock()
     m_pulse1.ClockTimer();
     m_pulse2.ClockTimer();
     m_triangle.ClockTimer();
+    m_noise.ClockTimer();
     ClockFrameCounter();
 
     m_samplePhase += SampleRate;
@@ -52,7 +57,8 @@ std::uint8_t APU::CpuRead(std::uint16_t address) const
 
     return (m_pulse1.m_lengthCounter != 0 ? 0x01 : 0x00) |
            (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00) |
-           (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00);
+           (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00) |
+           (m_noise.m_lengthCounter != 0 ? 0x08 : 0x00);
 }
 
 void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
@@ -70,10 +76,14 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
     case 0x4008: m_triangle.WriteControl(data); break;
     case 0x400A: m_triangle.WriteTimerLow(data); break;
     case 0x400B: m_triangle.WriteTimerHigh(data); break;
+    case 0x400C: m_noise.WriteControl(data); break;
+    case 0x400E: m_noise.WritePeriod(data); break;
+    case 0x400F: m_noise.WriteLength(data); break;
     case 0x4015:
         m_pulse1.SetEnabled((data & 0x01) != 0);
         m_pulse2.SetEnabled((data & 0x02) != 0);
         m_triangle.SetEnabled((data & 0x04) != 0);
+        m_noise.SetEnabled((data & 0x08) != 0);
         break;
     default:
         break;
@@ -305,6 +315,95 @@ std::uint8_t APU::TriangleChannel::Output() const
     return TriangleSequence[m_sequenceStep];
 }
 
+void APU::NoiseChannel::WriteControl(std::uint8_t data)
+{
+    m_control = data;
+}
+
+void APU::NoiseChannel::WritePeriod(std::uint8_t data)
+{
+    m_mode = (data & 0x80) != 0;
+    m_periodIndex = data & 0x0F;
+}
+
+void APU::NoiseChannel::WriteLength(std::uint8_t data)
+{
+    if (m_enabled)
+    {
+        m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
+    }
+    m_envelopeStart = true;
+}
+
+void APU::NoiseChannel::SetEnabled(bool enabled)
+{
+    m_enabled = enabled;
+    if (!enabled)
+    {
+        m_lengthCounter = 0;
+    }
+}
+
+void APU::NoiseChannel::ClockTimer()
+{
+    if (m_timerCounter != 0)
+    {
+        --m_timerCounter;
+        return;
+    }
+
+    m_timerCounter = NoisePeriodTable[m_periodIndex];
+    const std::uint8_t tap = m_mode ? 6 : 1;
+    const std::uint16_t feedback = (m_shiftRegister & 0x01) ^
+                                   ((m_shiftRegister >> tap) & 0x01);
+    m_shiftRegister = (m_shiftRegister >> 1) | (feedback << 14);
+}
+
+void APU::NoiseChannel::ClockEnvelope()
+{
+    if (m_envelopeStart)
+    {
+        m_envelopeStart = false;
+        m_envelopeDecayLevel = 15;
+        m_envelopeDivider = m_control & 0x0F;
+        return;
+    }
+
+    if (m_envelopeDivider != 0)
+    {
+        --m_envelopeDivider;
+        return;
+    }
+
+    m_envelopeDivider = m_control & 0x0F;
+    if (m_envelopeDecayLevel != 0)
+    {
+        --m_envelopeDecayLevel;
+    }
+    else if ((m_control & 0x20) != 0)
+    {
+        m_envelopeDecayLevel = 15;
+    }
+}
+
+void APU::NoiseChannel::ClockLength()
+{
+    if ((m_control & 0x20) == 0 && m_lengthCounter != 0)
+    {
+        --m_lengthCounter;
+    }
+}
+
+std::uint8_t APU::NoiseChannel::Output() const
+{
+    if (!m_enabled || m_lengthCounter == 0 || (m_shiftRegister & 0x01) != 0)
+    {
+        return 0;
+    }
+
+    return (m_control & 0x10) != 0 ? (m_control & 0x0F) : m_envelopeDecayLevel;
+}
+
 void APU::ClockFrameCounter()
 {
     ++m_frameCounter;
@@ -317,12 +416,14 @@ void APU::ClockFrameCounter()
     m_pulse1.ClockEnvelope();
     m_pulse2.ClockEnvelope();
     m_triangle.ClockLinearCounter();
+    m_noise.ClockEnvelope();
     m_clockLengthCounters = !m_clockLengthCounters;
     if (m_clockLengthCounters)
     {
         m_pulse1.ClockLength();
         m_pulse2.ClockLength();
         m_triangle.ClockLength();
+        m_noise.ClockLength();
         m_pulse1.ClockSweep(true);
         m_pulse2.ClockSweep(false);
     }
@@ -339,7 +440,8 @@ void APU::QueueSample()
     const float pulse = static_cast<float>(m_pulse1.Output(true) +
                                            m_pulse2.Output(false));
     const float triangle = static_cast<float>(m_triangle.Output());
-    m_samples.push_back(pulse / 60.0F + triangle / 120.0F);
+    const float noise = static_cast<float>(m_noise.Output());
+    m_samples.push_back(pulse / 60.0F + triangle / 120.0F + noise / 120.0F);
 }
 
 } // namespace dendyforge

@@ -72,3 +72,22 @@ TEST_CASE("APU triangle channel produces samples while linear and length counter
     CHECK(std::any_of(samples.begin(), samples.end(),
                       [](float sample) { return sample > 0.0F; }));
 }
+
+TEST_CASE("APU noise channel produces samples through its shift register")
+{
+    dendyforge::APU apu;
+    apu.CpuWrite(0x4015, 0x08);
+    apu.CpuWrite(0x400C, 0x3F);
+    apu.CpuWrite(0x400E, 0x00);
+    apu.CpuWrite(0x400F, 0x18);
+
+    for (int cycle = 0; cycle < 10'000; ++cycle)
+    {
+        apu.Clock();
+    }
+
+    const auto samples = apu.TakeSamples();
+    CHECK((apu.CpuRead(0x4015) & 0x08) != 0);
+    CHECK(std::any_of(samples.begin(), samples.end(),
+                      [](float sample) { return sample > 0.0F; }));
+}
