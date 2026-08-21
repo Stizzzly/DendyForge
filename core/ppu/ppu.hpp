@@ -116,6 +116,7 @@ private:
     bool m_writeLatch{false};
     bool m_nmiPending{false};
     bool m_frameComplete{false};
+    bool m_oddFrame{false};
     std::int16_t m_scanline{-1};
     std::int16_t m_cycle{0};
 };

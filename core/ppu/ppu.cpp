@@ -86,6 +86,13 @@ void PPU::Clock()
     }
 
     ++m_cycle;
+    if (m_scanline == -1 && m_cycle == 340 && m_oddFrame &&
+        RenderingEnabled())
+    {
+        m_cycle = 0;
+        m_scanline = 0;
+        return;
+    }
     if (m_cycle < 341)
     {
         return;
@@ -96,6 +103,7 @@ void PPU::Clock()
     if (m_scanline == 261)
     {
         m_scanline = -1;
+        m_oddFrame = !m_oddFrame;
     }
 }
 

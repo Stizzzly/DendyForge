@@ -71,6 +71,50 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
 }
 
+TEST_CASE("PPU raises an NMI when it is enabled during VBlank")
+{
+    dendyforge::PPU ppu;
+
+    for (int cycle = 0; cycle < 242 * 341 + 2; ++cycle)
+    {
+        ppu.Clock();
+    }
+
+    ppu.CpuWrite(0x2000, 0x80);
+    CHECK(ppu.PollNmi());
+    CHECK_FALSE(ppu.PollNmi());
+}
+
+TEST_CASE("PPU skips one pre-render cycle on alternating rendered frames")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08);
+
+    const auto clocksUntilFrame = [&ppu]()
+    {
+        int clocks = 0;
+        do
+        {
+            ppu.Clock();
+            ++clocks;
+        }
+        while (!ppu.ConsumeFrameComplete());
+        return clocks;
+    };
+
+    clocksUntilFrame();
+    const int firstFrame = clocksUntilFrame();
+    const int secondFrame = clocksUntilFrame();
+    const int thirdFrame = clocksUntilFrame();
+
+    const bool secondFrameHasSkippedCycle =
+        secondFrame == firstFrame - 1 || secondFrame == firstFrame + 1;
+    const bool thirdFrameHasSkippedCycle =
+        thirdFrame == secondFrame - 1 || thirdFrame == secondFrame + 1;
+    CHECK(secondFrameHasSkippedCycle);
+    CHECK(thirdFrameHasSkippedCycle);
+}
+
 TEST_CASE("PPU scroll and address writes keep v, t, fine X, and the latch distinct")
 {
     dendyforge::PPU ppu;
