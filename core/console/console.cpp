@@ -34,6 +34,7 @@ bool Console::LoadRom(const std::string& path)
 void Console::Reset()
 {
     m_cpu.Reset();
+    m_bus.AudioProcessor().Reset();
     m_cpuCycleIsOdd = false;
 }
 
@@ -47,7 +48,7 @@ void Console::Clock()
 
     m_bus.AudioProcessor().Clock();
 
-    if (m_bus.AudioProcessor().DmcIrqPending())
+    if (m_bus.AudioProcessor().IrqPending())
     {
         m_cpu.IRQ();
     }

@@ -14,12 +14,13 @@ public:
     static constexpr int SampleRate = 44'100;
     using DmcMemoryReader = std::function<std::uint8_t(std::uint16_t)>;
 
+    void Reset();
     void Clock();
-    std::uint8_t CpuRead(std::uint16_t address) const;
+    std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
     void SetDmcMemoryReader(DmcMemoryReader reader);
     bool ConsumeDmcDmaStallCycle();
-    bool DmcIrqPending() const;
+    bool IrqPending() const;
     std::vector<float> TakeSamples();
 
 private:
@@ -131,6 +132,8 @@ private:
     };
 
     void ClockFrameCounter();
+    void ClockQuarterFrame();
+    void ClockHalfFrame();
     void QueueSample();
 
     PulseChannel m_pulse1;
@@ -140,7 +143,13 @@ private:
     DmcChannel m_dmc;
     DmcMemoryReader m_dmcMemoryReader;
     std::uint32_t m_frameCounter{0};
-    bool m_clockLengthCounters{false};
+    bool m_fiveStepFrameCounter{false};
+    bool m_frameIrqInhibit{false};
+    bool m_frameIrqFlag{false};
+    bool m_pendingFiveStepFrameCounter{false};
+    bool m_pendingFrameIrqInhibit{false};
+    bool m_cpuCycleOdd{false};
+    std::uint8_t m_frameResetDelay{0};
     std::uint32_t m_samplePhase{0};
     std::vector<float> m_samples;
 };

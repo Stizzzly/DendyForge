@@ -21,6 +21,8 @@ TEST_CASE("APU pulse channel produces samples after its registers are enabled")
     CHECK_FALSE(samples.empty());
     CHECK(std::any_of(samples.begin(), samples.end(),
                       [](float sample) { return sample > 0.0F; }));
+    CHECK(std::all_of(samples.begin(), samples.end(),
+                      [](float sample) { return sample >= 0.0F && sample <= 1.0F; }));
     CHECK((apu.CpuRead(0x4015) & 0x01) != 0);
 }
 
@@ -108,6 +110,50 @@ TEST_CASE("APU DMC fetches sample bytes and contributes to the output")
         apu.Clock();
     }
 
+    const auto samples = apu.TakeSamples();
+    CHECK(std::any_of(samples.begin(), samples.end(),
+                      [](float sample) { return sample > 0.0F; }));
+}
+
+TEST_CASE("APU four-step frame counter raises and clears its status IRQ")
+{
+    dendyforge::APU apu;
+    for (int cycle = 0; cycle < 29'829; ++cycle)
+    {
+        apu.Clock();
+    }
+
+    CHECK((apu.CpuRead(0x4015) & 0x40) != 0);
+    CHECK((apu.CpuRead(0x4015) & 0x40) == 0);
+}
+
+TEST_CASE("APU five-step frame counter does not raise a frame IRQ")
+{
+    dendyforge::APU apu;
+    apu.CpuWrite(0x4017, 0x80);
+    for (int cycle = 0; cycle < 37'281; ++cycle)
+    {
+        apu.Clock();
+    }
+
+    CHECK((apu.CpuRead(0x4015) & 0x40) == 0);
+}
+
+TEST_CASE("APU reset clears channel status while preserving its DMC reader")
+{
+    dendyforge::APU apu;
+    apu.SetDmcMemoryReader([](std::uint16_t) { return 0xFF; });
+    apu.CpuWrite(0x4012, 0x00);
+    apu.CpuWrite(0x4013, 0x10);
+    apu.CpuWrite(0x4015, 0x10);
+    apu.Reset();
+
+    CHECK(apu.CpuRead(0x4015) == 0);
+    apu.CpuWrite(0x4015, 0x10);
+    for (int cycle = 0; cycle < 4'000; ++cycle)
+    {
+        apu.Clock();
+    }
     const auto samples = apu.TakeSamples();
     CHECK(std::any_of(samples.begin(), samples.end(),
                       [](float sample) { return sample > 0.0F; }));

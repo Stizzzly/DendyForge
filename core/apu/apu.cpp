@@ -10,7 +10,6 @@ namespace
 {
 
 constexpr std::uint32_t CpuClockHz = 1'789'773;
-constexpr std::uint32_t HalfFramePeriod = CpuClockHz / 240;
 constexpr std::array<std::uint8_t, 32> LengthTable{
     10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
     12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30,
@@ -36,6 +35,13 @@ constexpr std::array<std::uint16_t, 16> DmcRateTable{
 
 }
 
+void APU::Reset()
+{
+    auto memoryReader = std::move(m_dmcMemoryReader);
+    *this = APU{};
+    m_dmcMemoryReader = std::move(memoryReader);
+}
+
 void APU::Clock()
 {
     m_pulse1.ClockTimer();
@@ -51,21 +57,27 @@ void APU::Clock()
         m_samplePhase -= CpuClockHz;
         QueueSample();
     }
+
+    m_cpuCycleOdd = !m_cpuCycleOdd;
 }
 
-std::uint8_t APU::CpuRead(std::uint16_t address) const
+std::uint8_t APU::CpuRead(std::uint16_t address)
 {
     if (address != 0x4015)
     {
         return 0;
     }
 
-    return (m_pulse1.m_lengthCounter != 0 ? 0x01 : 0x00) |
-           (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00) |
-           (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00) |
-           (m_noise.m_lengthCounter != 0 ? 0x08 : 0x00) |
-           (m_dmc.Active() ? 0x10 : 0x00) |
-           (m_dmc.IrqPending() ? 0x80 : 0x00);
+    const std::uint8_t status =
+        (m_pulse1.m_lengthCounter != 0 ? 0x01 : 0x00) |
+        (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00) |
+        (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00) |
+        (m_noise.m_lengthCounter != 0 ? 0x08 : 0x00) |
+        (m_dmc.Active() ? 0x10 : 0x00) |
+        (m_frameIrqFlag ? 0x40 : 0x00) |
+        (m_dmc.IrqPending() ? 0x80 : 0x00);
+    m_frameIrqFlag = false;
+    return status;
 }
 
 void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
@@ -97,6 +109,15 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
         m_noise.SetEnabled((data & 0x08) != 0);
         m_dmc.SetEnabled((data & 0x10) != 0);
         break;
+    case 0x4017:
+        m_pendingFiveStepFrameCounter = (data & 0x80) != 0;
+        m_pendingFrameIrqInhibit = (data & 0x40) != 0;
+        if (m_pendingFrameIrqInhibit)
+        {
+            m_frameIrqFlag = false;
+        }
+        m_frameResetDelay = m_cpuCycleOdd ? 3 : 4;
+        break;
     default:
         break;
     }
@@ -117,9 +138,9 @@ bool APU::ConsumeDmcDmaStallCycle()
     return m_dmc.ConsumeDmaStallCycle();
 }
 
-bool APU::DmcIrqPending() const
+bool APU::IrqPending() const
 {
-    return m_dmc.IrqPending();
+    return m_frameIrqFlag || m_dmc.IrqPending();
 }
 
 void APU::PulseChannel::WriteControl(std::uint8_t data)
@@ -575,27 +596,80 @@ bool APU::DmcChannel::Active() const
 
 void APU::ClockFrameCounter()
 {
-    ++m_frameCounter;
-    if (m_frameCounter < HalfFramePeriod)
+    if (m_frameResetDelay != 0)
     {
+        --m_frameResetDelay;
+        if (m_frameResetDelay == 0)
+        {
+            m_fiveStepFrameCounter = m_pendingFiveStepFrameCounter;
+            m_frameIrqInhibit = m_pendingFrameIrqInhibit;
+            m_frameCounter = 0;
+            if (m_fiveStepFrameCounter)
+            {
+                ClockQuarterFrame();
+                ClockHalfFrame();
+            }
+        }
         return;
     }
 
-    m_frameCounter = 0;
+    ++m_frameCounter;
+
+    if (m_fiveStepFrameCounter)
+    {
+        if (m_frameCounter == 7457 || m_frameCounter == 22371)
+        {
+            ClockQuarterFrame();
+        }
+        else if (m_frameCounter == 14913 || m_frameCounter == 37281)
+        {
+            ClockQuarterFrame();
+            ClockHalfFrame();
+            if (m_frameCounter == 37281)
+            {
+                m_frameCounter = 0;
+            }
+        }
+        return;
+    }
+
+    if (m_frameCounter == 7457 || m_frameCounter == 22371)
+    {
+        ClockQuarterFrame();
+    }
+    else if (m_frameCounter == 14913)
+    {
+        ClockQuarterFrame();
+        ClockHalfFrame();
+    }
+    else if (m_frameCounter == 29829)
+    {
+        ClockQuarterFrame();
+        ClockHalfFrame();
+        if (!m_frameIrqInhibit)
+        {
+            m_frameIrqFlag = true;
+        }
+        m_frameCounter = 0;
+    }
+}
+
+void APU::ClockQuarterFrame()
+{
     m_pulse1.ClockEnvelope();
     m_pulse2.ClockEnvelope();
     m_triangle.ClockLinearCounter();
     m_noise.ClockEnvelope();
-    m_clockLengthCounters = !m_clockLengthCounters;
-    if (m_clockLengthCounters)
-    {
-        m_pulse1.ClockLength();
-        m_pulse2.ClockLength();
-        m_triangle.ClockLength();
-        m_noise.ClockLength();
-        m_pulse1.ClockSweep(true);
-        m_pulse2.ClockSweep(false);
-    }
+}
+
+void APU::ClockHalfFrame()
+{
+    m_pulse1.ClockLength();
+    m_pulse2.ClockLength();
+    m_triangle.ClockLength();
+    m_noise.ClockLength();
+    m_pulse1.ClockSweep(true);
+    m_pulse2.ClockSweep(false);
 }
 
 void APU::QueueSample()
@@ -606,13 +680,22 @@ void APU::QueueSample()
         m_samples.erase(m_samples.begin());
     }
 
-    const float pulse = static_cast<float>(m_pulse1.Output(true) +
-                                           m_pulse2.Output(false));
+    const float pulse1 = static_cast<float>(m_pulse1.Output(true));
+    const float pulse2 = static_cast<float>(m_pulse2.Output(false));
     const float triangle = static_cast<float>(m_triangle.Output());
     const float noise = static_cast<float>(m_noise.Output());
     const float dmc = static_cast<float>(m_dmc.Output());
-    m_samples.push_back(pulse / 60.0F + triangle / 120.0F + noise / 120.0F +
-                        dmc / 1024.0F);
+
+    const float pulseSum = pulse1 + pulse2;
+    const float pulseMix = pulseSum == 0.0F
+                               ? 0.0F
+                               : 95.88F / ((8128.0F / pulseSum) + 100.0F);
+    const float tndInput = triangle / 8227.0F + noise / 12241.0F +
+                           dmc / 22638.0F;
+    const float tndMix = tndInput == 0.0F
+                             ? 0.0F
+                             : 159.79F / ((1.0F / tndInput) + 100.0F);
+    m_samples.push_back(pulseMix + tndMix);
 }
 
 } // namespace dendyforge

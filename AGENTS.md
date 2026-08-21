@@ -226,9 +226,10 @@ background renderer without a focused regression test and a Mario checkpoint.
 
 `APU` is a standalone component owned by `Bus`, while SDL audio remains in the
 frontend. Pulse channels, including envelope/sweep units, triangle, noise, DMC,
-and a bounded SDL-fed sample queue are in place. Continue with the accurate
-frame counter and NES nonlinear mixer. Test register writes, timers, envelopes,
-DMA, and sample generation before claiming that a game has
+the four-/five-step frame sequence, and a bounded SDL-fed sample queue are in
+place. The nonlinear 2A03 mixer is also in place. Continue with remaining
+frame-reset timing details and accuracy validation. Test register writes,
+timers, envelopes, DMA, and sample generation before claiming that a game has
 accurate sound.
 
 ## APU: current status
@@ -236,11 +237,12 @@ accurate sound.
 `Bus` owns `APU`, which is clocked once per CPU cycle. The current component
 implements pulse channels 1 and 2, triangle, noise, and DMC with
 duty/waveform sequences, timer periods, length counters, pulse/noise envelope
-units, triangle linear counter, DMC sample fetches/CPU stalls/IRQ, `$4015`
-enables/status, and a bounded 44.1 kHz PCM sample queue. `main.cpp` sends that
-queue to an SDL3 audio stream. This is intentionally an initial audible layer,
-not an accurate 2A03 APU: exact frame-counter modes, nonlinear mixing, and
-frame IRQs remain absent.
+units, triangle linear counter, DMC sample fetches/CPU stalls/IRQ, four-/five-
+step frame sequencing with frame IRQ, `$4015` enables/status, and a bounded
+44.1 kHz PCM sample queue. `main.cpp` sends that queue to an SDL3 audio stream.
+This is intentionally an initial audible layer, not a fully cycle-accurate 2A03
+APU: hardware-level validation remains outstanding. The `$4017` frame reset
+uses the 3/4-cycle delay and the 4-step/5-step mode distinction.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
