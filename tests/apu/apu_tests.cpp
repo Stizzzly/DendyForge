@@ -34,3 +34,22 @@ TEST_CASE("APU status disables a pulse channel and clears its length counter")
     apu.CpuWrite(0x4015, 0x00);
     CHECK((apu.CpuRead(0x4015) & 0x01) == 0);
 }
+
+TEST_CASE("APU triangle channel produces samples while linear and length counters run")
+{
+    dendyforge::APU apu;
+    apu.CpuWrite(0x4015, 0x04);
+    apu.CpuWrite(0x4008, 0xFF);
+    apu.CpuWrite(0x400A, 0x20);
+    apu.CpuWrite(0x400B, 0x00);
+
+    for (int cycle = 0; cycle < 10'000; ++cycle)
+    {
+        apu.Clock();
+    }
+
+    const auto samples = apu.TakeSamples();
+    CHECK((apu.CpuRead(0x4015) & 0x04) != 0);
+    CHECK(std::any_of(samples.begin(), samples.end(),
+                      [](float sample) { return sample > 0.0F; }));
+}

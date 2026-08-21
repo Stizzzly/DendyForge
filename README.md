@@ -138,7 +138,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 ### APU
 
 * 🟡 Pulse Channels
-* ⬜ Triangle Channel
+* 🟡 Triangle Channel
 * ⬜ Noise Channel
 * ⬜ DMC Channel
 * ⬜ Audio Mixer

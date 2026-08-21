@@ -21,6 +21,10 @@ constexpr std::array<std::array<bool, 8>, 4> DutySequences{{
     {{false, true, true, true, true, false, false, false}},
     {{true, false, false, true, true, true, true, true}},
 }};
+constexpr std::array<std::uint8_t, 32> TriangleSequence{
+    15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+};
 
 }
 
@@ -28,6 +32,7 @@ void APU::Clock()
 {
     m_pulse1.ClockTimer();
     m_pulse2.ClockTimer();
+    m_triangle.ClockTimer();
     ClockFrameCounter();
 
     m_samplePhase += SampleRate;
@@ -46,7 +51,8 @@ std::uint8_t APU::CpuRead(std::uint16_t address) const
     }
 
     return (m_pulse1.m_lengthCounter != 0 ? 0x01 : 0x00) |
-           (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00);
+           (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00) |
+           (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00);
 }
 
 void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
@@ -59,9 +65,13 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
     case 0x4004: m_pulse2.WriteControl(data); break;
     case 0x4006: m_pulse2.WriteTimerLow(data); break;
     case 0x4007: m_pulse2.WriteTimerHigh(data); break;
+    case 0x4008: m_triangle.WriteControl(data); break;
+    case 0x400A: m_triangle.WriteTimerLow(data); break;
+    case 0x400B: m_triangle.WriteTimerHigh(data); break;
     case 0x4015:
         m_pulse1.SetEnabled((data & 0x01) != 0);
         m_pulse2.SetEnabled((data & 0x02) != 0);
+        m_triangle.SetEnabled((data & 0x04) != 0);
         break;
     default:
         break;
@@ -140,6 +150,88 @@ std::uint8_t APU::PulseChannel::Output() const
     return m_control & 0x0F;
 }
 
+void APU::TriangleChannel::WriteControl(std::uint8_t data)
+{
+    m_control = data;
+}
+
+void APU::TriangleChannel::WriteTimerLow(std::uint8_t data)
+{
+    m_timerPeriod = (m_timerPeriod & 0x0700) | data;
+}
+
+void APU::TriangleChannel::WriteTimerHigh(std::uint8_t data)
+{
+    m_timerPeriod = (m_timerPeriod & 0x00FF) |
+                    ((static_cast<std::uint16_t>(data) & 0x07) << 8);
+    m_timerCounter = m_timerPeriod;
+    if (m_enabled)
+    {
+        m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
+    }
+    m_linearReloadFlag = true;
+}
+
+void APU::TriangleChannel::SetEnabled(bool enabled)
+{
+    m_enabled = enabled;
+    if (!enabled)
+    {
+        m_lengthCounter = 0;
+    }
+}
+
+void APU::TriangleChannel::ClockTimer()
+{
+    if (m_timerCounter == 0)
+    {
+        m_timerCounter = m_timerPeriod;
+        if (m_lengthCounter != 0 && m_linearCounter != 0 && m_timerPeriod > 1)
+        {
+            m_sequenceStep = (m_sequenceStep + 1) & 0x1F;
+        }
+        return;
+    }
+
+    --m_timerCounter;
+}
+
+void APU::TriangleChannel::ClockLinearCounter()
+{
+    if (m_linearReloadFlag)
+    {
+        m_linearCounter = m_control & 0x7F;
+    }
+    else if (m_linearCounter != 0)
+    {
+        --m_linearCounter;
+    }
+
+    if ((m_control & 0x80) == 0)
+    {
+        m_linearReloadFlag = false;
+    }
+}
+
+void APU::TriangleChannel::ClockLength()
+{
+    if ((m_control & 0x80) == 0 && m_lengthCounter != 0)
+    {
+        --m_lengthCounter;
+    }
+}
+
+std::uint8_t APU::TriangleChannel::Output() const
+{
+    if (!m_enabled || m_lengthCounter == 0 || m_linearCounter == 0 ||
+        m_timerPeriod < 2)
+    {
+        return 0;
+    }
+
+    return TriangleSequence[m_sequenceStep];
+}
+
 void APU::ClockFrameCounter()
 {
     ++m_frameCounter;
@@ -149,8 +241,14 @@ void APU::ClockFrameCounter()
     }
 
     m_frameCounter = 0;
-    m_pulse1.ClockLength();
-    m_pulse2.ClockLength();
+    m_triangle.ClockLinearCounter();
+    m_clockLengthCounters = !m_clockLengthCounters;
+    if (m_clockLengthCounters)
+    {
+        m_pulse1.ClockLength();
+        m_pulse2.ClockLength();
+        m_triangle.ClockLength();
+    }
 }
 
 void APU::QueueSample()
@@ -163,7 +261,8 @@ void APU::QueueSample()
 
     const float pulse = static_cast<float>(m_pulse1.Output() +
                                            m_pulse2.Output());
-    m_samples.push_back(pulse / 60.0F);
+    const float triangle = static_cast<float>(m_triangle.Output());
+    m_samples.push_back(pulse / 60.0F + triangle / 120.0F);
 }
 
 } // namespace dendyforge
