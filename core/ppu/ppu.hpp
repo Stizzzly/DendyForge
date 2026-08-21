@@ -33,7 +33,7 @@ private:
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
     void IncrementVramAddress();
-    static std::uint32_t ColorFromPaletteIndex(std::uint8_t index);
+    std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
 
     Cartridge* m_cartridge{nullptr};
     Mirroring m_mirroring{Mirroring::Horizontal};

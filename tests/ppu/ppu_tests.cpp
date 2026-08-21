@@ -72,7 +72,7 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
 TEST_CASE("PPU renders a background tile into the frame buffer")
 {
     dendyforge::PPU ppu;
-    ppu.CpuWrite(0x2001, 0x08);
+    ppu.CpuWrite(0x2001, 0x0A);
 
     ppu.PpuWrite(0x0000, 0x80);
     ppu.PpuWrite(0x0008, 0x00);
@@ -90,7 +90,7 @@ TEST_CASE("PPU renders a background tile into the frame buffer")
 TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")
 {
     dendyforge::PPU ppu;
-    ppu.CpuWrite(0x2001, 0x08);
+    ppu.CpuWrite(0x2001, 0x0A);
     ppu.PpuWrite(0x0000, 0x80);
     ppu.PpuWrite(0x0010, 0x80);
     ppu.PpuWrite(0x0018, 0x80);
@@ -113,7 +113,7 @@ TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")
 TEST_CASE("PPU renders an OAM sprite and records a Sprite Zero Hit")
 {
     dendyforge::PPU ppu;
-    ppu.CpuWrite(0x2001, 0x18);
+    ppu.CpuWrite(0x2001, 0x1E);
     ppu.PpuWrite(0x0000, 0x80);
     ppu.PpuWrite(0x0001, 0x80);
     ppu.PpuWrite(0x0008, 0x00);
@@ -141,7 +141,7 @@ TEST_CASE("PPU applies the eight-sprite scanline limit and 8x16 sprite mode")
 {
     dendyforge::PPU ppu;
     ppu.CpuWrite(0x2000, 0x20);
-    ppu.CpuWrite(0x2001, 0x10);
+    ppu.CpuWrite(0x2001, 0x14);
     ppu.PpuWrite(0x0000, 0x80);
     ppu.PpuWrite(0x0010, 0x80);
     ppu.PpuWrite(0x3F11, 0x21);
@@ -161,4 +161,29 @@ TEST_CASE("PPU applies the eight-sprite scanline limit and 8x16 sprite mode")
     CHECK((ppu.CpuRead(0x2002) & 0x20) != 0);
     CHECK(ppu.FrameBuffer()[256] != ppu.FrameBuffer()[256 + 64]);
     CHECK(ppu.FrameBuffer()[256 + 64] == ppu.FrameBuffer()[256 + 72]);
+}
+
+TEST_CASE("PPU applies PPUMASK clipping, grayscale, and color emphasis")
+{
+    dendyforge::PPU ppu;
+    ppu.PpuWrite(0x0000, 0xC0);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+
+    ppu.CpuWrite(0x2001, 0x08);
+    ppu.RenderBackground();
+    const auto clippedPixel = ppu.FrameBuffer()[0];
+    const auto visiblePixel = ppu.FrameBuffer()[8];
+    CHECK(clippedPixel != visiblePixel);
+
+    ppu.CpuWrite(0x2001, 0x0B);
+    ppu.RenderBackground();
+    const auto grayscalePixel = ppu.FrameBuffer()[8];
+    CHECK(grayscalePixel != visiblePixel);
+
+    ppu.CpuWrite(0x2001, 0x2A);
+    ppu.RenderBackground();
+    CHECK(ppu.FrameBuffer()[8] != grayscalePixel);
 }

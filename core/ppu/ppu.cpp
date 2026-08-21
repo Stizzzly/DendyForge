@@ -112,8 +112,11 @@ void PPU::RenderBackground()
                 : 0x3F00 + palette * 4 + color;
 
             const std::size_t pixel = y * 256 + x;
-            m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
-            m_backgroundOpaque[pixel] = color != 0;
+            const bool visible = x >= 8 || (m_mask & 0x02) != 0;
+            m_frameBuffer[pixel] = visible
+                ? ColorFromPaletteIndex(PpuRead(paletteAddress))
+                : backdrop;
+            m_backgroundOpaque[pixel] = visible && color != 0;
         }
     }
 }
@@ -187,7 +190,7 @@ void PPU::RenderSprites()
             for (std::uint16_t column = 0; column < 8; ++column)
             {
                 const std::uint16_t screenX = spriteX + column;
-                if (screenX >= 256)
+                if (screenX >= 256 || (screenX < 8 && (m_mask & 0x04) == 0))
                 {
                     continue;
                 }
@@ -397,9 +400,34 @@ void PPU::IncrementVramAddress()
     m_vramAddress &= 0x3FFF;
 }
 
-std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index)
+std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index) const
 {
-    return 0xFF000000 | SystemPalette[index & 0x3F];
+    index &= (m_mask & 0x01) ? 0x30 : 0x3F;
+    std::uint32_t color = SystemPalette[index];
+    std::uint8_t red = color >> 16;
+    std::uint8_t green = color >> 8;
+    std::uint8_t blue = color;
+
+    if ((m_mask & 0x20) != 0)
+    {
+        green = static_cast<std::uint8_t>(green * 3 / 4);
+        blue = static_cast<std::uint8_t>(blue * 3 / 4);
+    }
+    if ((m_mask & 0x40) != 0)
+    {
+        red = static_cast<std::uint8_t>(red * 3 / 4);
+        blue = static_cast<std::uint8_t>(blue * 3 / 4);
+    }
+    if ((m_mask & 0x80) != 0)
+    {
+        red = static_cast<std::uint8_t>(red * 3 / 4);
+        green = static_cast<std::uint8_t>(green * 3 / 4);
+    }
+
+    return 0xFF000000 |
+           (static_cast<std::uint32_t>(red) << 16) |
+           (static_cast<std::uint32_t>(green) << 8) |
+           blue;
 }
 
 } // namespace dendyforge
