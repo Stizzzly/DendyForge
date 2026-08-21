@@ -39,15 +39,33 @@ public:
     void PpuWrite(std::uint16_t address, std::uint8_t data);
 
 private:
+    struct BackgroundFetchState
+    {
+        std::uint8_t nametableByte{0};
+        std::uint8_t attribute{0};
+        std::uint8_t lowPlane{0};
+        std::uint8_t highPlane{0};
+        std::uint16_t patternShiftLow{0};
+        std::uint16_t patternShiftHigh{0};
+        std::uint16_t attributeShiftLow{0};
+        std::uint16_t attributeShiftHigh{0};
+    };
+
     std::uint16_t NormalizeAddress(std::uint16_t address) const;
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
     void BeginFrame();
-    void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX,
-                               std::uint16_t vramAddress);
-    void RenderBackgroundScanline(std::uint16_t screenY,
-                                  std::uint16_t& vramAddress);
+    void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX);
+    void RenderBackgroundScanline(std::uint16_t screenY);
     void RenderSpritesScanline(std::uint16_t screenY);
+    void ClockBackgroundFetch();
+    void PrimeBackgroundFetch();
+    void FetchNametableByte();
+    void FetchAttribute();
+    void FetchPatternLow();
+    void FetchPatternHigh();
+    void LoadBackgroundShifters();
+    void ShiftBackgroundShifters();
     void IncrementVramAddress();
     void IncrementCoarseX(std::uint16_t& address) const;
     void IncrementY(std::uint16_t& address) const;
@@ -67,6 +85,7 @@ private:
     std::array<std::uint8_t, 8192> m_chrRam{};
     std::array<std::uint32_t, 256 * 240> m_frameBuffer{};
     std::array<bool, 256 * 240> m_backgroundOpaque{};
+    BackgroundFetchState m_backgroundFetch{};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};

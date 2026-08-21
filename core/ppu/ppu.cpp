@@ -36,37 +36,41 @@ void PPU::Clock()
         m_nmiPending = false;
         BeginFrame();
     }
-    else if (m_scanline == -1 && m_cycle == 257 && RenderingEnabled())
+
+    const bool renderingScanline = m_scanline >= -1 && m_scanline < 240;
+    const bool backgroundFetchCycle =
+        (m_cycle >= 1 && m_cycle <= 256) ||
+        (m_cycle >= 321 && m_cycle <= 336);
+
+    if (m_scanline >= 0 && m_scanline < 240 &&
+        m_cycle >= 1 && m_cycle <= 256)
     {
-        CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+        RenderBackgroundPixel(m_scanline, m_cycle - 1);
     }
-    else if (m_scanline == -1 && m_cycle >= 280 && m_cycle <= 304 &&
-             RenderingEnabled())
+
+    if (renderingScanline && RenderingEnabled())
     {
-        CopyVerticalBits(m_vramAddress, m_temporaryAddress);
-    }
-    else if (m_scanline >= 0 && m_scanline < 240 &&
-             m_cycle >= 1 && m_cycle <= 256)
-    {
-        const std::uint16_t screenX = m_cycle - 1;
-        RenderBackgroundPixel(m_scanline, screenX, m_vramAddress);
-        if (((screenX + m_fineX) & 0x07) == 0x07 && RenderingEnabled())
+        if (backgroundFetchCycle)
         {
-            IncrementCoarseX(m_vramAddress);
+            ClockBackgroundFetch();
         }
         if (m_cycle == 256)
         {
-            if (RenderingEnabled())
-            {
-                IncrementY(m_vramAddress);
-            }
-            RenderSpritesScanline(m_scanline);
+            IncrementY(m_vramAddress);
+        }
+        if (m_cycle == 257)
+        {
+            CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+        }
+        if (m_scanline == -1 && m_cycle >= 280 && m_cycle <= 304)
+        {
+            CopyVerticalBits(m_vramAddress, m_temporaryAddress);
         }
     }
-    else if (m_scanline >= 0 && m_scanline < 240 && m_cycle == 257 &&
-             RenderingEnabled())
+
+    if (m_scanline >= 0 && m_scanline < 240 && m_cycle == 256)
     {
-        CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+        RenderSpritesScanline(m_scanline);
     }
     else if (m_scanline == 241 && m_cycle == 1)
     {
@@ -103,14 +107,27 @@ void PPU::RenderBackground()
 {
     BeginFrame();
 
-    std::uint16_t vramAddress = m_temporaryAddress;
+    const std::uint16_t savedVramAddress = m_vramAddress;
+    const BackgroundFetchState savedBackgroundFetch = m_backgroundFetch;
+    const std::int16_t savedCycle = m_cycle;
+    m_vramAddress = m_temporaryAddress;
+    PrimeBackgroundFetch();
 
     for (std::uint16_t screenY = 0; screenY < 240; ++screenY)
     {
-        RenderBackgroundScanline(screenY, vramAddress);
-        IncrementY(vramAddress);
-        CopyHorizontalBits(vramAddress, m_temporaryAddress);
+        RenderBackgroundScanline(screenY);
+        IncrementY(m_vramAddress);
+        CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+        for (int cycle = 321; cycle <= 336; ++cycle)
+        {
+            m_cycle = cycle;
+            ClockBackgroundFetch();
+        }
     }
+
+    m_cycle = savedCycle;
+    m_vramAddress = savedVramAddress;
+    m_backgroundFetch = savedBackgroundFetch;
 }
 
 void PPU::BeginFrame()
@@ -119,21 +136,120 @@ void PPU::BeginFrame()
     m_backgroundOpaque.fill(false);
 }
 
-void PPU::RenderBackgroundScanline(std::uint16_t screenY,
-                                   std::uint16_t& vramAddress)
+void PPU::RenderBackgroundScanline(std::uint16_t screenY)
 {
     for (std::uint16_t screenX = 0; screenX < 256; ++screenX)
     {
-        RenderBackgroundPixel(screenY, screenX, vramAddress);
-        if (((screenX + m_fineX) & 0x07) == 0x07)
+        RenderBackgroundPixel(screenY, screenX);
+        m_cycle = screenX + 1;
+        ClockBackgroundFetch();
+    }
+}
+
+void PPU::ClockBackgroundFetch()
+{
+    ShiftBackgroundShifters();
+
+    switch (m_cycle & 0x0007)
+    {
+    case 1:
+        FetchNametableByte();
+        break;
+    case 3:
+        FetchAttribute();
+        break;
+    case 5:
+        FetchPatternLow();
+        break;
+    case 7:
+        FetchPatternHigh();
+        break;
+    case 0:
+        LoadBackgroundShifters();
+        IncrementCoarseX(m_vramAddress);
+        break;
+    default:
+        break;
+    }
+}
+
+void PPU::PrimeBackgroundFetch()
+{
+    m_backgroundFetch = {};
+    for (int tile = 0; tile < 2; ++tile)
+    {
+        FetchNametableByte();
+        FetchAttribute();
+        FetchPatternLow();
+        FetchPatternHigh();
+        LoadBackgroundShifters();
+        IncrementCoarseX(m_vramAddress);
+        if (tile == 0)
         {
-            IncrementCoarseX(vramAddress);
+            for (int shift = 0; shift < 8; ++shift)
+            {
+                ShiftBackgroundShifters();
+            }
         }
     }
 }
 
-void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX,
-                                std::uint16_t vramAddress)
+void PPU::FetchNametableByte()
+{
+    m_backgroundFetch.nametableByte = PpuRead(
+        0x2000 | (m_vramAddress & 0x0FFF));
+}
+
+void PPU::FetchAttribute()
+{
+    const std::uint16_t address = 0x23C0 |
+        (m_vramAddress & 0x0C00) |
+        ((m_vramAddress >> 4) & 0x0038) |
+        ((m_vramAddress >> 2) & 0x0007);
+    const std::uint8_t shift =
+        ((m_vramAddress >> 4) & 0x04) | (m_vramAddress & 0x02);
+    m_backgroundFetch.attribute = (PpuRead(address) >> shift) & 0x03;
+}
+
+void PPU::FetchPatternLow()
+{
+    const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
+    const std::uint16_t row = (m_vramAddress >> 12) & 0x0007;
+    m_backgroundFetch.lowPlane = PpuRead(
+        patternBase + m_backgroundFetch.nametableByte * 16 + row);
+}
+
+void PPU::FetchPatternHigh()
+{
+    const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
+    const std::uint16_t row = (m_vramAddress >> 12) & 0x0007;
+    m_backgroundFetch.highPlane = PpuRead(
+        patternBase + m_backgroundFetch.nametableByte * 16 + row + 8);
+}
+
+void PPU::LoadBackgroundShifters()
+{
+    m_backgroundFetch.patternShiftLow =
+        (m_backgroundFetch.patternShiftLow & 0xFF00) | m_backgroundFetch.lowPlane;
+    m_backgroundFetch.patternShiftHigh =
+        (m_backgroundFetch.patternShiftHigh & 0xFF00) | m_backgroundFetch.highPlane;
+    m_backgroundFetch.attributeShiftLow =
+        (m_backgroundFetch.attributeShiftLow & 0xFF00) |
+        ((m_backgroundFetch.attribute & 0x01) != 0 ? 0x00FF : 0x0000);
+    m_backgroundFetch.attributeShiftHigh =
+        (m_backgroundFetch.attributeShiftHigh & 0xFF00) |
+        ((m_backgroundFetch.attribute & 0x02) != 0 ? 0x00FF : 0x0000);
+}
+
+void PPU::ShiftBackgroundShifters()
+{
+    m_backgroundFetch.patternShiftLow <<= 1;
+    m_backgroundFetch.patternShiftHigh <<= 1;
+    m_backgroundFetch.attributeShiftLow <<= 1;
+    m_backgroundFetch.attributeShiftHigh <<= 1;
+}
+
+void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
 {
     const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
 
@@ -142,25 +258,13 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX,
         return;
     }
 
-    const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
-    const std::uint16_t nametableBase = 0x2000 | (vramAddress & 0x0C00);
-    const std::uint16_t tileRow = (vramAddress >> 5) & 0x1F;
-    const std::uint16_t tileColumn = vramAddress & 0x1F;
-    const std::uint16_t rowInTile = (vramAddress >> 12) & 0x07;
-    const std::uint8_t tileIndex = PpuRead(
-        nametableBase + tileRow * 32 + tileColumn);
-    const std::uint8_t attribute = PpuRead(
-        nametableBase + 0x03C0 + (tileRow / 4) * 8 + (tileColumn / 4));
-    const std::uint8_t attributeShift =
-        ((tileRow & 0x02) ? 4 : 0) | ((tileColumn & 0x02) ? 2 : 0);
-    const std::uint8_t palette = (attribute >> attributeShift) & 0x03;
-
-    const std::uint16_t tileAddress = patternBase + tileIndex * 16 + rowInTile;
-    const std::uint8_t lowPlane = PpuRead(tileAddress);
-    const std::uint8_t highPlane = PpuRead(tileAddress + 8);
-    const std::uint8_t bit = 7 - ((screenX + m_fineX) & 0x07);
+    const std::uint16_t fineXMask = 0x8000 >> m_fineX;
     const std::uint8_t color =
-        ((highPlane >> bit) & 0x01) << 1 | ((lowPlane >> bit) & 0x01);
+        ((m_backgroundFetch.patternShiftHigh & fineXMask) != 0 ? 0x02 : 0x00) |
+        ((m_backgroundFetch.patternShiftLow & fineXMask) != 0 ? 0x01 : 0x00);
+    const std::uint8_t palette =
+        ((m_backgroundFetch.attributeShiftHigh & fineXMask) != 0 ? 0x02 : 0x00) |
+        ((m_backgroundFetch.attributeShiftLow & fineXMask) != 0 ? 0x01 : 0x00);
     const std::uint16_t paletteAddress = color == 0
         ? 0x3F00
         : 0x3F00 + palette * 4 + color;

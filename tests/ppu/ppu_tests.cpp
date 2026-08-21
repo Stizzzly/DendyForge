@@ -196,13 +196,13 @@ TEST_CASE("PPU rendering copies t into v and advances coarse X at fine-X boundar
     {
         ppu.Clock();
     }
-    CHECK(ppu.AddressState().vramAddress == 0x6EA3);
+    CHECK(ppu.AddressState().vramAddress == 0x6EA5);
 
     for (int cycle = 0; cycle < 4; ++cycle)
     {
         ppu.Clock();
     }
-    CHECK(ppu.AddressState().vramAddress == 0x6EA4);
+    CHECK(ppu.AddressState().vramAddress == 0x6EA5);
 }
 
 TEST_CASE("PPU coarse X progression switches the horizontal nametable")
@@ -212,12 +212,17 @@ TEST_CASE("PPU coarse X progression switches the horizontal nametable")
     ppu.CpuWrite(0x2005, 0xF8);
     ppu.CpuWrite(0x2005, 0x00);
 
-    for (int cycle = 0; cycle < 341 + 9; ++cycle)
+    for (int cycle = 0; cycle < 341; ++cycle)
     {
         ppu.Clock();
     }
+    CHECK(ppu.AddressState().vramAddress == 0x0401);
 
-    CHECK(ppu.AddressState().vramAddress == 0x0400);
+    for (int cycle = 0; cycle < 9; ++cycle)
+    {
+        ppu.Clock();
+    }
+    CHECK(ppu.AddressState().vramAddress == 0x0402);
 }
 
 TEST_CASE("PPU rendering advances Y at cycle 256 and restores horizontal t bits")
@@ -229,7 +234,7 @@ TEST_CASE("PPU rendering advances Y at cycle 256 and restores horizontal t bits"
     {
         ppu.Clock();
     }
-    CHECK(ppu.AddressState().vramAddress == 0x1400);
+    CHECK(ppu.AddressState().vramAddress == 0x1402);
 
     ppu.Clock();
     CHECK(ppu.AddressState().vramAddress == 0x1000);
@@ -348,4 +353,87 @@ TEST_CASE("PPU emits background pixels one PPU clock at a time")
     }
 
     CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
+}
+
+TEST_CASE("PPU background shifters preserve tile boundaries during clocked rendering")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x0A);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0010, 0x80);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x0018, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x2001, 0x01);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+
+    for (int cycle = 0; cycle < 341 + 10; ++cycle)
+    {
+        ppu.Clock();
+    }
+
+    CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
+    CHECK(ppu.FrameBuffer()[8] == ppu.FrameBuffer()[0]);
+}
+
+TEST_CASE("PPU background shifters select the fine-X pattern bit")
+{
+    dendyforge::PPU unscrolled;
+    unscrolled.CpuWrite(0x2001, 0x0A);
+    unscrolled.PpuWrite(0x0000, 0x80);
+    unscrolled.PpuWrite(0x0008, 0x00);
+    unscrolled.PpuWrite(0x2000, 0x00);
+    unscrolled.PpuWrite(0x3F00, 0x0F);
+    unscrolled.PpuWrite(0x3F01, 0x21);
+
+    dendyforge::PPU fineScrolled;
+    fineScrolled.CpuWrite(0x2001, 0x0A);
+    fineScrolled.PpuWrite(0x0000, 0x80);
+    fineScrolled.PpuWrite(0x0008, 0x00);
+    fineScrolled.PpuWrite(0x2000, 0x00);
+    fineScrolled.PpuWrite(0x3F00, 0x0F);
+    fineScrolled.PpuWrite(0x3F01, 0x21);
+    fineScrolled.CpuWrite(0x2005, 0x01);
+    fineScrolled.CpuWrite(0x2005, 0x00);
+
+    for (int cycle = 0; cycle < 341 + 2; ++cycle)
+    {
+        unscrolled.Clock();
+        fineScrolled.Clock();
+    }
+
+    CHECK(unscrolled.FrameBuffer()[0] != unscrolled.FrameBuffer()[1]);
+    CHECK(fineScrolled.FrameBuffer()[0] == fineScrolled.FrameBuffer()[1]);
+}
+
+TEST_CASE("PPU background attribute shifters select the fetched palette")
+{
+    dendyforge::PPU firstPalette;
+    firstPalette.CpuWrite(0x2001, 0x0A);
+    firstPalette.PpuWrite(0x0000, 0x80);
+    firstPalette.PpuWrite(0x0008, 0x00);
+    firstPalette.PpuWrite(0x2000, 0x00);
+    firstPalette.PpuWrite(0x23C0, 0x00);
+    firstPalette.PpuWrite(0x3F00, 0x0F);
+    firstPalette.PpuWrite(0x3F01, 0x21);
+    firstPalette.PpuWrite(0x3F09, 0x31);
+
+    dendyforge::PPU thirdPalette;
+    thirdPalette.CpuWrite(0x2001, 0x0A);
+    thirdPalette.PpuWrite(0x0000, 0x80);
+    thirdPalette.PpuWrite(0x0008, 0x00);
+    thirdPalette.PpuWrite(0x2000, 0x00);
+    thirdPalette.PpuWrite(0x23C0, 0x02);
+    thirdPalette.PpuWrite(0x3F00, 0x0F);
+    thirdPalette.PpuWrite(0x3F01, 0x21);
+    thirdPalette.PpuWrite(0x3F09, 0x31);
+
+    for (int cycle = 0; cycle < 341 + 2; ++cycle)
+    {
+        firstPalette.Clock();
+        thirdPalette.Clock();
+    }
+
+    CHECK(firstPalette.FrameBuffer()[0] != thirdPalette.FrameBuffer()[0]);
 }
