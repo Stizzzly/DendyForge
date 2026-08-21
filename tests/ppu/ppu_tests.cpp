@@ -187,3 +187,22 @@ TEST_CASE("PPU applies PPUMASK clipping, grayscale, and color emphasis")
     ppu.RenderBackground();
     CHECK(ppu.FrameBuffer()[8] != grayscalePixel);
 }
+
+TEST_CASE("PPU renders visible scanlines before VBlank")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x0A);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0008, 0x00);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+
+    for (int cycle = 0; cycle < 341 + 257; ++cycle)
+    {
+        ppu.Clock();
+    }
+
+    CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
+    CHECK_FALSE(ppu.PollNmi());
+}

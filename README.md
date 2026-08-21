@@ -115,6 +115,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ PPU register interface ($2000-$2007)
 * ✅ CPU-to-PPU clock synchronization
 * ✅ PPUMASK rendering controls
+* 🟡 Scanline rendering timing
 * 🟡 VRAM
 * ✅ Pattern Tables
 * ✅ Name Tables

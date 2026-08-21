@@ -32,6 +32,9 @@ private:
     std::uint16_t NormalizeAddress(std::uint16_t address) const;
     std::uint16_t NametableAddress(std::uint16_t address) const;
     std::uint8_t PaletteAddress(std::uint16_t address) const;
+    void BeginFrame();
+    void RenderBackgroundScanline(std::uint16_t screenY);
+    void RenderSpritesScanline(std::uint16_t screenY);
     void IncrementVramAddress();
     std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
 
