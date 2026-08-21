@@ -8,6 +8,9 @@ namespace dendyforge
 Bus::Bus()
 {
     m_cpuRam.fill(0);
+    m_apu.SetDmcMemoryReader([this](std::uint16_t address) {
+        return CpuRead(address);
+    });
 }
 
 void Bus::InsertCartridge(Cartridge* cartridge)
@@ -153,13 +156,13 @@ void Bus::BeginPendingDma(bool cpuCycleIsOdd)
 
 bool Bus::ConsumeDmaStallCycle()
 {
-    if (m_dmaStallCycles == 0)
+    if (m_dmaStallCycles != 0)
     {
-        return false;
+        --m_dmaStallCycles;
+        return true;
     }
 
-    --m_dmaStallCycles;
-    return true;
+    return m_apu.ConsumeDmcDmaStallCycle();
 }
 
 } // namespace dendyforge

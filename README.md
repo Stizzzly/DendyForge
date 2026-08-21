@@ -140,7 +140,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * 🟡 Pulse Channels (envelope/sweep)
 * 🟡 Triangle Channel
 * 🟡 Noise Channel
-* ⬜ DMC Channel
+* 🟡 DMC Channel
 * ⬜ Audio Mixer
 
 ---

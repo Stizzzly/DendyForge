@@ -47,6 +47,11 @@ void Console::Clock()
 
     m_bus.AudioProcessor().Clock();
 
+    if (m_bus.AudioProcessor().DmcIrqPending())
+    {
+        m_cpu.IRQ();
+    }
+
     for (int index = 0; index < 3; ++index)
     {
         m_bus.ClockPpu();

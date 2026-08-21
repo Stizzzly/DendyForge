@@ -91,3 +91,24 @@ TEST_CASE("APU noise channel produces samples through its shift register")
     CHECK(std::any_of(samples.begin(), samples.end(),
                       [](float sample) { return sample > 0.0F; }));
 }
+
+TEST_CASE("APU DMC fetches sample bytes and contributes to the output")
+{
+    dendyforge::APU apu;
+    apu.SetDmcMemoryReader([](std::uint16_t address) {
+        return address == 0xC000 ? 0xFF : 0x00;
+    });
+    apu.CpuWrite(0x4010, 0x0F);
+    apu.CpuWrite(0x4012, 0x00);
+    apu.CpuWrite(0x4013, 0x10);
+    apu.CpuWrite(0x4015, 0x10);
+
+    for (int cycle = 0; cycle < 10'000; ++cycle)
+    {
+        apu.Clock();
+    }
+
+    const auto samples = apu.TakeSamples();
+    CHECK(std::any_of(samples.begin(), samples.end(),
+                      [](float sample) { return sample > 0.0F; }));
+}

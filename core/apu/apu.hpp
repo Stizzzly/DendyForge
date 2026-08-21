@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace dendyforge
@@ -11,10 +12,14 @@ class APU
 {
 public:
     static constexpr int SampleRate = 44'100;
+    using DmcMemoryReader = std::function<std::uint8_t(std::uint16_t)>;
 
     void Clock();
     std::uint8_t CpuRead(std::uint16_t address) const;
     void CpuWrite(std::uint16_t address, std::uint8_t data);
+    void SetDmcMemoryReader(DmcMemoryReader reader);
+    bool ConsumeDmcDmaStallCycle();
+    bool DmcIrqPending() const;
     std::vector<float> TakeSamples();
 
 private:
@@ -91,6 +96,40 @@ private:
         bool m_enabled{false};
     };
 
+    struct DmcChannel
+    {
+        void WriteControl(std::uint8_t data);
+        void WriteDirectLoad(std::uint8_t data);
+        void WriteSampleAddress(std::uint8_t data);
+        void WriteSampleLength(std::uint8_t data);
+        void SetEnabled(bool enabled);
+        void ClockTimer(const DmcMemoryReader& memoryReader);
+        std::uint8_t Output() const;
+        bool ConsumeDmaStallCycle();
+        bool IrqPending() const;
+        bool Active() const;
+
+        std::uint8_t m_rateIndex{0};
+        std::uint16_t m_timerCounter{0};
+        std::uint8_t m_outputLevel{0};
+        std::uint16_t m_sampleAddress{0xC000};
+        std::uint16_t m_sampleLength{1};
+        std::uint16_t m_currentAddress{0xC000};
+        std::uint16_t m_bytesRemaining{0};
+        std::uint8_t m_sampleBuffer{0};
+        std::uint8_t m_shiftRegister{0};
+        std::uint8_t m_bitsRemaining{8};
+        std::uint8_t m_dmaStallCycles{0};
+        bool m_sampleBufferEmpty{true};
+        bool m_silence{true};
+        bool m_irqEnabled{false};
+        bool m_loop{false};
+        bool m_irqFlag{false};
+
+        void RestartSample();
+        void RefillSampleBuffer(const DmcMemoryReader& memoryReader);
+    };
+
     void ClockFrameCounter();
     void QueueSample();
 
@@ -98,6 +137,8 @@ private:
     PulseChannel m_pulse2;
     TriangleChannel m_triangle;
     NoiseChannel m_noise;
+    DmcChannel m_dmc;
+    DmcMemoryReader m_dmcMemoryReader;
     std::uint32_t m_frameCounter{0};
     bool m_clockLengthCounters{false};
     std::uint32_t m_samplePhase{0};

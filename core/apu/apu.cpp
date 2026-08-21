@@ -29,6 +29,10 @@ constexpr std::array<std::uint16_t, 16> NoisePeriodTable{
     4, 8, 16, 32, 64, 96, 128, 160,
     202, 254, 380, 508, 762, 1016, 2034, 4068,
 };
+constexpr std::array<std::uint16_t, 16> DmcRateTable{
+    428, 380, 340, 320, 286, 254, 226, 214,
+    190, 160, 142, 128, 106, 85, 72, 54,
+};
 
 }
 
@@ -38,6 +42,7 @@ void APU::Clock()
     m_pulse2.ClockTimer();
     m_triangle.ClockTimer();
     m_noise.ClockTimer();
+    m_dmc.ClockTimer(m_dmcMemoryReader);
     ClockFrameCounter();
 
     m_samplePhase += SampleRate;
@@ -58,7 +63,9 @@ std::uint8_t APU::CpuRead(std::uint16_t address) const
     return (m_pulse1.m_lengthCounter != 0 ? 0x01 : 0x00) |
            (m_pulse2.m_lengthCounter != 0 ? 0x02 : 0x00) |
            (m_triangle.m_lengthCounter != 0 ? 0x04 : 0x00) |
-           (m_noise.m_lengthCounter != 0 ? 0x08 : 0x00);
+           (m_noise.m_lengthCounter != 0 ? 0x08 : 0x00) |
+           (m_dmc.Active() ? 0x10 : 0x00) |
+           (m_dmc.IrqPending() ? 0x80 : 0x00);
 }
 
 void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
@@ -79,11 +86,16 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
     case 0x400C: m_noise.WriteControl(data); break;
     case 0x400E: m_noise.WritePeriod(data); break;
     case 0x400F: m_noise.WriteLength(data); break;
+    case 0x4010: m_dmc.WriteControl(data); break;
+    case 0x4011: m_dmc.WriteDirectLoad(data); break;
+    case 0x4012: m_dmc.WriteSampleAddress(data); break;
+    case 0x4013: m_dmc.WriteSampleLength(data); break;
     case 0x4015:
         m_pulse1.SetEnabled((data & 0x01) != 0);
         m_pulse2.SetEnabled((data & 0x02) != 0);
         m_triangle.SetEnabled((data & 0x04) != 0);
         m_noise.SetEnabled((data & 0x08) != 0);
+        m_dmc.SetEnabled((data & 0x10) != 0);
         break;
     default:
         break;
@@ -93,6 +105,21 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
 std::vector<float> APU::TakeSamples()
 {
     return std::exchange(m_samples, {});
+}
+
+void APU::SetDmcMemoryReader(DmcMemoryReader reader)
+{
+    m_dmcMemoryReader = std::move(reader);
+}
+
+bool APU::ConsumeDmcDmaStallCycle()
+{
+    return m_dmc.ConsumeDmaStallCycle();
+}
+
+bool APU::DmcIrqPending() const
+{
+    return m_dmc.IrqPending();
 }
 
 void APU::PulseChannel::WriteControl(std::uint8_t data)
@@ -404,6 +431,148 @@ std::uint8_t APU::NoiseChannel::Output() const
     return (m_control & 0x10) != 0 ? (m_control & 0x0F) : m_envelopeDecayLevel;
 }
 
+void APU::DmcChannel::WriteControl(std::uint8_t data)
+{
+    m_irqEnabled = (data & 0x80) != 0;
+    if (!m_irqEnabled)
+    {
+        m_irqFlag = false;
+    }
+    m_loop = (data & 0x40) != 0;
+    m_rateIndex = data & 0x0F;
+}
+
+void APU::DmcChannel::WriteDirectLoad(std::uint8_t data)
+{
+    m_outputLevel = data & 0x7F;
+}
+
+void APU::DmcChannel::WriteSampleAddress(std::uint8_t data)
+{
+    m_sampleAddress = 0xC000 | (static_cast<std::uint16_t>(data) << 6);
+}
+
+void APU::DmcChannel::WriteSampleLength(std::uint8_t data)
+{
+    m_sampleLength = (static_cast<std::uint16_t>(data) << 4) | 0x0001;
+}
+
+void APU::DmcChannel::RestartSample()
+{
+    m_currentAddress = m_sampleAddress;
+    m_bytesRemaining = m_sampleLength;
+}
+
+void APU::DmcChannel::SetEnabled(bool enabled)
+{
+    m_irqFlag = false;
+    if (!enabled)
+    {
+        m_bytesRemaining = 0;
+        return;
+    }
+
+    if (m_bytesRemaining == 0)
+    {
+        RestartSample();
+    }
+}
+
+void APU::DmcChannel::RefillSampleBuffer(const DmcMemoryReader& memoryReader)
+{
+    if (!m_sampleBufferEmpty || m_bytesRemaining == 0 || !memoryReader)
+    {
+        return;
+    }
+
+    m_sampleBuffer = memoryReader(m_currentAddress);
+    m_sampleBufferEmpty = false;
+    m_dmaStallCycles = 4;
+    m_currentAddress = m_currentAddress == 0xFFFF ? 0x8000 : m_currentAddress + 1;
+    --m_bytesRemaining;
+    if (m_bytesRemaining == 0)
+    {
+        if (m_loop)
+        {
+            RestartSample();
+        }
+        else if (m_irqEnabled)
+        {
+            m_irqFlag = true;
+        }
+    }
+}
+
+void APU::DmcChannel::ClockTimer(const DmcMemoryReader& memoryReader)
+{
+    if (m_timerCounter == 0)
+    {
+        m_timerCounter = DmcRateTable[m_rateIndex];
+        if (!m_silence)
+        {
+            if ((m_shiftRegister & 0x01) != 0)
+            {
+                if (m_outputLevel <= 125)
+                {
+                    m_outputLevel += 2;
+                }
+            }
+            else if (m_outputLevel >= 2)
+            {
+                m_outputLevel -= 2;
+            }
+        }
+
+        m_shiftRegister >>= 1;
+        if (--m_bitsRemaining == 0)
+        {
+            m_bitsRemaining = 8;
+            if (m_sampleBufferEmpty)
+            {
+                m_silence = true;
+            }
+            else
+            {
+                m_silence = false;
+                m_shiftRegister = m_sampleBuffer;
+                m_sampleBufferEmpty = true;
+            }
+        }
+    }
+    else
+    {
+        --m_timerCounter;
+    }
+
+    RefillSampleBuffer(memoryReader);
+}
+
+std::uint8_t APU::DmcChannel::Output() const
+{
+    return m_outputLevel;
+}
+
+bool APU::DmcChannel::ConsumeDmaStallCycle()
+{
+    if (m_dmaStallCycles == 0)
+    {
+        return false;
+    }
+
+    --m_dmaStallCycles;
+    return true;
+}
+
+bool APU::DmcChannel::IrqPending() const
+{
+    return m_irqFlag;
+}
+
+bool APU::DmcChannel::Active() const
+{
+    return m_bytesRemaining != 0;
+}
+
 void APU::ClockFrameCounter()
 {
     ++m_frameCounter;
@@ -441,7 +610,9 @@ void APU::QueueSample()
                                            m_pulse2.Output(false));
     const float triangle = static_cast<float>(m_triangle.Output());
     const float noise = static_cast<float>(m_noise.Output());
-    m_samples.push_back(pulse / 60.0F + triangle / 120.0F + noise / 120.0F);
+    const float dmc = static_cast<float>(m_dmc.Output());
+    m_samples.push_back(pulse / 60.0F + triangle / 120.0F + noise / 120.0F +
+                        dmc / 1024.0F);
 }
 
 } // namespace dendyforge
