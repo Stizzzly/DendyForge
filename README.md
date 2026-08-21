@@ -13,6 +13,21 @@ A modern Dendy/NES emulator written in C++20.
 - Mapper support
 - Open source
 
+## Building on Windows with MinGW
+
+Install SDL3 in the same MinGW environment as the compiler:
+
+```powershell
+C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3
+```
+
+Then build and run the PPU frame-buffer window:
+
+```powershell
+cmake --build --preset mingw-clang-debug
+.\out\build\mingw-clang-debug\DendyForgeApp.exe
+```
+
 ## Roadmap
 
 # DendyForge Roadmap
