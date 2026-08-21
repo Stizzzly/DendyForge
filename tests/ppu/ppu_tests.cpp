@@ -136,3 +136,29 @@ TEST_CASE("PPU renders an OAM sprite and records a Sprite Zero Hit")
     CHECK(ppu.FrameBuffer()[256] != backgroundPixel);
     CHECK((ppu.CpuRead(0x2002) & 0x40) != 0);
 }
+
+TEST_CASE("PPU applies the eight-sprite scanline limit and 8x16 sprite mode")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2000, 0x20);
+    ppu.CpuWrite(0x2001, 0x10);
+    ppu.PpuWrite(0x0000, 0x80);
+    ppu.PpuWrite(0x0010, 0x80);
+    ppu.PpuWrite(0x3F11, 0x21);
+
+    ppu.CpuWrite(0x2003, 0x00);
+    for (int sprite = 0; sprite < 9; ++sprite)
+    {
+        ppu.CpuWrite(0x2004, 0x00);
+        ppu.CpuWrite(0x2004, 0x00);
+        ppu.CpuWrite(0x2004, 0x00);
+        ppu.CpuWrite(0x2004, sprite * 8);
+    }
+
+    ppu.RenderBackground();
+    ppu.RenderSprites();
+
+    CHECK((ppu.CpuRead(0x2002) & 0x20) != 0);
+    CHECK(ppu.FrameBuffer()[256] != ppu.FrameBuffer()[256 + 64]);
+    CHECK(ppu.FrameBuffer()[256 + 64] == ppu.FrameBuffer()[256 + 72]);
+}

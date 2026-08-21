@@ -125,26 +125,62 @@ void PPU::RenderSprites()
         return;
     }
 
+    const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
     const std::uint16_t patternBase = (m_control & 0x08) ? 0x1000 : 0x0000;
 
-    for (std::size_t sprite = 0; sprite < 64; ++sprite)
+    for (std::uint16_t screenY = 0; screenY < 240; ++screenY)
     {
-        const std::size_t offset = sprite * 4;
-        const std::uint8_t spriteY = m_oam[offset];
-        const std::uint8_t tileIndex = m_oam[offset + 1];
-        const std::uint8_t attributes = m_oam[offset + 2];
-        const std::uint8_t spriteX = m_oam[offset + 3];
+        std::array<std::uint8_t, 8> visibleSprites{};
+        std::size_t visibleCount = 0;
 
-        for (std::uint16_t row = 0; row < 8; ++row)
+        for (std::uint8_t sprite = 0; sprite < 64; ++sprite)
         {
-            const std::uint16_t screenY = spriteY + row + 1;
-            if (screenY >= 240)
+            const std::uint16_t spriteY = m_oam[sprite * 4];
+            if (screenY <= spriteY || screenY > spriteY + spriteHeight)
             {
                 continue;
             }
 
-            const std::uint8_t patternRow = (attributes & 0x80) ? 7 - row : row;
-            const std::uint16_t tileAddress = patternBase + tileIndex * 16 + patternRow;
+            if (visibleCount == visibleSprites.size())
+            {
+                m_status |= 0x20;
+                break;
+            }
+
+            visibleSprites[visibleCount++] = sprite;
+        }
+
+        for (std::size_t index = visibleCount; index > 0; --index)
+        {
+            const std::uint8_t sprite = visibleSprites[index - 1];
+            const std::size_t offset = sprite * 4;
+            const std::uint16_t spriteY = m_oam[offset];
+            std::uint8_t tileIndex = m_oam[offset + 1];
+            const std::uint8_t attributes = m_oam[offset + 2];
+            const std::uint8_t spriteX = m_oam[offset + 3];
+            std::uint16_t patternRow = screenY - spriteY - 1;
+
+            if ((attributes & 0x80) != 0)
+            {
+                patternRow = spriteHeight - 1 - patternRow;
+            }
+
+            std::uint16_t tileAddress;
+            if (spriteHeight == 16)
+            {
+                const std::uint16_t spritePatternBase = (tileIndex & 0x01) ? 0x1000 : 0x0000;
+                tileIndex &= 0xFE;
+                if (patternRow >= 8)
+                {
+                    ++tileIndex;
+                    patternRow -= 8;
+                }
+                tileAddress = spritePatternBase + tileIndex * 16 + patternRow;
+            }
+            else
+            {
+                tileAddress = patternBase + tileIndex * 16 + patternRow;
+            }
             const std::uint8_t lowPlane = PpuRead(tileAddress);
             const std::uint8_t highPlane = PpuRead(tileAddress + 8);
 
