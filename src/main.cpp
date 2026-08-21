@@ -1,5 +1,8 @@
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cstdint>
+
 #include "console/console.hpp"
 #include "ppu/ppu.hpp"
 
@@ -8,6 +11,9 @@ namespace
 
 constexpr int ScreenWidth = 256;
 constexpr int ScreenHeight = 240;
+constexpr double CpuClockHz = 1'789'773.0;
+constexpr std::uint64_t NanosecondsPerSecond = 1'000'000'000;
+constexpr std::uint64_t MaximumElapsedNanoseconds = 100'000'000;
 
 void PrepareDemoFrame(dendyforge::PPU& ppu)
 {
@@ -89,6 +95,8 @@ int main(int argc, char* argv[])
     }
 
     bool running = true;
+    std::uint64_t previousTicks = SDL_GetTicksNS();
+    double pendingCpuCycles = 0.0;
     while (running)
     {
         SDL_Event event;
@@ -108,9 +116,17 @@ int main(int argc, char* argv[])
 
         if (romLoaded)
         {
-            for (int cycle = 0; cycle < 1'000; ++cycle)
+            const std::uint64_t currentTicks = SDL_GetTicksNS();
+            const std::uint64_t elapsedNanoseconds = std::min(
+                currentTicks - previousTicks, MaximumElapsedNanoseconds);
+            previousTicks = currentTicks;
+            pendingCpuCycles += static_cast<double>(elapsedNanoseconds) *
+                CpuClockHz / NanosecondsPerSecond;
+
+            while (pendingCpuCycles >= 1.0)
             {
                 console.Clock();
+                pendingCpuCycles -= 1.0;
             }
         }
 
@@ -126,6 +142,8 @@ int main(int argc, char* argv[])
             SDL_RenderTexture(renderer, texture, nullptr, nullptr);
             SDL_RenderPresent(renderer);
         }
+
+        SDL_Delay(1);
     }
 
     SDL_DestroyTexture(texture);
