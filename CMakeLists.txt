@@ -4,6 +4,8 @@ project(DendyForge LANGUAGES CXX)
 
 enable_testing()
 
+find_package(SDL3 CONFIG REQUIRED)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -53,6 +55,21 @@ target_compile_definitions(DendyForgeTests PRIVATE
 )
 
 add_test(NAME DendyForgeTests COMMAND DendyForgeTests)
+
+add_executable(DendyForgeApp
+    src/main.cpp
+)
+
+target_link_libraries(DendyForgeApp PRIVATE
+    DendyForgeCore
+    SDL3::SDL3
+)
+
+add_custom_command(TARGET DendyForgeApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:SDL3::SDL3>"
+        "$<TARGET_FILE_DIR:DendyForgeApp>"
+)
 
 if(MINGW)
     get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)

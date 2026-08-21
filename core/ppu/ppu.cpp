@@ -285,7 +285,7 @@ void PPU::IncrementVramAddress()
 
 std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index)
 {
-    return SystemPalette[index & 0x3F];
+    return 0xFF000000 | SystemPalette[index & 0x3F];
 }
 
 } // namespace dendyforge

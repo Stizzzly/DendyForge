@@ -127,8 +127,8 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 
 ### Frontend
 
-* ⬜ SDL3 Window
-* ⬜ Renderer
+* ✅ SDL3 Window
+* ✅ Frame Buffer Renderer
 * ⬜ Audio Output
 * ⬜ Keyboard Input
 * ⬜ Game Loop
