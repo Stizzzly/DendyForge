@@ -119,6 +119,7 @@ int main(int argc, char* argv[])
             }
         }
 
+        bool frameComplete = false;
         if (romLoaded)
         {
             const std::uint64_t currentTicks = SDL_GetTicksNS();
@@ -128,18 +129,18 @@ int main(int argc, char* argv[])
             pendingCpuCycles += static_cast<double>(elapsedNanoseconds) *
                 CpuClockHz / NanosecondsPerSecond;
 
-            while (pendingCpuCycles >= 1.0)
+            while (pendingCpuCycles >= 1.0 && !frameComplete)
             {
                 console.Clock();
                 pendingCpuCycles -= 1.0;
+                frameComplete = console.VideoProcessor().ConsumeFrameComplete();
             }
         }
 
         const auto& frameBuffer = romLoaded
             ? console.VideoProcessor().FrameBuffer()
             : demoPpu.FrameBuffer();
-        const bool frameComplete = !romLoaded || console.VideoProcessor().ConsumeFrameComplete();
-        if (frameComplete)
+        if (!romLoaded || frameComplete)
         {
             SDL_UpdateTexture(texture, nullptr, frameBuffer.data(),
                               ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
