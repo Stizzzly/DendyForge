@@ -152,7 +152,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ SDL3 Window
 * ✅ Frame Buffer Renderer
 * ⬜ Audio Output
-* ⬜ Keyboard Input
+* ✅ Keyboard Input
 * 🟡 Game Loop
 
 ### Debugger
@@ -181,7 +181,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 ### Games
 
-* ⬜ Battle City
+* ✅ Battle City
 * ⬜ Super Mario Bros.
 * ⬜ Contra
 * ⬜ Duck Hunt (without Zapper)
