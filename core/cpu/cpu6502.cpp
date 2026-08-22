@@ -561,48 +561,61 @@ void CPU6502::Reset()
     m_a = 0;
     m_x = 0;
     m_y = 0;
-    m_sp = 0xFD;
+    m_pc = 0;
+    m_sp = 0;
     m_status = static_cast<std::uint8_t>(Flags::U) |
                static_cast<std::uint8_t>(Flags::I);
 
-    // The reset burn cycles must not continue the previously executed
-    // instruction's sequencer, and a latched interrupt must not survive a
-    // reset.
+    // Reset is a seven-cycle sequence drained by subsequent Clock()
+    // calls: two dummy fetches at the zeroed PC, the three suppressed
+    // pushes as reads with SP decrementing, then the FFFC/FFFD vector
+    // fetch. No sequencer state of a previously executing instruction
+    // may survive, and a latched or sampled interrupt must not survive
+    // a reset.
     m_executionKind = ExecutionKind::Legacy;
     m_currentInstruction = nullptr;
     m_stepCycle = 0;
     m_operandReady = false;
     m_branchTaken = false;
     m_pendingInterrupt = PendingInterrupt::None;
-
-    const std::uint16_t lo = Read(0xFFFC);
-    const std::uint16_t hi = Read(0xFFFD);
-
-    m_pc = (hi << 8) | lo;
-    m_cycles = 8;
+    m_recognizedInterrupt = PendingInterrupt::None;
+    m_specialSequence = SpecialSequence::Reset;
+    m_cycles = 7;
 }
 
 void CPU6502::Clock()
 {
-    if (m_cycles == 0)
+    // The interrupt lines are polled at phi2 of an instruction's
+    // penultimate cycle. Sampling as the final cycle begins sees every
+    // line update latched through the penultimate console cycle, matching
+    // that hardware poll; a line rising later defers entry past one more
+    // instruction. The I flag masks IRQ at the poll itself, so a line
+    // latched while I was clear (for example during an earlier entry
+    // sequence, before I is set) cannot re-trigger inside the handler.
+    if (m_cycles == 1 && m_specialSequence == SpecialSequence::None)
     {
-        if (m_pendingInterrupt != PendingInterrupt::None)
+        m_recognizedInterrupt = m_pendingInterrupt;
+        if (m_recognizedInterrupt == PendingInterrupt::Irq &&
+            GetFlag(Flags::I))
         {
-            const std::uint16_t vector = m_pendingInterrupt == PendingInterrupt::Nmi
-                                             ? 0xFFFA
-                                             : 0xFFFE;
-            m_pendingInterrupt = PendingInterrupt::None;
-            EnterInterrupt(vector, false);
-            // The interrupt entry burn cycles must not continue the
-            // interrupted instruction's sequencer.
-            m_executionKind = ExecutionKind::Legacy;
-            m_currentInstruction = nullptr;
-            m_cycles = 7;
-            --m_cycles;
-            return;
+            m_recognizedInterrupt = PendingInterrupt::None;
         }
+    }
 
-        BeginInstruction();
+    if (m_specialSequence != SpecialSequence::None)
+    {
+        StepSpecialSequence();
+    }
+    else if (m_cycles == 0)
+    {
+        if (m_recognizedInterrupt != PendingInterrupt::None)
+        {
+            BeginInterruptEntry();
+        }
+        else
+        {
+            BeginInstruction();
+        }
     }
     else
     {
@@ -1195,8 +1208,17 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
     }
 }
 
-void CPU6502::IRQ()
+void CPU6502::IRQ(bool line)
 {
+    if (!line)
+    {
+        if (m_pendingInterrupt == PendingInterrupt::Irq)
+        {
+            m_pendingInterrupt = PendingInterrupt::None;
+        }
+        return;
+    }
+
     if (GetFlag(Flags::I) || m_pendingInterrupt == PendingInterrupt::Nmi)
     {
         return;
@@ -2091,8 +2113,8 @@ std::uint8_t CPU6502::RTS()
 
 std::uint8_t CPU6502::BRK()
 {
-    ++m_pc;
-    EnterInterrupt(0xFFFE, true);
+    // BRK executes per cycle; see ExecutionKind::Brk. This operate body
+    // is never invoked by the sequencer.
     return 0;
 }
 
@@ -2116,29 +2138,102 @@ void CPU6502::BranchIf(bool condition)
     m_branchTaken = condition;
 }
 
-void CPU6502::EnterInterrupt(std::uint16_t vector, bool breakInstruction)
+// Consumes the interrupt sampled at the penultimate-cycle poll and begins
+// the seven-cycle hardware entry. The first entry cycle shares this
+// Clock() call.
+void CPU6502::BeginInterruptEntry()
 {
-    Push((m_pc >> 8) & 0x00FF);
-    Push(m_pc & 0x00FF);
+    m_interruptVector = m_recognizedInterrupt == PendingInterrupt::Nmi
+                            ? 0xFFFA
+                            : 0xFFFE;
+    m_pendingInterrupt = PendingInterrupt::None;
+    m_recognizedInterrupt = PendingInterrupt::None;
 
-    std::uint8_t status = m_status | static_cast<std::uint8_t>(Flags::U);
-    if (breakInstruction)
+    m_specialSequence = SpecialSequence::InterruptEntry;
+    m_currentInstruction = nullptr;
+    m_stepCycle = 0;
+    m_cycles = 7;
+
+    StepSpecialSequence();
+}
+
+// Performs one cycle of the seven-cycle interrupt-entry or reset
+// sequence: two dummy fetches at the interrupted PC, three stack bytes,
+// then the vector fetch. Interrupt entry pushes PCH, PCL and P (B clear,
+// U set) and sets I; reset suppresses every write, performing reads at
+// the would-be push addresses while only SP keeps decrementing.
+void CPU6502::StepSpecialSequence()
+{
+    const int cycle = m_stepCycle + 1;
+    m_stepCycle = cycle;
+
+    if (m_specialSequence == SpecialSequence::InterruptEntry)
     {
-        status |= static_cast<std::uint8_t>(Flags::B);
+        switch (cycle)
+        {
+        case 1:
+        case 2:
+            // Dummy fetches of the interrupted flow's next opcode and
+            // operand; both are discarded and PC does not advance.
+            Read(m_pc);
+            break;
+        case 3:
+            Push(static_cast<std::uint8_t>((m_pc >> 8) & 0x00FF));
+            break;
+        case 4:
+            Push(static_cast<std::uint8_t>(m_pc & 0x00FF));
+            break;
+        case 5:
+            Push(static_cast<std::uint8_t>(
+                (m_status & ~static_cast<std::uint8_t>(Flags::B)) |
+                static_cast<std::uint8_t>(Flags::U)));
+            SetFlag(Flags::B, false);
+            SetFlag(Flags::U, true);
+            SetFlag(Flags::I, true);
+            break;
+        case 6:
+            m_addrAbs = Read(m_interruptVector);
+            break;
+        default:
+            m_pc = static_cast<std::uint16_t>(
+                (Read(static_cast<std::uint16_t>(m_interruptVector + 1))
+                 << 8) |
+                m_addrAbs);
+            m_specialSequence = SpecialSequence::None;
+            m_stepCycle = 0;
+            break;
+        }
+        return;
     }
-    else
+
+    // Reset sequence.
+    switch (cycle)
     {
-        status &= ~static_cast<std::uint8_t>(Flags::B);
+    case 1:
+    case 2:
+        Read(m_pc);
+        break;
+    case 3:
+    case 4:
+    case 5:
+        Read(static_cast<std::uint16_t>(0x0100 + m_sp));
+        --m_sp;
+        if (cycle == 5)
+        {
+            SetFlag(Flags::B, false);
+            SetFlag(Flags::U, true);
+            SetFlag(Flags::I, true);
+        }
+        break;
+    case 6:
+        m_addrAbs = Read(0xFFFC);
+        break;
+    default:
+        m_pc = static_cast<std::uint16_t>((Read(0xFFFD) << 8) | m_addrAbs);
+        m_specialSequence = SpecialSequence::None;
+        m_stepCycle = 0;
+        break;
     }
-
-    Push(status);
-    SetFlag(Flags::B, false);
-    SetFlag(Flags::U, true);
-    SetFlag(Flags::I, true);
-
-    const std::uint16_t lo = Read(vector);
-    const std::uint16_t hi = Read(vector + 1);
-    m_pc = (hi << 8) | lo;
 }
 
 std::uint8_t CPU6502::BCC()

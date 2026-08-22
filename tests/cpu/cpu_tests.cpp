@@ -63,7 +63,8 @@ TEST_CASE("CPU reset uses the reset vector from the iNES ROM")
     CHECK(machine->cpu.ProgramCounter() == 0x8000);
     CHECK(machine->cpu.StackPointer() == 0xFD);
     CHECK(machine->cpu.Status() == 0x24);
-    CHECK(machine->cpu.Cycles() == 8);
+    // The machine constructor drained the seven-cycle reset sequence.
+    CHECK(machine->cpu.Cycles() == 0);
 }
 
 TEST_CASE("CPU fetches and decodes the first instruction")

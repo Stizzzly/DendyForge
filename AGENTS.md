@@ -121,27 +121,29 @@ committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
 bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`.
 
 The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) has landed
-its Phase 4: read-type, write-type, immediate, implied and both JMP classes
+its Phase 5: read-type, write-type, immediate, implied and both JMP classes
 execute one bus transaction per cycle with the hardware dummy reads
 (zp,X/(zp,X) read the unindexed base; abs,X/abs,Y/(zp),Y read the unfixed
 address when crossing); read-modify-write, stack (PHA/PHP/PLA/PLP),
 subroutine (JSR/RTS/RTI) and BRK instructions execute per cycle with the
-NMOS read -> write-old -> write-new pattern and dummy stack reads; and
+NMOS read -> write-old -> write-new pattern and dummy stack reads;
 branches execute per cycle (not taken 2 cycles, taken 3 with a dummy fetch
 of the next opcode address, taken crossing a page 4 with an internal
-fix-up cycle). Exact sequences are pinned by
-`tests/cpu/cpu_bus_cycle_tests.cpp`. Hardware interrupt entry and reset
-still execute atomically until Phase 5; their cycle totals are unchanged.
-Because the PC now advances within an instruction, the blargg timing
-runner detects the final loop as a short periodic PC sequence instead of a
-constant PC.
+fix-up cycle); and hardware interrupt entry and reset run their seven
+cycles per cycle (two dummy fetches at the interrupted PC, three stack
+bytes, vector fetch; reset performs reads instead of pushes and
+decrements SP three times). Interrupt lines are polled at the penultimate
+cycle of an instruction, sampled as the final cycle begins, with the I
+flag masking IRQ at the poll; `IRQ(bool line)` is level-triggered so a
+dropped line clears a stale latch. Exact sequences are pinned by
+`tests/cpu/cpu_bus_cycle_tests.cpp`.
 
-The conversion is **in execution** (Phases 1-4 complete, one commit each).
+The conversion is **in execution** (Phases 1-5 complete, one commit each).
 See `CPU_CYCLE_ACCURACY_PLAN.md` in the repository root for the full phased
-plan, its test strategy, gates, and risks. Phase 5 (hardware interrupt
-entry and reset) is next; its first task is restoring blargg
-`08.irq_timing` by owning the interrupt poll point. Do not begin later
-phases as a side effect of other tasks.
+plan, its test strategy, gates, and risks. Phase 6 (final regression,
+performance, documentation) is next; its first task is recovering the
+Release speed dip (~2.4x vs the ~2.8x baseline). Do not begin it as a side
+effect of other tasks.
 
 Important CPU rules:
 
@@ -294,20 +296,24 @@ filters remove the DC component produced by the raw digital mixer and reduce
 high-frequency aliasing; keep them in the APU rather than the SDL frontend.
 
 The local `blargg_apu_2005.07.30` suite was re-run on 2026-08-22 after the
-frame-sequencer rework: **all eleven ROMs pass** (code 1) through
-`DendyForgeApuTimingRunner`, and the `apu_mixer` suite still passes. The
-frame counter now models, in CPU cycles relative to the application of a
-`$4017` write's delayed reset: quarter/half events at 7456/14912/22370 and
-29828 (four-step) or 37280 (five-step), the frame IRQ flag set on three
-consecutive cycles 29827-29829, a parity-dependent jitter offset (write on
-an odd CPU cycle shifts all sequencer events two counter cycles later), a
-3-cycle latency from flag to IRQ line (`FrameIrqLineLatencyCycles`), and
-half-frame clocks that sample halt state before the same cycle's CPU write
-while a same-cycle length reload is ignored when the counter is non-zero.
-`CPU6502` now latches IRQ/NMI and services them at the instruction
-boundary, and `Console::Clock()` polls the APU interrupt line before the
-APU's end-of-cycle update. Remaining before marking channel Roadmap items
-complete: the manual Contra listening regression.
+frame-sequencer rework and again after cycle-accurate CPU Phase 5: **all
+eleven ROMs pass** (code 1) through `DendyForgeApuTimingRunner`, and the
+`apu_mixer` suite still passes. The frame counter now models, in CPU
+cycles relative to the application of a `$4017` write's delayed reset:
+quarter/half events at 7456/14912/22370 and 29828 (four-step) or 37280
+(five-step), the frame IRQ flag set on three consecutive cycles
+29827-29829, a parity-dependent jitter offset (write on an odd CPU cycle
+shifts all sequencer events two counter cycles later), a 1-cycle latency
+from the flag's first set cycle to the IRQ line
+(`FrameIrqLineLatencyCycles`, armed once and decremented before the
+sequencer update), and half-frame clocks that sample halt state before the
+same cycle's CPU write while a same-cycle length reload is ignored when
+the counter is non-zero. `CPU6502` polls the interrupt lines at the
+penultimate cycle of an instruction (sampled as the final cycle begins,
+I flag masking IRQ at the poll) and services them through the seven-cycle
+entry sequencer; `Console::Clock()` reports the level-triggered APU IRQ
+line after the APU's end-of-cycle update. Remaining before marking channel
+Roadmap items complete: the manual Contra listening regression.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
@@ -487,9 +493,10 @@ hardware. Instrumented findings (temporary probes, since reverted):
 * Games that enable NMI only after their boot-time VBlank polling (Super
   Mario Bros., Contra) do not hit this race, which is why they work.
 
-The fix is the cycle-accurate CPU (per-cycle bus transactions on their
-hardware cycles plus boundary interrupt polling) already planned in
-`CPU_CYCLE_ACCURACY_PLAN.md`, Phase 2/Phase 5. Do not add a Jackal-specific
+The fix was the cycle-accurate CPU (per-cycle bus transactions on their
+hardware cycles plus the penultimate-cycle interrupt poll), completed as
+Phases 2-5 of `CPU_CYCLE_ACCURACY_PLAN.md` on 2026-08-22. Re-test Jackal
+after the Phase 6 gameplay regression; do not add a Jackal-specific
 workaround.
 
 ### PPU precise handoff point
@@ -602,14 +609,16 @@ cmake --build --preset mingw-clang-release --target DendyForgeApuTimingRunner
 & .\out\build\mingw-clang-release\DendyForgeApuTimingRunner.exe .\blargg_apu_2005.07.30\*.nes
 ```
 
-The current baseline (2026-08-22, re-verified after CPU Phase 4): ten of
-eleven ROMs report code 1 (pass). `08.irq_timing` fails with code 3: the
-per-cycle CPU moved the effective interrupt poll point and no
-`APU::FrameIrqLineLatencyCycles` value (now 2) satisfies both loop phases
-of that test — restoring it is the first task of the cycle-accurate CPU
-Phase 5, which owns interrupt poll timing. Before the frame-sequencer
-rework, `04`-`08`, `10` and `11` failed with the codes recorded in git
-history.
+The current baseline (2026-08-22, re-verified after cycle-accurate CPU
+Phase 5): **all eleven ROMs report code 1 (pass)**, including
+`08.irq_timing`, which had regressed to code 3 after the per-cycle CPU
+phases moved the effective interrupt poll point. The Phase 5 fix combined
+the penultimate-cycle poll inside the CPU, level-triggered `IRQ(bool
+line)`, a 1-cycle `FrameIrqLineLatencyCycles` armed only on the flag's
+first set cycle (decremented before the sequencer update), and reporting
+the line after the APU's end-of-cycle update in `Console::Clock()`.
+Before the frame-sequencer rework, `04`-`08`, `10` and `11` failed with
+the codes recorded in git history.
 
 The suite's own `tests.txt` declares dependencies between tests. Therefore
 later isolated passes do not prove full conformance once an earlier timing test
@@ -622,10 +631,10 @@ see the status section above). Remaining follow-up:
 
 1. Manually regression-test Contra and listen for the formerly metallic
    artifacts; only then mark the channel Roadmap items in `README.md`.
-2. If audio artifacts appear, check the frame IRQ path first: the CPU now
-   services interrupts only at instruction boundaries, and the frame IRQ
-   line uses `APU::FrameIrqLineLatencyCycles` (3) cycles of latency after
-   the `$4015`-visible flag.
+2. If audio artifacts appear, check the frame IRQ path first: the CPU
+   polls the interrupt lines at each instruction's penultimate cycle, and
+   the frame IRQ line uses `APU::FrameIrqLineLatencyCycles` (1) cycle of
+   latency after the `$4015`-visible flag's first set cycle.
 
 ### Diagnostics and runner-writing rules
 

@@ -40,7 +40,12 @@ public:
 
     void Reset();
     void Clock();
-    void IRQ();
+
+    // IRQ is level-triggered: the caller reports the line state every
+    // cycle, and a low line clears a previously latched IRQ so a stale
+    // latch (for example one taken during an entry sequence before I is
+    // set) cannot fire after the line has dropped.
+    void IRQ(bool line = true);
     void NMI();
 
     bool GetFlag(Flags flag) const;
@@ -172,7 +177,6 @@ private:
     std::uint8_t BVS();
 
     void BranchIf(bool condition);
-    void EnterInterrupt(std::uint16_t vector, bool breakInstruction);
 
     static const Instruction& GetInstructionConfig(std::uint8_t opcode);
 
@@ -180,10 +184,10 @@ private:
     std::uint8_t Fetch();
     std::uint8_t FetchData();
 
-    // Per-cycle execution (cycle-accurate CPU work, Phases 2-4 of
+    // Per-cycle execution (cycle-accurate CPU work, Phases 2-5 of
     // CPU_CYCLE_ACCURACY_PLAN.md). Instruction classes perform one bus
-    // transaction per cycle, including the hardware dummy reads; classes
-    // not yet converted keep the legacy atomic execution.
+    // transaction per cycle, including the hardware dummy reads; the
+    // legacy atomic execution remains only as the "no sequencer" sentinel.
     enum class ExecutionKind
     {
         Legacy,          // executed atomically on the opcode-fetch cycle
@@ -208,6 +212,19 @@ private:
     void StepMemoryInstruction(const Instruction& instruction, int cycle);
     void StepDataPhase(const Instruction& instruction, int cycle, int dataCycle);
     void RunOperate(const Instruction& instruction);
+
+    // Seven-cycle hardware sequences (Phase 5): interrupt entry and reset
+    // run their bus transactions on their hardware cycles instead of
+    // atomically at the boundary.
+    enum class SpecialSequence
+    {
+        None,
+        InterruptEntry, // dummy fetches, stack pushes, vector fetch
+        Reset           // dummy reads only, SP -= 3, vector fetch
+    };
+
+    void BeginInterruptEntry();
+    void StepSpecialSequence();
 
     // Stack operations
     void Push(std::uint8_t data);
@@ -253,6 +270,14 @@ private:
         Nmi
     };
     PendingInterrupt m_pendingInterrupt{PendingInterrupt::None};
+
+    // The lines are sampled during the penultimate cycle of an
+    // instruction (phi2); the sampled state decides at the following
+    // boundary whether the seven-cycle entry begins.
+    PendingInterrupt m_recognizedInterrupt{PendingInterrupt::None};
+
+    SpecialSequence m_specialSequence{SpecialSequence::None};
+    std::uint16_t m_interruptVector{0};
 };
 
 } // namespace dendyforge

@@ -8,16 +8,21 @@ stack (PHA/PHP/PLA/PLP), subroutine (JSR/RTS/RTI) and BRK instructions
 execute per cycle with the hardware read -> write-old -> write-new pattern
 and dummy stack reads. Phase 4 complete (2026-08-22): branches execute per
 cycle — not taken 2 cycles, taken 3 with the dummy fetch of the next
-opcode address, taken crossing a page 4 with an internal fix-up cycle;
-hardware interrupt entry and reset remain legacy atomic until Phase 5.**
-Known follow-ups carried into later phases:
-blargg `08.irq_timing` regressed to code 3 because sequenced reads moved
-the effective interrupt poll point — no `FrameIrqLineLatencyCycles` value
-satisfies both loop phases, so fixing it is the first Phase 5 task; and
-Release speed dipped from ~2.8x to ~2.4x realtime, to be recovered in
-Phase 6. This document is the full implementation plan for converting
-`CPU6502` from instruction-timed to cycle-accurate execution; `AGENTS.md`
-remains the authoritative status document.
+opcode address, taken crossing a page 4 with an internal fix-up cycle.
+Phase 5 complete (2026-08-22): hardware IRQ/NMI entry and reset execute
+their seven cycles per cycle (dummy fetches, stack bytes, vector fetch;
+reset suppresses writes and decrements SP three times), interrupt lines
+are polled at the penultimate cycle of an instruction with the I flag
+masking IRQ at the poll, IRQ became level-triggered through
+`IRQ(bool line)`, and the restored flag-to-line timing
+(`FrameIrqLineLatencyCycles = 1`, armed only on the flag's first set
+cycle, decremented before the sequencer update) brought the blargg suite
+back to 11/11 — including the previously regressed `08.irq_timing`.**
+Known follow-ups carried into Phase 6: Release speed dipped from ~2.8x to
+~2.4x realtime, to be recovered in Phase 6. This document is the full
+implementation plan for converting `CPU6502` from instruction-timed to
+cycle-accurate execution; `AGENTS.md` remains the authoritative status
+document.
 
 ## Why
 

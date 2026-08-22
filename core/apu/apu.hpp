@@ -12,7 +12,7 @@ class APU
 {
 public:
     static constexpr int SampleRate = 44'100;
-    static constexpr std::uint8_t FrameIrqLineLatencyCycles = 2;
+    static constexpr std::uint8_t FrameIrqLineLatencyCycles = 1;
     using DmcMemoryReader = std::function<std::uint8_t(std::uint16_t)>;
 
     void Reset();

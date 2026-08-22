@@ -273,30 +273,58 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
 
     cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
     cpu.IRQ();
-    cpu.Clock(); // the latched interrupt is serviced at the next boundary
+    // Hardware polls the lines during an instruction's penultimate cycle
+    // (Phase 5), so the instruction at the return address executes once
+    // before the entry sequence begins.
+    bus.memory[0x8002] = 0xEA; // NOP
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x8003);
+    CHECK(cpu.StackPointer() == 0xFD);
+
+    cpu.Clock(); // interrupt-entry cycle 1: dummy fetch at PC
     CHECK(cpu.Cycles() == 6);
+    CHECK(cpu.StackPointer() == 0xFD);
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
     CHECK(cpu.ProgramCounter() == 0x9000);
+    CHECK(cpu.StackPointer() == 0xFA);
     CHECK(bus.memory[0x01FD] == 0x80);
-    CHECK(bus.memory[0x01FC] == 0x02);
+    CHECK(bus.memory[0x01FC] == 0x03);
     CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+
+    CompleteInstruction(cpu); // RTI
+    CHECK(cpu.ProgramCounter() == 0x8003);
+    CHECK(cpu.StackPointer() == 0xFD);
 
     cpu.Reset();
     while (cpu.Cycles() > 0)
     {
         cpu.Clock();
     }
+    CHECK(cpu.ProgramCounter() == 0x8000);
+    CHECK(cpu.StackPointer() == 0xFD);
 
     cpu.SetFlag(dendyforge::CPU6502::Flags::I, true);
-    cpu.IRQ();
-    CHECK(cpu.Cycles() == 0);
-    CHECK(cpu.ProgramCounter() == 0x8000);
-
+    cpu.IRQ(); // masked by I: the line never latches
     cpu.NMI();
-    cpu.Clock(); // the latched interrupt is serviced at the next boundary
+    bus.memory[0x8000] = 0xEA; // NOP: one instruction precedes the entry
+    CompleteInstruction(cpu);
+    CHECK(cpu.ProgramCounter() == 0x8001);
+    CHECK(cpu.StackPointer() == 0xFD);
+
+    cpu.Clock(); // NMI-entry cycle 1: dummy fetch at PC
     CHECK(cpu.Cycles() == 6);
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
     CHECK(cpu.ProgramCounter() == 0xA000);
+    CHECK(cpu.StackPointer() == 0xFA);
     CHECK(bus.memory[0x01FD] == 0x80);
-    CHECK(bus.memory[0x01FC] == 0x00);
+    CHECK(bus.memory[0x01FC] == 0x01);
     CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
 }
 

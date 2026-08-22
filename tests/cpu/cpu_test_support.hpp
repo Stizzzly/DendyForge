@@ -35,6 +35,12 @@ struct CpuMachine
         bus.InsertCartridge(&cartridge);
         cpu.ConnectBus(&bus);
         cpu.Reset();
+        // Reset is a seven-cycle sequenced sequence (Phase 5); drain it
+        // so the machine starts with the vector loaded and ready to fetch.
+        while (cpu.Cycles() > 0)
+        {
+            cpu.Clock();
+        }
     }
 };
 

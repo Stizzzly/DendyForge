@@ -9,9 +9,11 @@ TEST_CASE("Console loads a Mapper 0 ROM and connects the CPU to its bus")
 
     REQUIRE(console.LoadRom(dendyforge::test::RomPath("cpu_test.nes").string()));
 
-    CHECK(console.Cpu().Cycles() == 8);
-    console.Clock();
+    // Reset is a seven-cycle sequenced sequence (Phase 5); the vector
+    // loads on its final drain cycle.
     CHECK(console.Cpu().Cycles() == 7);
+    console.Clock();
+    CHECK(console.Cpu().Cycles() == 6);
 }
 
 TEST_CASE("Console diagnostics exposes cartridge PRG RAM only")

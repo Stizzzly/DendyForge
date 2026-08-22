@@ -652,3 +652,135 @@ TEST_CASE("A backward taken branch crossing a page also takes four cycles")
     CHECK(machine.bus.log.size() == 3);
     CHECK(machine.cpu.ProgramCounter() == 0x02FF);
 }
+
+TEST_CASE("Hardware IRQ entry runs the seven-cycle sequence")
+{
+    CycleMachine machine;
+    machine.bus.memory[0xFFFE] = 0x10; // IRQ vector $0310
+    machine.bus.memory[0xFFFF] = 0x03;
+    machine.bus.memory[0x0200] = 0xEA; // NOP: the intervening instruction
+    machine.cpu.SetProgramCounter(0x0200);
+    machine.cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
+    machine.bus.log.clear();
+
+    machine.cpu.IRQ();
+    const int precedingClocks = machine.RunInstruction();
+
+    CHECK(precedingClocks == 2);
+    CHECK(FormatLog(machine.bus.log) == "R0200 R0201");
+    machine.bus.log.clear();
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) ==
+          "R0201 R0201 W01FD=02 W01FC=01 W01FB=20 RFFFE RFFFF");
+    CHECK(clocks == 7);
+    CHECK(machine.cpu.ProgramCounter() == 0x0310);
+    CHECK(machine.cpu.StackPointer() == 0xFA);
+    CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+}
+
+TEST_CASE("NMI entry uses the NMI vector and bypasses the I flag")
+{
+    CycleMachine machine;
+    machine.bus.memory[0xFFFA] = 0x50; // NMI vector $0450
+    machine.bus.memory[0xFFFB] = 0x04;
+    machine.bus.memory[0x0200] = 0xEA; // NOP: the intervening instruction
+    machine.cpu.SetProgramCounter(0x0200);
+    machine.cpu.SetFlag(dendyforge::CPU6502::Flags::I, true);
+    machine.bus.log.clear();
+
+    machine.cpu.NMI();
+    machine.RunInstruction();
+    machine.bus.log.clear();
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) ==
+          "R0201 R0201 W01FD=02 W01FC=01 W01FB=24 RFFFA RFFFB");
+    CHECK(clocks == 7);
+    CHECK(machine.cpu.ProgramCounter() == 0x0450);
+    CHECK(machine.cpu.StackPointer() == 0xFA);
+}
+
+TEST_CASE("Reset performs seven dummy-read cycles and reloads the vector")
+{
+    RecordingCpuBus bus;
+    bus.memory[0xFFFC] = 0x00;
+    bus.memory[0xFFFD] = 0x02;
+
+    dendyforge::CPU6502 cpu;
+    cpu.ConnectBus(&bus);
+    cpu.Reset();
+    CHECK(cpu.Cycles() == 7);
+
+    int clocks = 0;
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+        ++clocks;
+    }
+
+    CHECK(clocks == 7);
+    CHECK(FormatLog(bus.log) ==
+          "R0000 R0000 R0100 R01FF R01FE RFFFC RFFFD");
+    CHECK(cpu.StackPointer() == 0xFD);
+    CHECK(cpu.ProgramCounter() == 0x0200);
+    CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+}
+
+TEST_CASE("Interrupt recognition follows the penultimate-cycle poll")
+{
+    CycleMachine machine;
+    machine.bus.memory[0xFFFE] = 0x10; // IRQ vector $0310
+    machine.bus.memory[0xFFFF] = 0x03;
+    machine.bus.memory[0x0200] = 0xA5; // LDA $10 (3 cycles)
+    machine.bus.memory[0x0201] = 0x10;
+    machine.bus.memory[0x0202] = 0xEA; // NOP
+    machine.bus.memory[0x0010] = 0x5A;
+    machine.cpu.SetProgramCounter(0x0200);
+    machine.cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
+
+    // The line rises before the poll (cycle 2 of 3): entry begins at
+    // this instruction's own boundary.
+    machine.cpu.Clock(); // cycle 1: opcode fetch
+    machine.cpu.IRQ();
+    machine.cpu.Clock(); // cycle 2: operand; the poll samples at its end
+    machine.cpu.Clock(); // cycle 3: data read
+    machine.cpu.Clock(); // boundary: interrupt-entry cycle 1
+    CHECK(machine.cpu.Cycles() == 6);
+    CHECK(machine.cpu.Accumulator() == 0x5A);
+    while (machine.cpu.Cycles() > 0)
+    {
+        machine.cpu.Clock();
+    }
+    CHECK(machine.cpu.ProgramCounter() == 0x0310);
+
+    // The line rises only at the boundary, after LDA's final-cycle poll:
+    // one more whole instruction passes before the entry sequence.
+    CycleMachine late;
+    late.bus.memory[0xFFFE] = 0x10;
+    late.bus.memory[0xFFFF] = 0x03;
+    late.bus.memory[0x0200] = 0xA5; // LDA $10 (3 cycles)
+    late.bus.memory[0x0201] = 0x10;
+    late.bus.memory[0x0202] = 0xEA; // NOP: the deferred instruction
+    late.cpu.SetProgramCounter(0x0200);
+    late.cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
+
+    late.cpu.Clock(); // cycle 1
+    late.cpu.Clock(); // cycle 2
+    late.cpu.Clock(); // cycle 3 completes LDA; its poll saw no line
+    CHECK(late.cpu.Cycles() == 0);
+    late.cpu.IRQ(); // the line rises at the boundary, after LDA's poll
+    late.cpu.Clock(); // the NOP begins
+    CHECK(late.cpu.Cycles() == 1);
+    late.cpu.Clock(); // NOP cycle 2: its final-cycle poll samples the line
+    late.cpu.Clock(); // boundary: interrupt-entry cycle 1
+    CHECK(late.cpu.Cycles() == 6);
+    CHECK(late.cpu.ProgramCounter() == 0x0203); // still before the vector
+    while (late.cpu.Cycles() > 0)
+    {
+        late.cpu.Clock();
+    }
+    CHECK(late.cpu.ProgramCounter() == 0x0310);
+}
