@@ -115,17 +115,18 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ PPU register interface ($2000-$2007)
 * ✅ CPU-to-PPU clock synchronization
 * ✅ PPUMASK rendering controls
-* 🟡 Scanline rendering timing
-* 🟡 VRAM
+* ✅ Scanline rendering timing (blargg vbl_nmi_timing 7/7)
+* ✅ VRAM (blargg vram_access, ppu_read_buffer)
 * ✅ Pattern Tables
 * ✅ Name Tables
-* ✅ Palette RAM
-* 🟡 Background Rendering
-* ✅ OAM DMA ($4014)
-* 🟡 Sprite Rendering
-* 🟡 Scrolling
-* ✅ VBlank and NMI signal
-* 🟡 Sprite Zero Hit
+* ✅ Palette RAM (blargg palette_ram, power_up_palette)
+* ✅ Background Rendering (per-dot fetch/shifter pipeline)
+* ✅ OAM DMA ($4014; real 512-cycle transfer)
+* ✅ Sprite Rendering (blargg sprite_overflow 5/5, oam_read, oam_stress)
+* ✅ Scrolling
+* ✅ VBlank and NMI signal (NMI line sampled per CPU cycle; vbl_nmi_timing 7/7)
+* ✅ Sprite Zero Hit (blargg sprite_hit_tests 11/11)
+* ✅ PPU Open Bus (blargg ppu_open_bus)
 
 ### Controller
 
@@ -171,7 +172,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 ## Phase 5 — Mapper Support
 
 * ✅ Mapper 2 (UxROM)
-* ⬜ Mapper 3 (CNROM)
+* ✅ Mapper 3 (CNROM)
 * ✅ Mapper 1 (MMC1)
 * ⬜ Mapper 4 (MMC3)
 

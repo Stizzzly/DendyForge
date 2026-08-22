@@ -196,60 +196,65 @@ to Start, K to A, and L to B.
 
 ## PPU: what is implemented
 
-The PPU currently has a useful renderer, but it is not cycle-accurate.
+The PPU is cycle-accurate: every PPU dot runs through `Clock()` with the
+hardware event placement, and the blargg suites validate it (see the
+operational appendix for the recorded results).
 
-Implemented and tested foundations:
+Implemented and validated:
 
-* CPU-visible registers `$2000-$2007`, including mirrored access through Bus.
-* `$2002` status read side effects: VBlank clear, NMI pending clear, write
-  latch clear.
-* `$2005` two-write scroll state; `$2006` two-write PPU address; `$2007`
-  buffered reads, palette-read behavior, and address increment by 1 or 32.
-* Pattern-table reads from cartridge CHR with 8 KiB fallback CHR RAM.
-* 2 KiB name-table RAM, horizontal/vertical mirroring and `$3000-$3EFF`
-  mirroring.
-* 32-byte palette RAM and special palette mirroring (`$3F10/$14/$18/$1C`).
-* PPUMASK background/sprite enable, left-edge clipping, grayscale and simple
-  colour-emphasis transform.
-* OAM registers, immediate `$4014` DMA, 8x8 and 8x16 sprites, sprite flips,
-  palette selection, sprite/background priority, a rough sprite-zero-hit
-  condition, and an 8-sprite-per-scanline limit with overflow flag.
-* 256x240 ARGB framebuffer.
-* PPU timing counters: scanline `-1` pre-render through `260`, cycle `0..340`.
-  Visible pixels are written at visible scanlines, cycles `1..256`. VBlank is
-  raised at scanline 241, cycle 1; an enabled NMI becomes pending there.
-* `m_frameComplete` is set at that same VBlank point. `ConsumeFrameComplete()`
-  returns the event once and clears it. The frontend uses this to upload and
-  present only whole frames, never the framebuffer while visible scanlines are
-  being drawn.
+* Per-dot background pipeline: nametable/attribute/pattern fetch latches on
+  their 8-dot phases, 16-bit shifters, live `v`/`t`/fine-X, coarse-X per 8
+  dots, increment-Y at dot 256, horizontal copy at 257, vertical copy at
+  dots 280-304 of the pre-render line, and the two dummy nametable fetches
+  at dots 337/339.
+* Per-dot sprite pipeline: secondary OAM cleared over dots 1-64, byte-wise
+  evaluation over dots 65-256 including the hardware sprite-overflow bug,
+  OAMADDR held at zero during dots 257-320, eight-dot sprite fetches with
+  transparent tile $FF fetches for unused slots, sprites never displayed on
+  scanline 0, and the first-opaque-wins multiplexer with per-dot sprite
+  zero hit (not at x=255, left-clip aware).
+* NMI as a level line: `PPU::NmiLineLevel()` = VBlank flag AND enable; the
+  Console samples the line into `CPU6502::NmiLine()` once per CPU cycle
+  between the first and second PPU dot, and the CPU edge-latches an NMI at
+  its penultimate-cycle poll. This reproduces the hardware NMI suppression
+  windows (pulses shorter than one sampling interval are missed).
+* VBlank races: a $2002 read landing on the dot before the flag-set dot
+  suppresses the flag for that frame; the read at the set dot returns 1,
+  clears the flag and suppresses the NMI (frame-complete is unaffected).
+* Open bus: one latch driven by every $2000-$2007 access, refreshed only
+  by real reads and writes; $2002 returns only the top three bits driven,
+  palette $2007 reads drive six bits, writes to OAM attribute bytes read
+  back with bits 2-4 clear, and the latch decays to zero after about half
+  a second of PPU dots.
+* Palette RAM powers up with the documented NTSC power-up palette.
+* OAM DMA is a real 512-cycle alternating read/write transfer preceded by
+  one or two alignment cycles (513/514 total) during which the CPU is
+  stalled while the PPU and APU keep clocking.
+* The odd-frame skipped tick is decided while pre-render dot 339 begins;
+  a $2001 write on dot 339 itself is too late to enable it.
 
-`main.cpp` intentionally clocks in batches of 1,000 console clocks to avoid an
-event-loop-dependent one-clock UI. This is only a frontend scheduling choice;
-presentation is still gated by `ConsumeFrameComplete()`. Do not reintroduce a
-texture upload and `SDL_RenderPresent()` on every outer loop iteration.
+## PPU: remaining known gaps
 
-## PPU: known gaps exposed by Super Mario Bros.
+Validated by ROM suites on 2026-08-22 (all through `DendyForgePpuRunner`):
+`blargg_ppu_tests_2005` 5/5, `vbl_nmi_timing` 7/7, `sprite_hit_tests`
+11/11, `sprite_overflow_tests` 5/5, `oam_read`, `oam_stress`,
+`ppu_open_bus`, `ppu_read_buffer` all pass. Two suites do not pass fully:
 
-The screenshot with a mostly correct HUD, ground, and player but missing or
-misplaced world elements is expected for the current implementation. It proves
-that ROM loading, CPU execution, basic background/sprite rendering, palette,
-and controller input are alive. It does **not** mean the game is supported.
+* `ppu_vbl_nmi` (the older 2005 combined suite) fails one subtest,
+  `10-even_odd_timing`, by one polling iteration. Its modern split
+  version (`vbl_nmi_timing/3.even_odd_frames`) passes, so this is a
+  residual one-dot CPU:PPU power-on alignment difference.
+* `sprdma_and_dmc_dma` fails: DMC CPU stalls are currently serviced only
+  after an OAM DMA completes, while hardware lets DMC fetches steal cycles
+  in the middle of an OAM transfer. Implementing the interleave is the
+  remaining follow-up.
 
-The renderer has live `v`, `t`, and fine-X scrolling; coarse-X/Y progression;
-background name-table/attribute/pattern fetch latches and 16-bit shifters; and
-a scanline sprite pipeline. It is still not fully cycle-accurate:
-
-* Mid-frame `$2000/$2005/$2006/$2007` races and split-scroll timing remain
-  approximate.
-* Sprite evaluation/fetch is scanline-based, but does not yet reproduce the
-  hardware overflow bug, per-cycle OAM accesses, or exact sprite-zero timing.
-* Background/sprite dummy fetches and bus-visible PPU timing are absent.
-* The odd-frame skipped cycle and OAM DMA CPU stall are modeled, but PPU
-  open-bus behavior and many VBlank/NMI timing races are still not.
-
-These are the main reason a simple Mapper 0 game can be playable while a more
-demanding scrolling game visibly breaks apart. Do not mark Super Mario Bros.
-as supported until it is actually stable in normal play.
+Performance note (2026-08-22): the per-dot pipelines cost roughly 20% of
+Release throughput measured with rendering enabled (`nestest` writes
+$2001); the machine was also measurably thermally throttled that day (the
+pre-PPU commit measured 2.44x realtime against the historically recorded
+6.67x). Current Release sustains about 1.9-2.0x realtime, enough for
+play, but a hot-loop optimization pass is a legitimate follow-up.
 
 ## Recommended next PPU plan
 
@@ -538,23 +543,34 @@ workaround was added.
 
 ### PPU precise handoff point
 
-The PPU is intentionally paused at a strong, usable baseline. It includes
-background fetch/shifter state, live scroll registers, scanline sprite
-selection/fetch, odd-frame behaviour, palette/nametable handling, OAM DMA,
-VBlank/NMI and a whole-frame framebuffer event. Do not discard that pipeline
-to pursue cycle accuracy.
+The cycle-accurate PPU conversion completed on 2026-08-22 (commits f9fb8e2,
+285ac93, 9cbe3e0, 87f2f29, 069778a): per-dot VBlank/NMI with race windows
+and line-level NMI sampled into the CPU, the per-dot sprite evaluation and
+fetch state machine with the overflow bug, open bus with decay, dummy
+fetches, a real 512-cycle OAM DMA, and CNROM (mapper 3) alongside NROM,
+MMC1 and UxROM. Validation, remaining gaps and the performance note are in
+the "PPU: remaining known gaps" section.
 
-The next PPU work, when it resumes, should be narrow and test-backed:
+#### PPU ROM-suite runner
 
-1. Mid-scanline `$2000/$2005/$2006/$2007` scroll/address races and split
-   scrolling.
-2. Hardware sprite-overflow bug and exact sprite-zero-hit windows.
-3. Dummy fetch/open-bus effects and VBlank/NMI edge cases.
+`tools/ppu_runner.cpp` (`DendyForgePpuRunner`) runs blargg PPU ROMs
+headlessly with per-ROM auto-detection between two reporting protocols:
 
-For each item: reproduce with a focused test ROM or unit test, make the
-smallest possible change, run all unit tests, then manually regression-test
-Mario, Pac-Man and Contra. Do not update the PPU Roadmap merely because a
-single screenshot looks correct.
+* PRG-RAM protocol: `$6000 == $80` running (reset request `$81`), final
+  code below `$80` where 0 passes, NUL-terminated text at `$6004`.
+* Zero-page protocol: the ROM ends in a `jmp self` loop; completion is a
+  period-2..8 PC sequence sustained for 60000 cycles (longer than one
+  frame, so `$2002` polling loops cannot false-trigger), and the result
+  code is read from `$F8` (2010 framework) or `$F0` (2005 framework)
+  only after the loop is confirmed - both bytes are scratch mid-run.
+
+The suites live locally under `roms/nes-test-roms/` (gitignored) and are
+run one directory at a time, e.g.:
+
+```powershell
+& .\outuild\mingw-clang-release\DendyForgePpuRunner.exe .oms
+es-test-romsbl_nmi_timing\*.nes
+```
 
 ### APU public integration contract
 
