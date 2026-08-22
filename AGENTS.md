@@ -120,6 +120,13 @@ behavior are covered by tests. The local `nestest` trace test has passed for
 PC, registers, and cycle count. It is intentionally instruction-timed, not
 yet a micro-operation/cycle-accurate CPU implementation.
 
+The **next major CPU work** — converting the core to cycle-accurate,
+per-cycle bus-transaction execution — is planned and approved but not
+started. See `CPU_CYCLE_ACCURACY_PLAN.md` in the repository root for the
+full phased plan, its test strategy (including reinstating a committed
+nestest golden-trace regression test before any core change), gates, and
+risks. Do not begin it as a side effect of other tasks.
+
 Important CPU rules:
 
 * Preserve modularity. `cpu6502.hpp/.cpp` may depend on `cpu_bus.hpp`, never
