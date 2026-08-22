@@ -66,6 +66,16 @@ void Console::Clock()
     m_cpuCycleIsOdd = !m_cpuCycleIsOdd;
 }
 
+std::uint8_t Console::ReadCartridgeRamForDiagnostics(std::uint16_t address)
+{
+    if (address < 0x6000 || address > 0x7FFF)
+    {
+        return 0;
+    }
+
+    return m_bus.CpuRead(address);
+}
+
 CPU6502& Console::Cpu()
 {
     return m_cpu;

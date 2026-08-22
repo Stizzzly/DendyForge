@@ -72,6 +72,14 @@ target_link_libraries(DendyForgeApp PRIVATE
     SDL3::SDL3
 )
 
+add_executable(DendyForgeApuMixerRunner
+    tools/apu_mixer_runner.cpp
+)
+
+target_link_libraries(DendyForgeApuMixerRunner PRIVATE
+    DendyForgeCore
+)
+
 add_custom_command(TARGET DendyForgeApp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:SDL3::SDL3>"

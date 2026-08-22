@@ -136,10 +136,11 @@ The current CPU map implemented by `Bus` is:
   selected by CPU-cycle parity. The PPU continues to clock during that stall.
 * `$4016`: controller 1 serial port.
 * cartridge reads/writes are tried first, then the built-in map.
-* `$4000-$4013` and `$4015`: initial APU pulse/triangle/noise/DMC
-  implementation. It produces 44.1 kHz mono PCM samples; `$4017` is not yet
-  implemented as an APU register. `$4014` remains OAM DMA and `$4016` remains
-  controller 1.
+* `$6000-$7FFF`: 8 KiB cartridge PRG RAM (the iNES zero-size default is one
+  8 KiB bank). This is required by common NES test ROM diagnostic ports.
+* `$4000-$4013`, `$4015`, and `$4017`: initial APU pulse/triangle/noise/DMC
+  implementation. It produces 44.1 kHz mono PCM samples; `$4014` remains OAM
+  DMA and `$4016` remains controller 1.
 
 Controller order is A, B, Select, Start, Up, Down, Left, Right. A write to
 `$4016` latches it on strobe or the high-to-low transition; reads shift one bit
@@ -247,9 +248,13 @@ uses the 3/4-cycle delay and the 4-step/5-step mode distinction.
 The SDL3 frontend keeps the device paused until a 50 ms PCM prebuffer has been
 queued. It caps SDL's queued input at 100 ms and retains excess generated
 samples locally instead of dropping them; this prevents startup underruns and
-audio discontinuities during a transient queue backlog. The APU is not yet
-verified against game audio; do not mark its Roadmap items complete until the
-audible metallic artifacts have been diagnosed and removed.
+audio discontinuities during a transient queue backlog. The mixer was verified
+on 2026-08-22 with Shay Green's `apu_mixer` ROM suite: `dmc.nes`, `noise.nes`,
+`square.nes`, and `triangle.nes` each reported status code 0 (`passed`). The
+ROMs remain local under `roms/nes-test-roms/apu_mixer`. Use
+`DendyForgeApuMixerRunner` to run them headlessly; it creates a fresh console
+per ROM, performs a requested reset after 100 ms, and reports the status/text
+supplied in PRG RAM `$6000-$60FF`.
 
 The mixer output passes through the standard NES-style 90 Hz and 440 Hz
 high-pass filters plus a 14 kHz low-pass filter before reaching SDL. These

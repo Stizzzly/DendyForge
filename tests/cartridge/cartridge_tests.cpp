@@ -59,3 +59,20 @@ TEST_CASE("Mapper 2 switches the lower PRG bank and provides CHR RAM")
     REQUIRE(cartridge.PpuRead(0x1FFF, data));
     CHECK(data == 0xA5);
 }
+
+TEST_CASE("Cartridge provides 8 KiB PRG RAM when iNES declares none")
+{
+    dendyforge::INesHeader header{};
+    header.prgRomBanks = 1;
+    std::vector<std::uint8_t> prgRom(16 * 1024);
+    dendyforge::Cartridge cartridge(header, std::move(prgRom), {});
+
+    REQUIRE(cartridge.CpuWrite(0x6000, 0xA5));
+    REQUIRE(cartridge.CpuWrite(0x7FFF, 0x5A));
+
+    std::uint8_t data = 0;
+    REQUIRE(cartridge.CpuRead(0x6000, data));
+    CHECK(data == 0xA5);
+    REQUIRE(cartridge.CpuRead(0x7FFF, data));
+    CHECK(data == 0x5A);
+}

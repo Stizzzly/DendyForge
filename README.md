@@ -141,7 +141,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Triangle Channel
 * ✅ Noise Channel
 * ✅ DMC Channel
-* ✅ Audio Mixer (nonlinear 2A03 mix)
+* ✅ Audio Mixer (nonlinear 2A03 mix; `apu_mixer` ROM suite)
 
 ---
 

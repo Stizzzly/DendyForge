@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -20,6 +21,7 @@ public:
     bool LoadRom(const std::string& path);
     void Reset();
     void Clock();
+    std::uint8_t ReadCartridgeRamForDiagnostics(std::uint16_t address);
 
     CPU6502& Cpu();
     PPU& VideoProcessor();

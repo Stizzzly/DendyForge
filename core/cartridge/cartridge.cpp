@@ -14,6 +14,8 @@ Cartridge::Cartridge(
     std::vector<std::uint8_t>&& chrRom)
     : m_info(header),
       m_prgRom(std::move(prgRom)),
+      m_prgRam(static_cast<std::size_t>(
+          header.prgRamSize == 0 ? 1 : header.prgRamSize) * 8 * 1024),
       m_chrRom(std::move(chrRom))
 {
     switch (m_info.Mapper())
@@ -59,6 +61,12 @@ bool Cartridge::CpuRead(
     std::uint16_t address,
     std::uint8_t& data)
 {
+    if (address >= 0x6000 && address <= 0x7FFF)
+    {
+        data = m_prgRam[address & 0x1FFF];
+        return true;
+    }
+
     std::uint32_t mappedAddress;
 
     if (!m_mapper->CpuRead(address, mappedAddress))
@@ -79,6 +87,12 @@ bool Cartridge::CpuWrite(
     std::uint16_t address,
     std::uint8_t data)
 {
+    if (address >= 0x6000 && address <= 0x7FFF)
+    {
+        m_prgRam[address & 0x1FFF] = data;
+        return true;
+    }
+
     std::uint32_t mappedAddress;
 
     if (!m_mapper->CpuWrite(address, data, mappedAddress))

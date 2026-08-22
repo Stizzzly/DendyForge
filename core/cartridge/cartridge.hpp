@@ -38,6 +38,7 @@ private:
     CartridgeInfo m_info;
 
     std::vector<std::uint8_t> m_prgRom;
+    std::vector<std::uint8_t> m_prgRam;
     std::vector<std::uint8_t> m_chrRom;
     std::vector<std::uint8_t> m_chrRam;
     std::unique_ptr<Mapper> m_mapper;
