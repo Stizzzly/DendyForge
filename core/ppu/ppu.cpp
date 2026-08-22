@@ -584,9 +584,30 @@ std::uint16_t PPU::NametableAddress(std::uint16_t address) const
     const std::uint16_t table = offset >> 10;
     const std::uint16_t withinTable = offset & 0x03FF;
 
-    const std::uint16_t physicalTable = m_mirroring == Mirroring::Vertical
-        ? table & 0x0001
-        : table >> 1;
+    // Mappers such as MMC1 switch the arrangement while the PPU runs,
+    // so query the cartridge on each nametable access.
+    const Mirroring mirroring = m_cartridge != nullptr
+        ? m_cartridge->CurrentMirroring()
+        : m_mirroring;
+
+    std::uint16_t physicalTable = 0;
+    switch (mirroring)
+    {
+    case Mirroring::Vertical:
+        physicalTable = table & 0x0001;
+        break;
+    case Mirroring::OneScreenLower:
+        physicalTable = 0;
+        break;
+    case Mirroring::OneScreenUpper:
+        physicalTable = 1;
+        break;
+    case Mirroring::Horizontal:
+    default:
+        physicalTable = table >> 1;
+        break;
+    }
+
     return (physicalTable << 10) | withinTable;
 }
 

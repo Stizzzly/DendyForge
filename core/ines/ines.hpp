@@ -8,7 +8,9 @@ namespace dendyforge
 enum class Mirroring
 {
     Horizontal,
-    Vertical
+    Vertical,
+    OneScreenLower,
+    OneScreenUpper
 };
 
 constexpr std::uint8_t FLAG_MIRRORING = 0x01;

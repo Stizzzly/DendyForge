@@ -24,6 +24,10 @@ public:
 
     const CartridgeInfo& Info() const;
 
+    // Current nametable arrangement: the iNES header mode unless the
+    // mapper switches it at runtime (MMC1).
+    Mirroring CurrentMirroring() const;
+
     bool CpuRead(std::uint16_t address, std::uint8_t& data);
     bool CpuWrite(std::uint16_t address, std::uint8_t data);
 

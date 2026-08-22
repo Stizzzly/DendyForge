@@ -37,7 +37,7 @@ core/
   controller/   serial controller-port implementation
   ines/         iNES header types and reader
   cartridge/    cartridge data plus mapper dispatch
-  mapper/       mapper abstraction and Mapper 0
+  mapper/       mapper abstraction and Mappers 0, 1, 2
 src/main.cpp    SDL3 window, event loop, texture upload and keyboard mapping
 tests/          doctest tests and versioned CPU test ROM fixtures
 roms/           user-local game ROMs; ignored by Git
@@ -160,10 +160,20 @@ Important CPU rules:
 
 ## Cartridge, mapper, and bus status
 
-Mapper 0 and Mapper 2 (UxROM/UNROM) are implemented. Mapper 0 maps 16 KiB or
-32 KiB PRG. Mapper 2 selects a 16 KiB PRG bank at `$8000-$BFFF` and fixes the
-last PRG bank at `$C000-$FFFF`. Both use CHR ROM when supplied and otherwise
-provide 8 KiB of CHR RAM. No other mapper must be assumed to work.
+Mapper 0, Mapper 1 (MMC1) and Mapper 2 (UxROM/UNROM) are implemented. Mapper 0
+maps 16 KiB or 32 KiB PRG. Mapper 1 implements the five-write serial port
+(first written bit becomes register bit 0), PRG modes 0-3, 4/8 KiB CHR bank
+modes, the bit-7 reset write (PRG mode forced to 3), bank wrap by masking to
+the available banks, CHR RAM boards, and the four live nametable arrangements
+(one-screen lower/upper, vertical, horizontal). Until the game first loads the
+control register the nametable arrangement stays taken from the iNES header.
+Mapper 2 selects a 16 KiB PRG bank at `$8000-$BFFF` and fixes the last PRG
+bank at `$C000-$FFFF`. Both Mapper 0 and Mapper 2 use CHR ROM when supplied
+and otherwise provide 8 KiB of CHR RAM; Mapper 1 likewise falls back to 8 KiB
+CHR RAM. No other mapper must be assumed to work. Mapper 1 is covered by
+`tests/mapper/mapper1_tests.cpp` (bank mapping, serial loading, reset write,
+CHR RAM, live mirroring through the PPU); no MMC1 game ROM was available for
+a manual gameplay regression on 2026-08-22, so none is claimed.
 
 The current CPU map implemented by `Bus` is:
 
@@ -411,8 +421,10 @@ are important for current work:
 
 ```text
 core/apu/apu.hpp, core/apu/apu.cpp       APU implementation.
+core/mapper/mapper1.hpp/.cpp             MMC1 implementation.
 core/mapper/mapper2.hpp/.cpp             UxROM/UNROM implementation.
 tests/apu/apu_tests.cpp                  APU unit coverage.
+tests/mapper/mapper1_tests.cpp           MMC1 unit coverage.
 tools/apu_mixer_runner.cpp               Headless Shay Green mixer-ROM runner.
 tools/apu_timing_runner.cpp              Headless blargg APU timing-ROM runner.
 ```
@@ -452,17 +464,36 @@ When fixing frame timing, avoid changing DMA behavior unless a failing test
 demonstrates an interaction. A broad scheduler rewrite risks corrupting both
 working PPU and already passing APU mixer tests.
 
-### Cartridge and Mapper 2 handoff
+### Cartridge and Mapper 1/2 handoff
 
 Cartridge PRG-RAM is now used by diagnostic ROMs at `$6000-$7FFF`; the default
 for an iNES header declaring zero PRG-RAM remains one 8 KiB bank. The core
-currently supports only Mapper 0 and Mapper 2. Mapper 2 contract:
+currently supports only Mappers 0, 1 and 2. Mapper 2 contract:
 
 ```text
 $8000-$BFFF  selected 16 KiB PRG bank
 $C000-$FFFF  permanently mapped final 16 KiB PRG bank
 write $8000-$FFFF  selects the lower bank (masked to available banks)
 ```
+
+Mapper 1 (MMC1) contract, implemented in `core/mapper/mapper1.cpp`:
+
+```text
+write $8000-$FFFF  serial load, bit 0 of each write; five writes load one
+                    register chosen by bits 14-13 of the FIFTH write's address
+write bit 7 = 1     reset sequence, force PRG mode 3, keep mirroring/CHR mode
+control $8000       mirroring (4 arrangements), CHR 4/8 KiB mode, PRG mode
+CHR 0 $A000         4 KiB bank for $0000-$0FFF (8 KiB mode ignores bit 0)
+CHR 1 $C000         4 KiB bank for $1000-$1FFF (ignored in 8 KiB mode)
+PRG  $E000          16 KiB bank; PRG modes 2/3 fix first/last bank
+power-on            PRG mode 3, bank registers 0, header mirroring in effect
+```
+
+`Cartridge::CurrentMirroring()` feeds the mapper's live arrangement to the
+PPU on every nametable access; mappers without switchable mirroring forward
+the iNES header value. Known MMC1 simplifications, acceptable until a test
+ROM demands them: the ~2-cycle write-ignore window after a register load and
+the `$E000` WRAM write-protect bit are not implemented.
 
 Do not special-case Jackal by filename. First inspect its iNES header and
 confirm the mapper/board, then implement the missing general hardware with

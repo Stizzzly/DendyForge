@@ -172,7 +172,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 
 * ✅ Mapper 2 (UxROM)
 * ⬜ Mapper 3 (CNROM)
-* ⬜ Mapper 1 (MMC1)
+* ✅ Mapper 1 (MMC1)
 * ⬜ Mapper 4 (MMC3)
 
 ---

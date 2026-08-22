@@ -25,6 +25,7 @@ add_library(DendyForgeCore
     core/cartridge/cartridge_info.cpp
     core/mapper/mapper.cpp
     core/mapper/mapper0.cpp
+    core/mapper/mapper1.cpp
     core/mapper/mapper2.cpp
     core/bus/bus.cpp
     core/console/console.cpp
@@ -50,6 +51,7 @@ add_executable(DendyForgeTests
     tests/apu/apu_tests.cpp
     tests/controller/controller_tests.cpp
     tests/cartridge/cartridge_tests.cpp
+    tests/mapper/mapper1_tests.cpp
 )
 
 target_link_libraries(DendyForgeTests PRIVATE DendyForgeCore)

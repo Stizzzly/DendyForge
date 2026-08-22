@@ -11,4 +11,9 @@ Mapper::Mapper(
 {
 }
 
+Mirroring Mapper::MirroringMode(Mirroring headerMirroring) const
+{
+    return headerMirroring;
+}
+
 } // namespace dendyforge

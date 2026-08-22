@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "ines/ines.hpp"
+
 namespace dendyforge
 {
 
@@ -29,6 +31,10 @@ public:
     virtual bool PpuWrite(
         std::uint16_t address,
         std::uint32_t& mappedAddress) = 0;
+
+    // Mappers with switchable nametable arrangement (e.g. MMC1) override
+    // this; the default keeps the arrangement from the iNES header.
+    virtual Mirroring MirroringMode(Mirroring headerMirroring) const;
 
 protected:
     std::uint8_t m_prgBanks;

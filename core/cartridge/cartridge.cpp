@@ -1,5 +1,6 @@
 #include "cartridge.hpp"
 #include "../mapper/mapper0.hpp"
+#include "../mapper/mapper1.hpp"
 #include "../mapper/mapper2.hpp"
 
 #include <utility>
@@ -26,6 +27,12 @@ Cartridge::Cartridge(
             CHRRomBanks());
         break;
 
+    case 1:
+        m_mapper = std::make_unique<Mapper1>(
+            PRGRomBanks(),
+            CHRRomBanks());
+        break;
+
     case 2:
         m_mapper = std::make_unique<Mapper2>(
             PRGRomBanks(),
@@ -45,6 +52,11 @@ Cartridge::Cartridge(
 const CartridgeInfo& Cartridge::Info() const
 {
     return m_info;
+}
+
+Mirroring Cartridge::CurrentMirroring() const
+{
+    return m_mapper->MirroringMode(m_info.MirroringMode());
 }
 
 const std::vector<std::uint8_t>& Cartridge::PRGRom() const
