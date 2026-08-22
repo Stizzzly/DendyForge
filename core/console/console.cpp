@@ -107,4 +107,9 @@ Controller& Console::PrimaryController()
     return m_bus.PrimaryController();
 }
 
+Zapper& Console::SecondaryZapper()
+{
+    return m_bus.SecondaryZapper();
+}
+
 } // namespace dendyforge

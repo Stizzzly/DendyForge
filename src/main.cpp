@@ -135,6 +135,24 @@ int main(int argc, char* argv[])
         bool frameComplete = false;
         if (romLoaded)
         {
+            // The Zapper aims through the mouse: the left button is the
+            // trigger. Map the window cursor into the 256x240 logical
+            // presentation space before each frame.
+            float mouseX = 0.0f;
+            float mouseY = 0.0f;
+            const SDL_MouseButtonFlags mouseButtons =
+                SDL_GetMouseState(&mouseX, &mouseY);
+            float logicalX = 0.0f;
+            float logicalY = 0.0f;
+            if (SDL_RenderCoordinatesFromWindow(
+                    renderer, mouseX, mouseY, &logicalX, &logicalY))
+            {
+                console.SecondaryZapper().SetAim(
+                    static_cast<int>(logicalX), static_cast<int>(logicalY));
+            }
+            console.SecondaryZapper().SetTrigger(
+                (mouseButtons & SDL_BUTTON_LMASK) != 0);
+
             const std::uint64_t currentTicks = SDL_GetTicksNS();
             const std::uint64_t elapsedNanoseconds = std::min(
                 currentTicks - previousTicks, MaximumElapsedNanoseconds);
@@ -210,6 +228,36 @@ int main(int argc, char* argv[])
                               ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
             SDL_RenderClear(renderer);
             SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+
+            // Draw the Zapper crosshair at the mouse position.
+            {
+                float mouseX = 0.0f;
+                float mouseY = 0.0f;
+                SDL_GetMouseState(&mouseX, &mouseY);
+                float logicalX = 0.0f;
+                float logicalY = 0.0f;
+                if (SDL_RenderCoordinatesFromWindow(
+                        renderer, mouseX, mouseY, &logicalX, &logicalY) &&
+                    logicalX >= 0.0f && logicalX < ScreenWidth &&
+                    logicalY >= 0.0f && logicalY < ScreenHeight)
+                {
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    SDL_RenderLine(renderer, logicalX - 6.0f, logicalY,
+                                   logicalX - 2.0f, logicalY);
+                    SDL_RenderLine(renderer, logicalX + 2.0f, logicalY,
+                                   logicalX + 6.0f, logicalY);
+                    SDL_RenderLine(renderer, logicalX, logicalY - 6.0f,
+                                   logicalX, logicalY - 2.0f);
+                    SDL_RenderLine(renderer, logicalX, logicalY + 2.0f,
+                                   logicalX, logicalY + 6.0f);
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                    SDL_RenderLine(renderer, logicalX - 1.0f, logicalY,
+                                   logicalX + 1.0f, logicalY);
+                    SDL_RenderLine(renderer, logicalX, logicalY - 1.0f,
+                                   logicalX, logicalY + 1.0f);
+                }
+            }
+
             SDL_RenderPresent(renderer);
         }
 

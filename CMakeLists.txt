@@ -31,6 +31,7 @@ add_library(DendyForgeCore
     core/bus/bus.cpp
     core/console/console.cpp
     core/controller/controller.cpp
+    core/zapper/zapper.cpp
     core/ppu/ppu.cpp
 )
 
@@ -54,6 +55,7 @@ add_executable(DendyForgeTests
     tests/controller/controller_tests.cpp
     tests/cartridge/cartridge_tests.cpp
     tests/mapper/mapper1_tests.cpp
+    tests/zapper/zapper_tests.cpp
     tests/mapper/mapper3_tests.cpp
 )
 

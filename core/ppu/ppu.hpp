@@ -38,6 +38,11 @@ public:
     const std::array<std::uint32_t, 256 * 240>& FrameBuffer() const;
     ScrollAddressState AddressState() const;
 
+    // The beam counters as observed between dots: the scanline being
+    // rendered (-1 pre-render through 260) and the next dot to execute.
+    std::int16_t Scanline() const { return m_scanline; }
+    std::int16_t Cycle() const { return m_cycle; }
+
     std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
 

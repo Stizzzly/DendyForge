@@ -194,6 +194,16 @@ Controller order is A, B, Select, Start, Up, Down, Left, Right. A write to
 and then return ones. SDL maps `W/A/S/D` to D-pad, Backspace to Select, Enter
 to Start, K to A, and L to B.
 
+The Zapper light gun is `core/zapper/` on controller port 2: reading `$4017`
+returns the light sensor in bit 3 (0 = light) and the trigger in bit 4
+(1 = pulled). Light is reported only when the beam is on the aimed scanline
+past the aimed column over a bright framebuffer pixel (threshold picks the
+$20-$30 brights), which lets games reconstruct both coordinates as on
+hardware. The SDL frontend aims through the mouse (mapped through the
+logical presentation), uses the left button as the trigger and draws a
+crosshair; `Console::SecondaryZapper()` is the plumbing point. Duck Hunt
+(World) boots on it (user-local ROM in Downloads).
+
 ## PPU: what is implemented
 
 The PPU is cycle-accurate: every PPU dot runs through `Clock()` with the

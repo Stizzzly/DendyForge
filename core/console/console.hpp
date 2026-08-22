@@ -28,6 +28,7 @@ public:
     PPU& VideoProcessor();
     APU& AudioProcessor();
     Controller& PrimaryController();
+    Zapper& SecondaryZapper();
 
 private:
     Bus m_bus;

@@ -6,6 +6,7 @@
 #include "../cpu/cpu_bus.hpp"
 #include "../apu/apu.hpp"
 #include "../controller/controller.hpp"
+#include "../zapper/zapper.hpp"
 #include "../ppu/ppu.hpp"
 
 namespace dendyforge
@@ -31,12 +32,14 @@ public:
     PPU& VideoProcessor();
     APU& AudioProcessor();
     Controller& PrimaryController();
+    Zapper& SecondaryZapper();
 
 private:
     Cartridge* m_cartridge{nullptr};
     PPU m_ppu;
     APU m_apu;
     Controller m_controller1;
+    Zapper m_zapper;
     bool m_dmaPending{false};
     std::uint16_t m_dmaStallCycles{0};
     std::uint16_t m_dmaAlignmentCycles{0};

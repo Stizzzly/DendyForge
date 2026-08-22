@@ -34,6 +34,11 @@ Controller& Bus::PrimaryController()
     return m_controller1;
 }
 
+Zapper& Bus::SecondaryZapper()
+{
+    return m_zapper;
+}
+
 std::uint8_t Bus::CpuRead(std::uint16_t address)
 {
     // Built-in ranges below $6000 can never be claimed by a cartridge
@@ -59,6 +64,13 @@ std::uint8_t Bus::CpuRead(std::uint16_t address)
     if (address == 0x4015)
     {
         return m_apu.CpuRead(address);
+    }
+
+    // $4017: controller port 2 reads the Zapper light sensor and trigger.
+    if (address == 0x4017)
+    {
+        return m_zapper.ReadPort(
+            m_ppu.Scanline(), m_ppu.Cycle(), m_ppu.FrameBuffer());
     }
 
     // $4020-$FFFF (and the unclaimed $4018-$401F/$4020-$5FFF open bus
