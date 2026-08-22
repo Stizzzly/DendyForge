@@ -100,3 +100,122 @@ TEST_CASE("A $2002 read during VBlank clears the flag and the pending NMI")
     CHECK((ppu.CpuRead(0x2002) & 0x80) == 0);
     CHECK_FALSE(ppu.PollNmi());
 }
+
+namespace
+{
+
+void WriteOamSprite(dendyforge::PPU& ppu, std::uint8_t index,
+                    std::uint8_t y, std::uint8_t tile,
+                    std::uint8_t attributes, std::uint8_t x)
+{
+    ppu.CpuWrite(0x2003, index * 4);
+    ppu.CpuWrite(0x2004, y);
+    ppu.CpuWrite(0x2004, tile);
+    ppu.CpuWrite(0x2004, attributes);
+    ppu.CpuWrite(0x2004, x);
+}
+
+void PrepareRenderedPattern(dendyforge::PPU& ppu)
+{
+    ppu.CpuWrite(0x2001, 0x1E);
+    // Background tile 0 and sprite tile 1: every row opaque in column 0
+    // (low plane bit 7), high plane clear, so any scanline row works.
+    for (int row = 0; row < 8; ++row)
+    {
+        ppu.PpuWrite(static_cast<std::uint16_t>(row), 0x80);
+        ppu.PpuWrite(static_cast<std::uint16_t>(0x0010 + row), 0x80);
+    }
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F01, 0x21);
+    ppu.PpuWrite(0x3F11, 0x31);
+
+    // Unwritten OAM reads as y=0 and would be in range on scanline 0;
+    // park every sprite off-screen so tests control exactly which ones
+    // are live.
+    for (std::uint8_t sprite = 0; sprite < 64; ++sprite)
+    {
+        WriteOamSprite(ppu, sprite, 240, 0, 0, 0);
+    }
+}
+
+} // namespace
+
+TEST_CASE("Sprite evaluation sets the overflow flag at the ninth live sprite")
+{
+    dendyforge::PPU ppu;
+    PrepareRenderedPattern(ppu);
+
+    // Nine sprites on scanline 17: eight fill the secondary OAM (one byte
+    // per dot pair, eight dots per sprite starting at dot 65), so the
+    // ninth is detected at scanline 16, dot 130.
+    for (std::uint8_t sprite = 0; sprite < 9; ++sprite)
+    {
+        WriteOamSprite(ppu, sprite, 16, 0, 0, sprite * 8);
+    }
+
+    ClockDots(ppu, DotsUntil(16, 129) + 1);
+    CHECK((ppu.CpuRead(0x2002) & 0x20) == 0);
+
+    ClockDots(ppu, 1);
+    CHECK((ppu.CpuRead(0x2002) & 0x20) != 0);
+}
+
+TEST_CASE("Sprite zero hit latches on the exact dot of pixel output")
+{
+    dendyforge::PPU ppu;
+    PrepareRenderedPattern(ppu);
+    WriteOamSprite(ppu, 0, 0, 1, 0, 0);
+
+    ClockDots(ppu, DotsUntil(1, 0) + 1);
+    CHECK((ppu.CpuRead(0x2002) & 0x40) == 0);
+
+    ClockDots(ppu, 1);
+    CHECK((ppu.CpuRead(0x2002) & 0x40) != 0);
+}
+
+TEST_CASE("Sprite zero hit does not trigger at x=255")
+{
+    dendyforge::PPU ppu;
+    PrepareRenderedPattern(ppu);
+    WriteOamSprite(ppu, 0, 0, 1, 0, 255);
+
+    // Past the end of scanline 1's pixel output: the opaque overlap at
+    // x=255 must not latch the hit.
+    ClockDots(ppu, DotsUntil(1, 256) + 1);
+    CHECK((ppu.CpuRead(0x2002) & 0x40) == 0);
+}
+
+TEST_CASE("OAMADDR is held at zero during the sprite fetch interval")
+{
+    dendyforge::PPU ppu;
+    PrepareRenderedPattern(ppu);
+    ppu.CpuWrite(0x2003, 0x40);
+
+    ClockDots(ppu, DotsUntil(0, 258) + 1);
+
+    // The $2004 write must land at OAM[0], not OAM[0x40].
+    ppu.CpuWrite(0x2004, 0xAB);
+    ppu.CpuWrite(0x2003, 0x00);
+    CHECK(ppu.CpuRead(0x2004) == 0xAB);
+}
+
+TEST_CASE("A behind-background sprite hides later sprites at the same pixel")
+{
+    dendyforge::PPU backgroundOnly;
+    PrepareRenderedPattern(backgroundOnly);
+
+    dendyforge::PPU withShadows;
+    PrepareRenderedPattern(withShadows);
+    // Sprite 0 sits behind the background, sprite 1 in front; both opaque
+    // at x=0. The multiplexer selects sprite 0, which loses to the
+    // background, so sprite 1 must not show either.
+    WriteOamSprite(withShadows, 0, 0, 1, 0x20, 0);
+    WriteOamSprite(withShadows, 1, 0, 1, 0x00, 0);
+
+    backgroundOnly.RenderBackground();
+    withShadows.RenderBackground();
+    withShadows.RenderSprites();
+
+    CHECK(withShadows.FrameBuffer()[256] == backgroundOnly.FrameBuffer()[256]);
+}

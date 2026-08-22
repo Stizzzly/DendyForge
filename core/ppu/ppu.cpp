@@ -69,15 +69,49 @@ void PPU::Clock()
             CopyVerticalBits(m_vramAddress, m_temporaryAddress);
         }
 
-        if (m_cycle == 257)
+        if (m_cycle >= 257 && m_cycle <= 320)
         {
-            const std::uint16_t nextScanline = m_scanline + 1;
-            EvaluateSpritesForScanline(nextScanline);
+            // Sprite tile loading interval: OAMADDR is held at zero, and
+            // each of the eight slots consumes eight dots (garbage
+            // nametable fetch, garbage attribute fetch, then the two
+            // pattern bytes at (cycle - 257) & 7 == 4).
+            m_oamAddress = 0;
+            if (m_cycle == 257)
+            {
+                m_spriteFetchIndex = 0;
+                if (m_scanline == -1)
+                {
+                    // No evaluation ran on the pre-render line, so sprites
+                    // are never displayed on scanline 0.
+                    m_scanlineSpriteCount = 0;
+                }
+            }
+            switch ((m_cycle - 257) & 0x07)
+            {
+            case 0:
+                PpuRead(0x2000 | (m_vramAddress & 0x0FFF));
+                break;
+            case 2:
+                PpuRead(0x23C0 |
+                        (m_vramAddress & 0x0C00) |
+                        ((m_vramAddress >> 4) & 0x0038) |
+                        ((m_vramAddress >> 2) & 0x0007));
+                break;
+            case 4:
+                LoadSpriteTileInfo();
+                break;
+            default:
+                break;
+            }
         }
-        if (m_cycle == 321)
-        {
-            FetchScanlineSprites(m_scanline + 1);
-        }
+    }
+
+    // Secondary OAM clear and sprite evaluation run on visible scanlines
+    // only; the selected sprites are rendered on the following scanline.
+    if (m_scanline >= 0 && m_scanline < 240 && RenderingEnabled() &&
+        m_cycle >= 1 && m_cycle <= 256)
+    {
+        ProcessSpriteEvaluation();
     }
 
     if (m_scanline == 241 && m_cycle == 1)
@@ -323,6 +357,7 @@ void PPU::RenderSpritesScanline(std::uint16_t screenY)
 void PPU::EvaluateSpritesForScanline(std::uint16_t screenY)
 {
     m_scanlineSpriteCount = 0;
+    m_sprite0Visible = false;
     if (screenY >= 240)
     {
         return;
@@ -347,6 +382,10 @@ void PPU::EvaluateSpritesForScanline(std::uint16_t screenY)
         const std::size_t offset = sprite * 4;
         m_scanlineSprites[m_scanlineSpriteCount++] = {
             sprite, m_oam[offset + 3], m_oam[offset + 2], 0, 0};
+        if (m_scanlineSpriteCount == 1)
+        {
+            m_sprite0Visible = sprite == 0;
+        }
     }
 }
 
@@ -390,6 +429,267 @@ void PPU::FetchScanlineSprites(std::uint16_t screenY)
     }
 }
 
+void PPU::ProcessSpriteEvaluation()
+{
+    if (m_cycle < 65)
+    {
+        // Dots 1-64: the secondary OAM is cleared to $FF, one byte every
+        // two dots.
+        m_oamCopyBuffer = 0xFF;
+        m_secondaryOam[(m_cycle - 1) >> 1] = 0xFF;
+        return;
+    }
+    if (m_cycle > 256)
+    {
+        return;
+    }
+
+    if ((m_cycle & 0x01) != 0)
+    {
+        // Odd dots read one byte from primary OAM.
+        if (m_cycle == 65)
+        {
+            SpriteEvaluationStart();
+        }
+        m_oamCopyBuffer = m_oam[m_oamAddress];
+        return;
+    }
+
+    // Even dots write the latched byte to secondary OAM and advance the
+    // evaluation counters. The structure follows the hardware state
+    // machine, including the sprite overflow bug: once eight sprites have
+    // been found, writes are disabled, the in-range comparison walks the
+    // diagonal H/L increments, and the overflow flag latches when the
+    // first (mis)read byte lands in range.
+    if (m_cycle == 256)
+    {
+        SpriteEvaluationEnd();
+    }
+
+    if (m_oamCopyDone)
+    {
+        m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+        if (m_secondaryOamAddress >= 0x20)
+        {
+            // With writes disabled, secondary OAM writes become reads.
+            m_oamCopyBuffer = m_secondaryOam[m_secondaryOamAddress & 0x1F];
+        }
+    }
+    else
+    {
+        const std::uint8_t spriteHeight = (m_control & 0x20) ? 16 : 8;
+        if (!m_spriteInRange &&
+            m_scanline >= m_oamCopyBuffer &&
+            m_scanline < m_oamCopyBuffer + spriteHeight)
+        {
+            m_spriteInRange = !m_oamCopyDone;
+        }
+
+        if (m_secondaryOamAddress < 0x20)
+        {
+            m_secondaryOam[m_secondaryOamAddress] = m_oamCopyBuffer;
+
+            if (m_spriteInRange)
+            {
+                if (m_cycle == 66)
+                {
+                    // The very first evaluated byte was in range; hardware
+                    // flags this slot as "sprite zero" even when evaluation
+                    // started at a nonzero OAMADDR.
+                    m_sprite0Added = true;
+                }
+
+                ++m_spriteAddrL;
+                ++m_secondaryOamAddress;
+
+                if (m_spriteAddrL >= 4)
+                {
+                    m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+                    m_spriteAddrL = 0;
+                    if (m_spriteAddrH == 0)
+                    {
+                        m_oamCopyDone = true;
+                    }
+                }
+
+                if ((m_secondaryOamAddress & 0x03) == 0)
+                {
+                    // All four bytes of this sprite were copied. When
+                    // evaluation is misaligned (nonzero OAMADDR start), the
+                    // byte counter only resynchronizes if the byte just
+                    // read is not itself in range.
+                    m_spriteInRange = false;
+                    if (m_spriteAddrL != 0)
+                    {
+                        const bool inRange =
+                            m_scanline >= m_oamCopyBuffer &&
+                            m_scanline < m_oamCopyBuffer + spriteHeight;
+                        if (!inRange)
+                        {
+                            m_spriteAddrL = 0;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Not in range: skip to the next sprite's Y coordinate.
+                m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+                m_spriteAddrL = 0;
+                if (m_spriteAddrH == 0)
+                {
+                    m_oamCopyDone = true;
+                }
+            }
+        }
+        else
+        {
+            // Eight sprites have been found: check for overflow and
+            // reproduce the hardware bug.
+            m_oamCopyBuffer = m_secondaryOam[m_secondaryOamAddress & 0x1F];
+
+            if (m_oamCopyDone)
+            {
+                m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+                m_spriteAddrL = 0;
+            }
+            else if (m_spriteInRange)
+            {
+                m_status |= 0x20;
+                m_spriteAddrL = m_spriteAddrL + 1;
+                if (m_spriteAddrL == 4)
+                {
+                    m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+                    m_spriteAddrL = 0;
+                }
+
+                if (m_overflowBugCounter == 0)
+                {
+                    m_overflowBugCounter = 3;
+                }
+                else if (m_overflowBugCounter > 0)
+                {
+                    --m_overflowBugCounter;
+                    if (m_overflowBugCounter == 0)
+                    {
+                        // After "fetching" the overflowed sprite the
+                        // evaluator realigns and only dummy reads remain.
+                        m_oamCopyDone = true;
+                        m_spriteAddrL = 0;
+                    }
+                }
+            }
+            else
+            {
+                // Sprite not on this scanline: the buggy increment steps
+                // both counters, scanning OAM diagonally.
+                m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+                m_spriteAddrL = (m_spriteAddrL + 1) & 0x03;
+                if (m_spriteAddrH == 0)
+                {
+                    m_oamCopyDone = true;
+                }
+            }
+        }
+    }
+
+    m_oamAddress = (m_spriteAddrL & 0x03) |
+                   (static_cast<std::uint8_t>(m_spriteAddrH) << 2);
+}
+
+void PPU::SpriteEvaluationStart()
+{
+    m_sprite0Added = false;
+    m_spriteInRange = false;
+    m_secondaryOamAddress = 0;
+    m_overflowBugCounter = 0;
+    m_oamCopyDone = false;
+    // Evaluation interprets whatever OAM byte OAMADDR selects as a sprite
+    // Y coordinate.
+    m_spriteAddrH = (m_oamAddress >> 2) & 0x3F;
+    m_spriteAddrL = m_oamAddress & 0x03;
+}
+
+void PPU::SpriteEvaluationEnd()
+{
+    m_sprite0Visible = m_sprite0Added;
+    // Add three to count a partially copied sprite: evaluation that
+    // wrapped past OAM can stop mid-sprite.
+    m_scanlineSpriteCount = static_cast<std::size_t>(
+        (m_secondaryOamAddress + 3) >> 2);
+}
+
+void PPU::LoadSpriteTileInfo()
+{
+    const std::size_t slot = m_spriteFetchIndex;
+    const std::uint8_t spriteY = m_secondaryOam[slot * 4];
+    const std::uint8_t tileIndex = m_secondaryOam[slot * 4 + 1];
+    const std::uint8_t attributes = m_secondaryOam[slot * 4 + 2];
+    const std::uint8_t spriteX = m_secondaryOam[slot * 4 + 3];
+
+    const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
+    bool loaded = false;
+    if (slot < m_scanlineSpriteCount && spriteY < 240 && m_scanline >= 0)
+    {
+        // The slot was fetched during scanline N for display on scanline
+        // N+1; the row inside the sprite is N - y.
+        std::uint16_t patternRow = m_scanline - spriteY;
+        if ((attributes & 0x80) != 0)
+        {
+            patternRow = spriteHeight - 1 - patternRow;
+        }
+
+        std::uint16_t tileAddress;
+        if (spriteHeight == 16)
+        {
+            const std::uint16_t spritePatternBase =
+                (tileIndex & 0x01) ? 0x1000 : 0x0000;
+            std::uint16_t tile = tileIndex & 0xFE;
+            if (patternRow >= 8)
+            {
+                ++tile;
+                patternRow -= 8;
+            }
+            tileAddress = spritePatternBase + tile * 16 + patternRow;
+        }
+        else
+        {
+            const std::uint16_t patternBase =
+                (m_control & 0x08) ? 0x1000 : 0x0000;
+            tileAddress = patternBase + tileIndex * 16 + patternRow;
+        }
+
+        ScanlineSprite& scanlineSprite = m_scanlineSprites[slot];
+        scanlineSprite.index = 0;
+        scanlineSprite.x = spriteX;
+        scanlineSprite.attributes = attributes;
+        scanlineSprite.lowPlane = PpuRead(tileAddress);
+        scanlineSprite.highPlane = PpuRead(tileAddress + 8);
+        loaded = true;
+    }
+
+    if (!loaded)
+    {
+        // Unused slots fetch the transparent tile $FF; the fetches are
+        // PPU-bus visible and matter for MMC3-style IRQ counters.
+        std::uint16_t garbageAddress;
+        if (spriteHeight == 16)
+        {
+            garbageAddress = 0x1000 + 0xFE * 16;
+        }
+        else
+        {
+            const std::uint16_t patternBase =
+                (m_control & 0x08) ? 0x1000 : 0x0000;
+            garbageAddress = patternBase + 0xFF * 16;
+        }
+        PpuRead(garbageAddress);
+        PpuRead(garbageAddress + 8);
+    }
+
+    ++m_spriteFetchIndex;
+}
+
 void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
 {
     if ((m_mask & 0x10) == 0 ||
@@ -398,9 +698,11 @@ void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
         return;
     }
 
-    for (std::size_t index = m_scanlineSpriteCount; index > 0; --index)
+    // The hardware multiplexer selects the first opaque sprite (lowest
+    // slot); only that sprite's pixel competes with the background.
+    for (std::size_t slot = 0; slot < m_scanlineSpriteCount; ++slot)
     {
-        const ScanlineSprite& sprite = m_scanlineSprites[index - 1];
+        const ScanlineSprite& sprite = m_scanlineSprites[slot];
         if (screenX < sprite.x || screenX >= sprite.x + 8)
         {
             continue;
@@ -418,18 +720,20 @@ void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
         }
 
         const std::size_t pixel = screenY * 256 + screenX;
-        if (sprite.index == 0 && m_backgroundOpaque[pixel] && screenX < 255)
+        if (slot == 0 && m_sprite0Visible &&
+            m_backgroundOpaque[pixel] && screenX < 255)
         {
             m_status |= 0x40;
         }
         if ((sprite.attributes & 0x20) != 0 && m_backgroundOpaque[pixel])
         {
-            continue;
+            return;
         }
 
         const std::uint16_t paletteAddress =
             0x3F10 + (sprite.attributes & 0x03) * 4 + color;
         m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
+        return;
     }
 }
 

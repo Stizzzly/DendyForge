@@ -71,6 +71,13 @@ private:
     void RenderSpritesScanline(std::uint16_t screenY);
     void EvaluateSpritesForScanline(std::uint16_t screenY);
     void FetchScanlineSprites(std::uint16_t screenY);
+    // Hardware sprite pipeline: per-dot secondary-OAM clear (dots 1-64),
+    // byte-wise evaluation with the overflow bug (dots 65-256) and the
+    // eight-dot sprite fetches (dots 257-320) on visible scanlines.
+    void ProcessSpriteEvaluation();
+    void SpriteEvaluationStart();
+    void SpriteEvaluationEnd();
+    void LoadSpriteTileInfo();
     void ClockBackgroundFetch();
     void PrimeBackgroundFetch();
     void FetchNametableByte();
@@ -104,6 +111,21 @@ private:
     BackgroundFetchState m_backgroundFetch{};
     std::array<ScanlineSprite, 8> m_scanlineSprites{};
     std::size_t m_scanlineSpriteCount{0};
+    // Secondary OAM (32 bytes) plus the evaluation state machine variables.
+    // The sprite address is split into H (OAM entry) and L (byte in entry),
+    // mirroring the hardware counters whose interplay produces the sprite
+    // overflow bug.
+    std::array<std::uint8_t, 32> m_secondaryOam{};
+    std::uint8_t m_oamCopyBuffer{0};
+    std::uint8_t m_secondaryOamAddress{0};
+    std::uint8_t m_spriteAddrH{0};
+    std::uint8_t m_spriteAddrL{0};
+    bool m_spriteInRange{false};
+    bool m_sprite0Added{false};
+    bool m_sprite0Visible{false};
+    bool m_oamCopyDone{false};
+    std::uint8_t m_overflowBugCounter{0};
+    std::uint8_t m_spriteFetchIndex{0};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};
