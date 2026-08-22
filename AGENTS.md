@@ -325,8 +325,9 @@ the counter is non-zero. `CPU6502` polls the interrupt lines at the
 penultimate cycle of an instruction (sampled as the final cycle begins,
 I flag masking IRQ at the poll) and services them through the seven-cycle
 entry sequencer; `Console::Clock()` reports the level-triggered APU IRQ
-line after the APU's end-of-cycle update. Remaining before marking channel
-Roadmap items complete: the manual Contra listening regression.
+line after the APU's end-of-cycle update. The manual Contra listening
+regression passed on 2026-08-22 with no metallic artifacts; the channel
+Roadmap items are green.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
@@ -383,7 +384,7 @@ timing-sensitive code.
 | --- | --- | --- |
 | Super Mario Bros. | Fully playable in the current build | Keep VBlank-only presentation; use as a scrolling PPU regression check. |
 | Pac-Man | Fully playable | Useful simple rendering/input regression. |
-| Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
+| Contra | Fully playable; sound audibly verified clean after the sequencer rework (2026-08-22) | Use to catch APU mixing, DMC and frontend-audio regressions. |
 | Jackal | Fully playable | Its early-NMI boot VBlank handshake now completes after the cycle-accurate CPU conversion; no game-specific workaround was added. |
 | Bomberman | Fully playable | Another simple-game rendering/input regression alongside Pac-Man (user-confirmed 2026-08-22). |
 | Mega Man | Fully playable | First MMC1 (mapper 1) regression (user-confirmed 2026-08-22). Use it to catch serial-register loading, CHR bank switching and live nametable-mirroring regressions; vertical corridors rely on one-screen mirroring. |
@@ -578,9 +579,9 @@ length, sample-buffer fetch, loop, IRQ and CPU stall. `$4015` enables/status,
 90 Hz + 440 Hz high-pass / 14 kHz low-pass filters are also present.
 
 The frame counter's CPU-cycle timing is validated by the full blargg suite
-(all eleven ROMs pass). Keep the four channel Roadmap entries yellow only
-until the manual Contra listening regression confirms no metallic artifacts;
-the Audio Mixer entry is green.
+(all eleven ROMs pass), and the manual Contra listening regression confirmed
+clean audio on 2026-08-22. All four channel Roadmap entries and the Audio
+Mixer entry are green.
 
 ### SDL3 audio contract
 
@@ -663,14 +664,13 @@ fails.
 ### Next APU implementation plan
 
 The frame-sequencer timing work is complete (all blargg timing ROMs pass,
-see the status section above). Remaining follow-up:
-
-1. Manually regression-test Contra and listen for the formerly metallic
-   artifacts; only then mark the channel Roadmap items in `README.md`.
-2. If audio artifacts appear, check the frame IRQ path first: the CPU
-   polls the interrupt lines at each instruction's penultimate cycle, and
-   the frame IRQ line uses `APU::FrameIrqLineLatencyCycles` (1) cycle of
-   latency after the `$4015`-visible flag's first set cycle.
+see the status section above) and the manual Contra listening regression
+passed on 2026-08-22 with no metallic artifacts. All APU Roadmap items in
+`README.md` are green; there is no scheduled follow-up work. If audio
+artifacts appear later, check the frame IRQ path first: the CPU
+polls the interrupt lines at each instruction's penultimate cycle, and
+the frame IRQ line uses `APU::FrameIrqLineLatencyCycles` (1) cycle of
+latency after the `$4015`-visible flag's first set cycle.
 
 ### Diagnostics and runner-writing rules
 
