@@ -588,12 +588,84 @@ void CPU6502::Clock()
             return;
         }
 
-        Fetch();
+        BeginInstruction();
+    }
+    else
+    {
+        StepInstruction();
+    }
 
-        const auto& instruction = GetInstructionConfig(m_opcode);
+    --m_cycles;
+}
 
-        m_cycles = instruction.cycles;
+CPU6502::ExecutionKind CPU6502::ClassifyExecution(
+    const Instruction& instruction) const
+{
+    const auto operate = instruction.operate;
 
+    const bool legacyOperate =
+        operate == &CPU6502::ASL || operate == &CPU6502::LSR ||
+        operate == &CPU6502::ROL || operate == &CPU6502::ROR ||
+        operate == &CPU6502::INC || operate == &CPU6502::DEC ||
+        operate == &CPU6502::SLO || operate == &CPU6502::RLA ||
+        operate == &CPU6502::SRE || operate == &CPU6502::RRA ||
+        operate == &CPU6502::DCP || operate == &CPU6502::ISB ||
+        operate == &CPU6502::PHA || operate == &CPU6502::PHP ||
+        operate == &CPU6502::PLA || operate == &CPU6502::PLP ||
+        operate == &CPU6502::JSR || operate == &CPU6502::RTS ||
+        operate == &CPU6502::RTI || operate == &CPU6502::BRK ||
+        operate == &CPU6502::BPL || operate == &CPU6502::BMI ||
+        operate == &CPU6502::BVC || operate == &CPU6502::BVS ||
+        operate == &CPU6502::BCC || operate == &CPU6502::BCS ||
+        operate == &CPU6502::BNE || operate == &CPU6502::BEQ;
+    if (legacyOperate)
+    {
+        // Read-modify-write, stack, subroutine and branch instructions keep
+        // the atomic execution model until their per-cycle forms land.
+        return ExecutionKind::Legacy;
+    }
+
+    if (operate == &CPU6502::JMP)
+    {
+        return instruction.addressMode == &CPU6502::IND
+                   ? ExecutionKind::JumpIndirect
+                   : ExecutionKind::JumpAbsolute;
+    }
+
+    if (operate == &CPU6502::STA || operate == &CPU6502::STX ||
+        operate == &CPU6502::STY || operate == &CPU6502::SAX)
+    {
+        return ExecutionKind::Write;
+    }
+
+    if (instruction.addressMode == &CPU6502::IMP)
+    {
+        return ExecutionKind::Implied;
+    }
+
+    return ExecutionKind::Read;
+}
+
+void CPU6502::BeginInstruction()
+{
+    Fetch();
+
+    m_currentInstruction = &GetInstructionConfig(m_opcode);
+    const auto& instruction = *m_currentInstruction;
+
+    m_executionKind = ClassifyExecution(instruction);
+    m_cycles = instruction.cycles;
+    m_stepCycle = 1;
+    m_operandReady = false;
+
+    if (m_executionKind == ExecutionKind::Implied)
+    {
+        // The implied mode used to publish the accumulator through
+        // m_fetched inside its address-mode function.
+        m_fetched = m_a;
+    }
+    else if (m_executionKind == ExecutionKind::Legacy)
+    {
         const std::uint8_t additionalAddressCycles =
             (this->*instruction.addressMode)();
         const std::uint8_t additionalOperationCycles =
@@ -601,8 +673,291 @@ void CPU6502::Clock()
 
         m_cycles += additionalAddressCycles & additionalOperationCycles;
     }
+}
 
-    --m_cycles;
+void CPU6502::RunOperate(const Instruction& instruction)
+{
+    (this->*instruction.operate)();
+}
+
+void CPU6502::StepInstruction()
+{
+    const auto& instruction = *m_currentInstruction;
+    const int cycle = m_stepCycle + 1;
+    m_stepCycle = cycle;
+
+    switch (m_executionKind)
+    {
+    case ExecutionKind::Legacy:
+        break;
+
+    case ExecutionKind::Implied:
+        // The extra cycle reads the next opcode address without
+        // consuming it.
+        Read(m_pc);
+        RunOperate(instruction);
+        break;
+
+    case ExecutionKind::Read:
+    case ExecutionKind::Write:
+        StepMemoryInstruction(instruction, cycle);
+        break;
+
+    case ExecutionKind::JumpAbsolute:
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            m_addrAbs = static_cast<std::uint16_t>(
+                Read(m_pc++) << 8 | (m_addrAbs & 0x00FF));
+            RunOperate(instruction);
+        }
+        break;
+
+    case ExecutionKind::JumpIndirect:
+        if (cycle == 2)
+        {
+            m_addrBase = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            m_addrBase = static_cast<std::uint16_t>(
+                Read(m_pc++) << 8 | m_addrBase);
+        }
+        else if (cycle == 4)
+        {
+            m_addrAbs = Read(m_addrBase);
+        }
+        else if (cycle == 5)
+        {
+            const std::uint16_t hiAddress =
+                (m_addrBase & 0x00FF) == 0x00FF ? m_addrBase & 0xFF00
+                                                : m_addrBase + 1;
+            m_addrAbs = static_cast<std::uint16_t>(
+                Read(hiAddress) << 8 | m_addrAbs);
+            RunOperate(instruction);
+        }
+        break;
+    }
+}
+
+void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
+{
+    const bool isWrite = m_executionKind == ExecutionKind::Write;
+    const auto mode = instruction.addressMode;
+
+    if (mode == &CPU6502::IMM)
+    {
+        if (cycle == 2)
+        {
+            m_fetched = Read(m_pc++);
+            m_operandReady = true;
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::ZP0)
+    {
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else
+        {
+            if (!isWrite)
+            {
+                m_fetched = Read(m_addrAbs);
+                m_operandReady = true;
+            }
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::ZPX || mode == &CPU6502::ZPY)
+    {
+        const std::uint8_t index = mode == &CPU6502::ZPX ? m_x : m_y;
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            // Dummy read at the unindexed base before the index is added.
+            Read(m_addrAbs);
+            m_addrAbs = static_cast<std::uint16_t>((m_addrAbs + index) & 0x00FF);
+        }
+        else
+        {
+            if (!isWrite)
+            {
+                m_fetched = Read(m_addrAbs);
+                m_operandReady = true;
+            }
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::ABS)
+    {
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            m_addrAbs = static_cast<std::uint16_t>(
+                Read(m_pc++) << 8 | m_addrAbs);
+        }
+        else
+        {
+            if (!isWrite)
+            {
+                m_fetched = Read(m_addrAbs);
+                m_operandReady = true;
+            }
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::ABX || mode == &CPU6502::ABY)
+    {
+        const std::uint8_t index = mode == &CPU6502::ABX ? m_x : m_y;
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            m_addrBase = static_cast<std::uint16_t>(Read(m_pc++) << 8 | m_addrAbs);
+            m_addrAbs = static_cast<std::uint16_t>(m_addrBase + index);
+        }
+        else if (cycle == 4)
+        {
+            // Every indexed access reads the address with an unfixed high
+            // byte; when the index carries into the high byte that read
+            // goes to the wrong page and the fixed address is read one
+            // cycle later.
+            const std::uint16_t unfixed = static_cast<std::uint16_t>(
+                (m_addrBase & 0xFF00) | (m_addrAbs & 0x00FF));
+            const bool crossed =
+                (m_addrAbs & 0xFF00) != (m_addrBase & 0xFF00);
+            if (isWrite)
+            {
+                Read(unfixed);
+            }
+            else
+            {
+                m_fetched = Read(unfixed);
+                m_operandReady = true;
+                if (crossed)
+                {
+                    ++m_cycles;
+                    return;
+                }
+            }
+            RunOperate(instruction);
+        }
+        else if (cycle == 5 && !isWrite)
+        {
+            // Page-cross refetch for read instructions; stores always write
+            // on their fixed cycle count.
+            m_fetched = Read(m_addrAbs);
+            m_operandReady = true;
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::IZX)
+    {
+        if (cycle == 2)
+        {
+            m_addrBase = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            Read(m_addrBase & 0x00FF);
+            m_addrBase = static_cast<std::uint16_t>(
+                (m_addrBase + m_x) & 0x00FF);
+        }
+        else if (cycle == 4)
+        {
+            m_addrAbs = Read(m_addrBase);
+        }
+        else if (cycle == 5)
+        {
+            m_addrAbs = static_cast<std::uint16_t>(
+                Read(static_cast<std::uint16_t>((m_addrBase + 1) & 0x00FF)) << 8 |
+                m_addrAbs);
+        }
+        else
+        {
+            if (!isWrite)
+            {
+                m_fetched = Read(m_addrAbs);
+                m_operandReady = true;
+            }
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (mode == &CPU6502::IZY)
+    {
+        if (cycle == 2)
+        {
+            m_addrBase = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            m_addrAbs = Read(m_addrBase & 0x00FF);
+        }
+        else if (cycle == 4)
+        {
+            m_addrAbs = static_cast<std::uint16_t>(
+                Read(static_cast<std::uint16_t>(m_addrBase + 1) & 0x00FF) << 8 |
+                m_addrAbs);
+            m_addrBase = m_addrAbs;
+            m_addrAbs = static_cast<std::uint16_t>(m_addrBase + m_y);
+        }
+        else if (cycle == 5)
+        {
+            const std::uint16_t unfixed = static_cast<std::uint16_t>(
+                (m_addrBase & 0xFF00) | (m_addrAbs & 0x00FF));
+            const bool crossed =
+                (m_addrAbs & 0xFF00) != (m_addrBase & 0xFF00);
+            if (isWrite)
+            {
+                Read(unfixed);
+            }
+            else
+            {
+                m_fetched = Read(unfixed);
+                m_operandReady = true;
+                if (crossed)
+                {
+                    ++m_cycles;
+                    return;
+                }
+            }
+            RunOperate(instruction);
+        }
+        else if (cycle == 6 && !isWrite)
+        {
+            // Page-cross refetch for read instructions; stores always write
+            // on their fixed cycle count.
+            m_fetched = Read(m_addrAbs);
+            m_operandReady = true;
+            RunOperate(instruction);
+        }
+        return;
+    }
 }
 
 void CPU6502::IRQ()
@@ -1612,7 +1967,11 @@ std::uint8_t CPU6502::Cycles() const
 
 std::uint8_t CPU6502::FetchData()
 {
-    if (GetInstructionConfig(m_opcode).addressMode != &CPU6502::IMP)
+    // Sequenced instructions deliver their operand through the addressing
+    // step that performs the data read; only legacy execution still reads
+    // the bus here.
+    if (!m_operandReady &&
+        GetInstructionConfig(m_opcode).addressMode != &CPU6502::IMP)
     {
         m_fetched = Read(m_addrAbs);
     }

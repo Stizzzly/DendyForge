@@ -728,10 +728,12 @@ void APU::ClockFrameCounter()
         !m_frameIrqInhibit)
     {
         m_frameIrqFlag = true;
-        // The frame IRQ line reaches the CPU several cycles after the flag
-        // becomes readable through $4015; this delay models that latency
-        // against the instruction-boundary interrupt poll (blargg
-        // 08.irq_timing vs 07.irq_flag_timing).
+       // The frame IRQ line reaches the CPU after the flag becomes readable
+        // through $4015; this delay models that latency against the
+        // instruction-boundary interrupt poll (blargg 07.irq_flag_timing).
+        // Sequenced per-cycle reads shifted the effective poll point; 08
+        // now needs the in-CPU poll timing planned for the cycle-accurate
+        // CPU Phase 5.
         m_frameIrqLineCountdown = FrameIrqLineLatencyCycles;
     }
 

@@ -180,6 +180,26 @@ private:
     std::uint8_t Fetch();
     std::uint8_t FetchData();
 
+    // Per-cycle execution (cycle-accurate CPU work, Phase 2 of
+    // CPU_CYCLE_ACCURACY_PLAN.md). Most instruction classes perform one bus
+    // transaction per cycle, including the hardware dummy reads; classes
+    // not yet converted keep the legacy atomic execution.
+    enum class ExecutionKind
+    {
+        Legacy,        // executed atomically on the opcode-fetch cycle
+        Implied,       // dummy read at PC, then operate
+        Read,          // read-type instruction with sequenced addressing
+        Write,         // store-type instruction with sequenced addressing
+        JumpAbsolute,  // JMP $nnnn
+        JumpIndirect   // JMP ($nnnn) with page wrap
+    };
+
+    ExecutionKind ClassifyExecution(const Instruction& instruction) const;
+    void BeginInstruction();
+    void StepInstruction();
+    void StepMemoryInstruction(const Instruction& instruction, int cycle);
+    void RunOperate(const Instruction& instruction);
+
     // Stack operations
     void Push(std::uint8_t data);
     std::uint8_t Pop();
@@ -201,6 +221,13 @@ private:
     std::uint8_t m_fetched{0};
 
     std::uint8_t m_cycles{0};
+
+    // Per-cycle execution state
+    ExecutionKind m_executionKind{ExecutionKind::Legacy};
+    const Instruction* m_currentInstruction{nullptr};
+    int m_stepCycle{0};
+    bool m_operandReady{false};
+    std::uint16_t m_addrBase{0};
 
     // Hardware polls interrupt lines at an instruction boundary, so a
     // signalled interrupt must not cut into the cycle burn of the current

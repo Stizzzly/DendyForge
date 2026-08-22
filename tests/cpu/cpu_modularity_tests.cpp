@@ -100,9 +100,20 @@ TEST_CASE("CPU6502 applies page-crossing and branch cycle penalties")
     CompleteInstruction(cpu);
 
     CompleteInstruction(cpu);
+
+    // Per-cycle execution recognizes the page-cross penalty only when the
+    // indexed address is formed, so a mid-instruction Cycles() probe no
+    // longer sees the penalty up front. Validate the contract instead:
+    // the completed instruction takes four base cycles plus one.
+    int clocks = 0;
     cpu.Clock();
-    CHECK(cpu.Cycles() == 4);
-    CompleteInstruction(cpu);
+    ++clocks;
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+        ++clocks;
+    }
+    CHECK(clocks == 5);
     CHECK(cpu.Accumulator() == 0x5A);
 }
 

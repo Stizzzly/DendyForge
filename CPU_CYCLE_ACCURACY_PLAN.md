@@ -1,13 +1,17 @@
 # CPU6502 Cycle-Accuracy Plan
 
-Status: **in execution. Phase 1 complete (2026-08-22): the nestest
-golden-trace regression is committed as
-`tests/cpu/nestest_trace_tests.cpp` and the current instruction-timed core
-passes all 8991 lines plus the automation result registers.** Phase 2 is
-next. This document is the full implementation plan for converting
-`CPU6502` from instruction-timed to cycle-accurate execution. Nothing else
-in this file describes shipped behavior; `AGENTS.md` remains the
-authoritative status document.
+Status: **in execution. Phase 1 complete (nestest golden-trace regression
+committed and passing). Phase 2 complete (2026-08-22): read-type,
+write-type, implied, immediate and both JMP classes execute per cycle with
+hardware dummy reads; RMW/stack/branches/interrupt entry remain legacy
+atomic until Phases 3-5.** Known follow-ups carried into later phases:
+blargg `08.irq_timing` regressed to code 3 because sequenced reads moved
+the effective interrupt poll point — no `FrameIrqLineLatencyCycles` value
+satisfies both loop phases, so fixing it is the first Phase 5 task; and
+Release speed dipped from ~2.8x to ~2.4x realtime, to be recovered in
+Phase 6. This document is the full implementation plan for converting
+`CPU6502` from instruction-timed to cycle-accurate execution; `AGENTS.md`
+remains the authoritative status document.
 
 ## Why
 
@@ -166,6 +170,10 @@ and without page cross, `STA abs,X`, `LDA (zp),Y` crossing, implied
 (`INC A`-style dummy read at PC), `LDA zp,X` dummy read.
 
 **Gate:** all existing tests + nestest trace pass unchanged totals.
+*Implemented note:* the zero-page-indexed and (zp,X) dummy reads go to the
+**unindexed** base/pointer address (hardware behavior; the table above
+said the indexed address — the code and `tests/cpu/cpu_bus_cycle_tests.cpp`
+assert the unindexed form).
 
 ### Phase 3 — RMW and stack instructions cycle-exact
 

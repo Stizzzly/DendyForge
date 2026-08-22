@@ -118,9 +118,18 @@ instruction-level cycle accounting, page-cross penalties, branch timing,
 interrupt handling, decimal-mode configuration, and the JMP indirect wrapping
 behavior are covered by tests. The `nestest` golden-trace regression is
 committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
-bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`. The
-core is intentionally instruction-timed, not yet a micro-operation/
-cycle-accurate CPU implementation.
+bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`.
+
+The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) has landed
+its Phase 2: read-type, write-type, immediate, implied and both JMP classes
+execute one bus transaction per cycle with the hardware dummy reads
+(zp,X/(zp,X) read the unindexed base; abs,X/abs,Y/(zp),Y read the unfixed
+address when crossing). Exact sequences are pinned by
+`tests/cpu/cpu_bus_cycle_tests.cpp`. Read-modify-write, stack, subroutine,
+branch and interrupt-entry classes still execute atomically until Phases
+3-5; their cycle totals are unchanged. Because the PC now advances within
+an instruction, the blargg timing runner detects the final loop as a short
+periodic PC sequence instead of a constant PC.
 
 The **next major CPU work** — converting the core to cycle-accurate,
 per-cycle bus-transaction execution — is planned and approved but not
@@ -588,9 +597,14 @@ cmake --build --preset mingw-clang-release --target DendyForgeApuTimingRunner
 & .\out\build\mingw-clang-release\DendyForgeApuTimingRunner.exe .\blargg_apu_2005.07.30
 ```
 
-The current baseline (2026-08-22, after the frame-sequencer rework): all
-eleven ROMs report code 1 (pass). Before the rework, `04`-`08`, `10` and
-`11` failed with the codes recorded in git history.
+The current baseline (2026-08-22, after CPU Phase 2): ten of eleven ROMs
+report code 1 (pass). `08.irq_timing` fails with code 3: the per-cycle CPU
+moved the effective interrupt poll point and no
+`APU::FrameIrqLineLatencyCycles` value (now 2) satisfies both loop phases
+of that test — restoring it is the first task of the cycle-accurate CPU
+Phase 5, which owns interrupt poll timing. Before the frame-sequencer
+rework, `04`-`08`, `10` and `11` failed with the codes recorded in git
+history.
 
 The suite's own `tests.txt` declares dependencies between tests. Therefore
 later isolated passes do not prove full conformance once an earlier timing test

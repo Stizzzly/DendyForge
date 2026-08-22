@@ -42,6 +42,7 @@ add_executable(DendyForgeTests
     tests/test_main.cpp
     tests/cpu/cpu_tests.cpp
     tests/cpu/cpu_modularity_tests.cpp
+    tests/cpu/cpu_bus_cycle_tests.cpp
     tests/cpu/nestest_trace_tests.cpp
     tests/bus/bus_tests.cpp
     tests/ppu/ppu_tests.cpp
