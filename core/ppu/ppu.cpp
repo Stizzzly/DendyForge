@@ -107,6 +107,13 @@ void PPU::Clock()
                     m_scanlineSpriteCount = 0;
                 }
             }
+            // MMC3-style scanline counters are clocked by the first
+            // sprite garbage nametable fetch of the scanline.
+            if (m_cycle == 257 && m_cartridge)
+            {
+                m_cartridge->PpuScanlineClock();
+            }
+
             switch ((m_cycle - 257) & 0x07)
             {
             case 0:

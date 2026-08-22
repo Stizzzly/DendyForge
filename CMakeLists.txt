@@ -28,6 +28,7 @@ add_library(DendyForgeCore
     core/mapper/mapper1.cpp
     core/mapper/mapper2.cpp
     core/mapper/mapper3.cpp
+    core/mapper/mapper4.cpp
     core/bus/bus.cpp
     core/console/console.cpp
     core/controller/controller.cpp
@@ -57,6 +58,7 @@ add_executable(DendyForgeTests
     tests/mapper/mapper1_tests.cpp
     tests/zapper/zapper_tests.cpp
     tests/mapper/mapper3_tests.cpp
+    tests/mapper/mapper4_tests.cpp
 )
 
 target_link_libraries(DendyForgeTests PRIVATE DendyForgeCore)

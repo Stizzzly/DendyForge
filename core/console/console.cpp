@@ -50,8 +50,10 @@ void Console::Clock()
 
     // The IRQ line is level-triggered: report its state every cycle so a
     // dropped line clears any stale latch taken while I was clear (blargg
-    // 08.irq_timing).
-    m_cpu.IRQ(m_bus.AudioProcessor().IrqPending());
+    // 08.irq_timing). Cartridge IRQs (MMC3 scanline counter) share the
+    // line.
+    m_cpu.IRQ(m_bus.AudioProcessor().IrqPending() ||
+              m_bus.CartridgeIrqPending());
 
     // One CPU cycle spans three PPU dots and the /NMI line is sampled
     // once per CPU cycle at phi2, between the second and third dot. A

@@ -36,6 +36,13 @@ public:
     // this; the default keeps the arrangement from the iNES header.
     virtual Mirroring MirroringMode(Mirroring headerMirroring) const;
 
+    // Mappers with a scanline IRQ counter (MMC3) are clocked once per
+    // rendering scanline by the PPU sprite-fetch phase.
+    virtual void PpuScanlineClock();
+    // The mapper's request for a CPU IRQ line (level; MMC3 until
+    // acknowledged).
+    virtual bool IrqPending() const;
+
 protected:
     std::uint8_t m_prgBanks;
     std::uint8_t m_chrBanks;

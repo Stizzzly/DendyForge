@@ -39,6 +39,11 @@ Zapper& Bus::SecondaryZapper()
     return m_zapper;
 }
 
+bool Bus::CartridgeIrqPending() const
+{
+    return m_cartridge && m_cartridge->IrqPending();
+}
+
 std::uint8_t Bus::CpuRead(std::uint16_t address)
 {
     // Built-in ranges below $6000 can never be claimed by a cartridge

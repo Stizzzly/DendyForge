@@ -28,6 +28,11 @@ public:
     // mapper switches it at runtime (MMC1).
     Mirroring CurrentMirroring() const;
 
+    // Scanline IRQ counter support (MMC3): the PPU clocks this during
+    // the sprite-fetch phase of rendering scanlines.
+    void PpuScanlineClock();
+    bool IrqPending() const;
+
     bool CpuRead(std::uint16_t address, std::uint8_t& data);
     bool CpuWrite(std::uint16_t address, std::uint8_t data);
 

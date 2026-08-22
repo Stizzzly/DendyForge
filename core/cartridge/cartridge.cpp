@@ -3,6 +3,7 @@
 #include "../mapper/mapper1.hpp"
 #include "../mapper/mapper2.hpp"
 #include "../mapper/mapper3.hpp"
+#include "../mapper/mapper4.hpp"
 
 #include <utility>
 #include <stdexcept>
@@ -46,6 +47,12 @@ Cartridge::Cartridge(
             CHRRomBanks());
         break;
 
+    case 4:
+        m_mapper = std::make_unique<Mapper4>(
+            PRGRomBanks(),
+            CHRRomBanks());
+        break;
+
     default:
         throw std::runtime_error("Unsupported mapper");
     }
@@ -64,6 +71,16 @@ const CartridgeInfo& Cartridge::Info() const
 Mirroring Cartridge::CurrentMirroring() const
 {
     return m_mapper->MirroringMode(m_info.MirroringMode());
+}
+
+void Cartridge::PpuScanlineClock()
+{
+    m_mapper->PpuScanlineClock();
+}
+
+bool Cartridge::IrqPending() const
+{
+    return m_mapper->IrqPending();
 }
 
 const std::vector<std::uint8_t>& Cartridge::PRGRom() const

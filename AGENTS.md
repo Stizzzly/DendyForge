@@ -160,7 +160,8 @@ Important CPU rules:
 
 ## Cartridge, mapper, and bus status
 
-Mapper 0, Mapper 1 (MMC1) and Mapper 2 (UxROM/UNROM) are implemented. Mapper 0
+Mapper 0, Mapper 1 (MMC1), Mapper 2 (UxROM/UNROM), Mapper 3 (CNROM) and
+Mapper 4 (MMC3) are implemented. Mapper 0
 maps 16 KiB or 32 KiB PRG. Mapper 1 implements the five-write serial port
 (first written bit becomes register bit 0), PRG modes 0-3, 4/8 KiB CHR bank
 modes, the bit-7 reset write (PRG mode forced to 3), bank wrap by masking to
@@ -511,6 +512,28 @@ PPU on every nametable access; mappers without switchable mirroring forward
 the iNES header value. Known MMC1 simplifications, acceptable until a test
 ROM demands them: the ~2-cycle write-ignore window after a register load and
 the `$E000` WRAM write-protect bit are not implemented.
+
+Mapper 4 (MMC3) contract, implemented in `core/mapper/mapper4.cpp`:
+
+```text
+$8000/$8001   bank select (R0-R7, PRG mode bit 6, CHR mode bit 7) / bank data
+$A000         nametable arrangement: bit 0 set = vertical
+$C000/$C001   IRQ latch / reload request
+$E000/$E001   IRQ disable + acknowledge / enable
+PRG           R6/R7 8 KiB switchable, last two 8 KiB fixed (mode-ordered)
+CHR           R0/R1 2 KiB + R2-R5 1 KiB, layout chosen by the CHR mode bit
+IRQ           clocked once per rendering scanline at PPU dot 257 by the
+              sprite garbage nametable fetch; level line ORed with the APU
+              IRQ in Console::Clock (Cartridge::IrqPending)
+```
+
+Known MMC3 simplifications: the IRQ uses the one-clock-per-scanline model
+of the A12 rises rather than a cycle-true A12 edge filter, the WRAM
+protect register and the read-based IRQ acknowledge are not implemented,
+and $8000/$8001 write races are ignored. Unit coverage is
+`tests/mapper/mapper4_tests.cpp` (both PRG/CHR modes, wrap, mirroring,
+IRQ latch/reload/disable/re-enable); no MMC3 game regression has been run
+yet.
 
 Do not special-case Jackal by filename. First inspect its iNES header and
 confirm the mapper/board, then implement the missing general hardware with

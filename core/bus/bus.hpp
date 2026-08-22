@@ -33,6 +33,7 @@ public:
     APU& AudioProcessor();
     Controller& PrimaryController();
     Zapper& SecondaryZapper();
+    bool CartridgeIrqPending() const;
 
 private:
     Cartridge* m_cartridge{nullptr};
