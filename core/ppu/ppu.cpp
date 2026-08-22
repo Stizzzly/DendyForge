@@ -104,6 +104,12 @@ void PPU::Clock()
                 break;
             }
         }
+
+        if (m_cycle == 337 || m_cycle == 339)
+        {
+            // The two dummy nametable fetches that end the scanline.
+            PpuRead(0x2000 | (m_vramAddress & 0x0FFF));
+        }
     }
 
     // Secondary OAM clear and sprite evaluation run on visible scanlines
@@ -753,10 +759,10 @@ bool PPU::ConsumeFrameComplete()
 
 std::uint8_t PPU::CpuRead(std::uint16_t address)
 {
+    std::uint8_t data = m_openBusLatch;
     switch (address & 0x0007)
     {
     case 0x0002:
-    {
         // Race window: a read landing one dot before the VBlank flag-set
         // dot returns 0 and suppresses both the flag and the NMI for this
         // frame. The set dot is scanline 241, cycle 1, and CPU accesses
@@ -765,38 +771,46 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
         {
             m_suppressVblank = true;
         }
-        const std::uint8_t data = (m_status & 0xE0) | (m_dataBuffer & 0x1F);
+        data = (m_status & 0xE0) | (m_openBusLatch & 0x1F);
         m_status &= ~0x80;
         m_nmiPending = false;
         m_writeLatch = false;
         UpdateNmiOutput();
-        return data;
-    }
+        break;
     case 0x0004:
-        return m_oam[m_oamAddress];
+        data = m_oam[m_oamAddress];
+        break;
     case 0x0007:
     {
-        const std::uint16_t address = m_vramAddress;
-        const std::uint8_t value = PpuRead(address);
+        const std::uint16_t vramAddress = m_vramAddress;
+        const std::uint8_t value = PpuRead(vramAddress);
         IncrementVramAddress();
 
-        if (address >= 0x3F00)
+        if (vramAddress >= 0x3F00)
         {
-            m_dataBuffer = PpuRead(address - 0x1000);
-            return value;
+            m_dataBuffer = PpuRead(vramAddress - 0x1000);
+            data = value;
         }
-
-        const std::uint8_t data = m_dataBuffer;
-        m_dataBuffer = value;
-        return data;
+        else
+        {
+            data = m_dataBuffer;
+            m_dataBuffer = value;
+        }
+        break;
     }
     default:
-        return 0;
+        // Write-only registers leave the open-bus latch on the CPU bus.
+        break;
     }
+
+    m_openBusLatch = data;
+    return data;
 }
 
 void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
 {
+    m_openBusLatch = data;
+
     switch (address & 0x0007)
     {
     case 0x0000:

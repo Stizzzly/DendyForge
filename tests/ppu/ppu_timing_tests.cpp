@@ -219,3 +219,27 @@ TEST_CASE("A behind-background sprite hides later sprites at the same pixel")
 
     CHECK(withShadows.FrameBuffer()[256] == backgroundOnly.FrameBuffer()[256]);
 }
+
+TEST_CASE("PPU register accesses share one open-bus latch")
+{
+    dendyforge::PPU ppu;
+
+    // A write drives the value onto the bus; $2002 echoes its low bits.
+    ppu.CpuWrite(0x2001, 0x2B);
+    CHECK((ppu.CpuRead(0x2002) & 0x1F) == 0x0B);
+
+    // Reading a write-only register returns the latch unchanged.
+    CHECK(ppu.CpuRead(0x2000) == 0x0B);
+    CHECK(ppu.CpuRead(0x2005) == 0x0B);
+
+    // A $2007 palette read drives the palette value onto the bus.
+    ppu.PpuWrite(0x3F00, 0x1F);
+    ppu.CpuWrite(0x2006, 0x3F);
+    ppu.CpuWrite(0x2006, 0x00);
+    CHECK(ppu.CpuRead(0x2007) == 0x1F);
+    CHECK(ppu.CpuRead(0x2000) == 0x1F);
+
+    // A $2002 read itself latches the returned status byte.
+    const std::uint8_t status = ppu.CpuRead(0x2002);
+    CHECK(ppu.CpuRead(0x2000) == status);
+}

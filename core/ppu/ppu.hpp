@@ -132,6 +132,9 @@ private:
     std::uint8_t m_status{0};
     std::uint8_t m_oamAddress{0};
     std::uint8_t m_dataBuffer{0};
+    // PPU open-bus latch: holds the last value driven onto the CPU data
+    // bus by any $2000-$2007 read or write. Decay is not modeled.
+    std::uint8_t m_openBusLatch{0};
     // The PPU scrolling registers conventionally call these v, t, and x.
     // CPU register writes prepare t and x; only a completed $2006 write
     // copies t into v. The renderer will progressively take ownership of v.
