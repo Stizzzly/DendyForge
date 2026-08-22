@@ -27,6 +27,7 @@ add_library(DendyForgeCore
     core/mapper/mapper0.cpp
     core/mapper/mapper1.cpp
     core/mapper/mapper2.cpp
+    core/mapper/mapper3.cpp
     core/bus/bus.cpp
     core/console/console.cpp
     core/controller/controller.cpp
@@ -53,6 +54,7 @@ add_executable(DendyForgeTests
     tests/controller/controller_tests.cpp
     tests/cartridge/cartridge_tests.cpp
     tests/mapper/mapper1_tests.cpp
+    tests/mapper/mapper3_tests.cpp
 )
 
 target_link_libraries(DendyForgeTests PRIVATE DendyForgeCore)
@@ -90,6 +92,14 @@ add_executable(DendyForgeApuTimingRunner
 )
 
 target_link_libraries(DendyForgeApuTimingRunner PRIVATE
+    DendyForgeCore
+)
+
+add_executable(DendyForgePpuRunner
+    tools/ppu_runner.cpp
+)
+
+target_link_libraries(DendyForgePpuRunner PRIVATE
     DendyForgeCore
 )
 
