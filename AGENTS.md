@@ -349,7 +349,7 @@ timing-sensitive code.
 | Super Mario Bros. | Fully playable in the current build | Keep VBlank-only presentation; use as a scrolling PPU regression check. |
 | Pac-Man | Fully playable | Useful simple rendering/input regression. |
 | Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
-| Jackal | Does not work | Do not claim Mapper 2 alone solves it; diagnose board/mapper requirements from its header and documented hardware. |
+| Jackal | Does not work | Root cause diagnosed 2026-08-22, see "Jackal root-cause diagnosis" below. Not a mapper problem; fixed by the cycle-accurate CPU work. |
 
 `README.md` must preserve these distinctions. In particular, it is valid to
 describe a game as practically playable while PPU/APU items remain yellow.
@@ -443,6 +443,38 @@ confirm the mapper/board, then implement the missing general hardware with
 small mapping tests. Possible future cartridge work includes trainer handling,
 NES 2.0 metadata, battery-backed PRG-RAM persistence and further mappers; none
 should be implied by the current Mapper 0/2 support.
+
+#### Jackal root-cause diagnosis (2026-08-22)
+
+`Jackal (USA).nes`: iNES mapper 2 (UxROM), 128 KiB PRG, 8 KiB CHR RAM,
+vertical mirroring. Loading and Mapper 2 work; the failure is not cartridge
+hardware. Instrumented findings (temporary probes, since reverted):
+
+* The CPU boots, the reset code at $C23D runs, deliberately re-enters the
+  reset path once from `JSR $C369` (warm-boot signature at $07F0-$07FF), and
+  then hangs forever in the boot VBlank handshake at $D0E0
+  (`LDA $2002 / BPL $D0E0`). Rendering stays disabled, the screen is a solid
+  backdrop color, and only banks 0 and 1 are ever selected.
+* Measured over 2.5 M cycles (84 frames): exactly 84 reads of `$2002`
+  returned bit 7 set — one per frame, all from the NMI handler's opening
+  `LDA $2002` at $C298. The main thread's polling loop never once observed
+  the flag.
+* Mechanism: Jackal enables NMI early. When the VBlank flag sets, the NMI
+  preempts the polling loop, and the handler clears the flag about 16 cycles
+  later. Because the current `CPU6502` executes instructions atomically and
+  performs bus reads on the FIRST cycle of an instruction, an in-flight
+  `LDA $2002` cannot observe a flag that sets mid-instruction, and the
+  deterministic frame lock means the poller's phase never lands inside the
+  visibility window. On hardware the read happens on the instruction's final
+  cycle and interrupt polling occurs at the instruction boundary, so the
+  in-flight read wins the race and `BPL` falls through after `RTI`.
+* Games that enable NMI only after their boot-time VBlank polling (Super
+  Mario Bros., Contra) do not hit this race, which is why they work.
+
+The fix is the cycle-accurate CPU (per-cycle bus transactions on their
+hardware cycles plus boundary interrupt polling) already planned in
+`CPU_CYCLE_ACCURACY_PLAN.md`, Phase 2/Phase 5. Do not add a Jackal-specific
+workaround.
 
 ### PPU precise handoff point
 
