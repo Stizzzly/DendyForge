@@ -1,11 +1,13 @@
 # CPU6502 Cycle-Accuracy Plan
 
-Status: **approved 2026-08-22, not started.** This document is the full
-implementation plan for converting `CPU6502` from instruction-timed to
-cycle-accurate execution. A future session should be able to execute it
-without repeating the investigation recorded here. Nothing in this file
-describes shipped behavior; `AGENTS.md` remains the authoritative status
-document.
+Status: **in execution. Phase 1 complete (2026-08-22): the nestest
+golden-trace regression is committed as
+`tests/cpu/nestest_trace_tests.cpp` and the current instruction-timed core
+passes all 8991 lines plus the automation result registers.** Phase 2 is
+next. This document is the full implementation plan for converting
+`CPU6502` from instruction-timed to cycle-accurate execution. Nothing else
+in this file describes shipped behavior; `AGENTS.md` remains the
+authoritative status document.
 
 ## Why
 

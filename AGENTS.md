@@ -116,9 +116,11 @@ cartridge from `Bus::InsertCartridge()`.
 The CPU has all 56 official mnemonics and all 151 official opcodes. Its normal
 instruction-level cycle accounting, page-cross penalties, branch timing,
 interrupt handling, decimal-mode configuration, and the JMP indirect wrapping
-behavior are covered by tests. The local `nestest` trace test has passed for
-PC, registers, and cycle count. It is intentionally instruction-timed, not
-yet a micro-operation/cycle-accurate CPU implementation.
+behavior are covered by tests. The `nestest` golden-trace regression is
+committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
+bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`. The
+core is intentionally instruction-timed, not yet a micro-operation/
+cycle-accurate CPU implementation.
 
 The **next major CPU work** — converting the core to cycle-accurate,
 per-cycle bus-transaction execution — is planned and approved but not
