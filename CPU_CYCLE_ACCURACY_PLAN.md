@@ -1,6 +1,6 @@
 # CPU6502 Cycle-Accuracy Plan
 
-Status: **in execution. Phase 1 complete (nestest golden-trace regression
+Status: **complete (2026-08-22). Phase 1 complete (nestest golden-trace regression
 committed and passing). Phase 2 complete (2026-08-22): read-type,
 write-type, immediate, implied and both JMP classes execute per cycle with
 hardware dummy reads. Phase 3 complete (2026-08-22): read-modify-write,
@@ -18,11 +18,15 @@ masking IRQ at the poll, IRQ became level-triggered through
 (`FrameIrqLineLatencyCycles = 1`, armed only on the flag's first set
 cycle, decremented before the sequencer update) brought the blargg suite
 back to 11/11 — including the previously regressed `08.irq_timing`.**
-Known follow-ups carried into Phase 6: Release speed dipped from ~2.8x to
-~2.4x realtime, to be recovered in Phase 6. This document is the full
-implementation plan for converting `CPU6502` from instruction-timed to
-cycle-accurate execution; `AGENTS.md` remains the authoritative status
-document.
+Phase 6 complete (2026-08-22): the final regression suite passed (CTest,
+nestest trace, `apu_mixer` 4/4 and blargg APU timing 11/11); user gameplay
+regression confirmed Super Mario Bros., Pac-Man, Contra and Jackal. Release
+performance was recovered by caching CPU address-mode dispatch and avoiding
+cartridge virtual calls on built-in bus ranges: the standard 20 M-cycle
+Mapper 0 `nestest.nes` benchmark measured 11,944,313 console clocks/s
+(6.67x realtime).** This document is the full implementation plan for
+converting `CPU6502` from instruction-timed to cycle-accurate execution;
+`AGENTS.md` remains the authoritative status document.
 
 ## Why
 
@@ -244,18 +248,19 @@ trace.
 
 ### Phase 6 — Final regression, performance, documentation
 
-* Full `ctest`, nestest trace, both ROM runners.
-* Performance benchmark, Release preset: the standard measurement is a
-  scratch program clocking 20 M console cycles against a mapper-0 ROM;
-  the current baseline is ~2.8x realtime. The state machine must not be
-  slower; if it is, optimize the dispatch (per-class switch, avoid
-  function-pointer indirection in hot paths) before merging the phase
-  that regressed it.
-* Manual gameplay regression by the user: Super Mario Bros, Pac-Man,
-  Contra (timing changes around `$2002`/`$2007` access cycles can shift
-  behavior, usually toward correctness).
-* Update `AGENTS.md` CPU status section and this file's Status line;
-  update `README.md` claims only where genuinely verified.
+Completed 2026-08-22:
+
+* Debug and Release `ctest` passed, including the committed nestest golden
+  trace; the `apu_mixer` runner passed 4/4 and the blargg APU timing runner
+  passed 11/11.
+* The Release 20 M-console-cycle Mapper 0 `nestest.nes` benchmark measured
+  11,944,313 clocks/s (6.67x realtime), above the 2.8x pre-conversion
+  baseline. CPU dispatch now caches the address-mode kind and the bus skips
+  the cartridge virtual call for built-in RAM/register ranges.
+* User gameplay regression confirmed Super Mario Bros., Pac-Man, Contra and
+  Jackal. Jackal's boot VBlank handshake now completes without a game-specific
+  workaround.
+* `AGENTS.md`, this Status line and `README.md` reflect the verified result.
 
 ## Explicit non-goals for this effort
 

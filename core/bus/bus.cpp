@@ -36,26 +36,17 @@ Controller& Bus::PrimaryController()
 
 std::uint8_t Bus::CpuRead(std::uint16_t address)
 {
-    std::uint8_t data = 0x00;
-
-    // $4020-$FFFF
-    // Cartridge space
-    if (m_cartridge &&
-        m_cartridge->CpuRead(address, data))
-    {
-        return data;
-    }
-
-    // $0000-$1FFF
-    // 2 KB internal RAM (mirrored every $800 bytes)
+    // Built-in ranges below $6000 can never be claimed by a cartridge
+    // (Mapper 0/2 decode only $6000-$FFFF), so answer them directly and
+    // skip the virtual cartridge call on the hot RAM/register paths.
+    // $0000-$1FFF: 2 KB internal RAM (mirrored every $800 bytes)
     if (address <= 0x1FFF)
     {
         return m_cpuRam[address & 0x07FF];
     }
 
-    // $2000-$3FFF
-    // PPU registers (mirrored every 8 bytes)
-    if (address >= 0x2000 && address <= 0x3FFF)
+    // $2000-$3FFF: PPU registers (mirrored every 8 bytes)
+    if (address <= 0x3FFF)
     {
         return m_ppu.CpuRead(address);
     }
@@ -70,8 +61,14 @@ std::uint8_t Bus::CpuRead(std::uint16_t address)
         return m_apu.CpuRead(address);
     }
 
-    // $4000-$4017
-    // APU + Controllers (TODO)
+    // $4020-$FFFF (and the unclaimed $4018-$401F/$4020-$5FFF open bus
+    // when no cartridge decodes them): cartridge space.
+    std::uint8_t data = 0x00;
+    if (m_cartridge &&
+        m_cartridge->CpuRead(address, data))
+    {
+        return data;
+    }
 
     return data;
 }
@@ -80,25 +77,17 @@ void Bus::CpuWrite(
     std::uint16_t address,
     std::uint8_t data)
 {
-    // $4020-$FFFF
-    // Cartridge space
-    if (m_cartridge &&
-        m_cartridge->CpuWrite(address, data))
-    {
-        return;
-    }
-
-    // $0000-$1FFF
-    // 2 KB internal RAM (mirrored every $800 bytes)
+    // Same ordering as CpuRead: built-in ranges first, cartridge space
+    // ($6000-$FFFF for the implemented mappers) last.
+    // $0000-$1FFF: 2 KB internal RAM (mirrored every $800 bytes)
     if (address <= 0x1FFF)
     {
         m_cpuRam[address & 0x07FF] = data;
         return;
     }
 
-    // $2000-$3FFF
-    // PPU registers (mirrored every 8 bytes)
-    if (address >= 0x2000 && address <= 0x3FFF)
+    // $2000-$3FFF: PPU registers (mirrored every 8 bytes)
+    if (address <= 0x3FFF)
     {
         m_ppu.CpuWrite(address, data);
         return;
@@ -123,14 +112,17 @@ void Bus::CpuWrite(
         return;
     }
 
-    if (address >= 0x4000 && address <= 0x4017)
+    if (address <= 0x4017)
     {
         m_apu.CpuWrite(address, data);
         return;
     }
 
-    // $4000-$4017
-    // APU + Controllers (TODO)
+    if (m_cartridge &&
+        m_cartridge->CpuWrite(address, data))
+    {
+        return;
+    }
 }
 
 void Bus::ClockPpu()

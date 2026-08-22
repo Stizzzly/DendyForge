@@ -213,6 +213,25 @@ private:
     void StepDataPhase(const Instruction& instruction, int cycle, int dataCycle);
     void RunOperate(const Instruction& instruction);
 
+    // Cached addressing-mode classification so the per-cycle sequencer
+    // dispatches on a dense enum instead of comparing member-function
+    // pointers every cycle (Phase 6 performance work).
+    enum class AddressModeKind
+    {
+        IMM,
+        ZP0,
+        ZPX,
+        ZPY,
+        ABS,
+        ABX,
+        ABY,
+        IZX,
+        IZY
+    };
+
+    static AddressModeKind ClassifyAddressMode(
+        const Instruction& instruction);
+
     // Seven-cycle hardware sequences (Phase 5): interrupt entry and reset
     // run their bus transactions on their hardware cycles instead of
     // atomically at the boundary.
@@ -254,6 +273,7 @@ private:
     int m_stepCycle{0};
     bool m_operandReady{false};
     std::uint16_t m_addrBase{0};
+    AddressModeKind m_addressModeKind{AddressModeKind::ZP0};
 
     // The branch operate stage records its condition here on the operand
     // cycle; the sequencer performs the taken branch's dummy fetch and PC

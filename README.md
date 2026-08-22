@@ -63,7 +63,7 @@ cmake --build --preset mingw-clang-debug
 - ✅ IRQ Handling
 - ✅ NMI Handling
 - ✅ BRK / RTI
-- 🟡 Clock Cycle Emulation
+- ✅ Clock Cycle Emulation
 
 ### Addressing Modes
 
@@ -72,7 +72,7 @@ cmake --build --preset mingw-clang-debug
 - ✅ Relative addressing
 - ✅ Indirect JMP hardware bug
 - ✅ Page-crossing cycle penalties
-- 🟡 Cycle-accurate address calculation
+- ✅ Cycle-accurate address calculation
 
 ### Official Instruction Set
 
@@ -81,7 +81,7 @@ cmake --build --preset mingw-clang-debug
 - ✅ Correct processor flag behavior
 - ✅ Correct cycle timing at instruction level
 - ✅ Accurate branch timing
-- 🟡 Accurate interrupt timing
+- ✅ Accurate interrupt timing
 
 ### Validation
 
@@ -182,7 +182,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 ### Games
 
 * ✅ Battle City
-* ⬜ Jackal
+* ✅ Jackal
 * ✅ Pac-Man
 * ✅ Super Mario Bros.
 * ✅ Contra

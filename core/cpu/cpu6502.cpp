@@ -705,6 +705,7 @@ void CPU6502::BeginInstruction()
     const auto& instruction = *m_currentInstruction;
 
     m_executionKind = ClassifyExecution(instruction);
+    m_addressModeKind = ClassifyAddressMode(instruction);
     m_cycles = instruction.cycles;
     m_stepCycle = 1;
     m_operandReady = false;
@@ -1018,35 +1019,48 @@ void CPU6502::StepDataPhase(const Instruction& instruction, int cycle, int dataC
     }
 }
 
-void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
+CPU6502::AddressModeKind CPU6502::ClassifyAddressMode(
+    const Instruction& instruction)
 {
     const auto mode = instruction.addressMode;
+    if (mode == &CPU6502::IMM) return AddressModeKind::IMM;
+    if (mode == &CPU6502::ZP0) return AddressModeKind::ZP0;
+    if (mode == &CPU6502::ZPX) return AddressModeKind::ZPX;
+    if (mode == &CPU6502::ZPY) return AddressModeKind::ZPY;
+    if (mode == &CPU6502::ABS) return AddressModeKind::ABS;
+    if (mode == &CPU6502::ABX) return AddressModeKind::ABX;
+    if (mode == &CPU6502::ABY) return AddressModeKind::ABY;
+    if (mode == &CPU6502::IZX) return AddressModeKind::IZX;
+    return AddressModeKind::IZY;
+}
 
-    if (mode == &CPU6502::IMM)
+void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
+{
+    switch (m_addressModeKind)
     {
+    case AddressModeKind::IMM:
         if (cycle == 2)
         {
             m_fetched = Read(m_pc++);
             m_operandReady = true;
             RunOperate(instruction);
         }
-        return;
-    }
+        break;
 
-    if (mode == &CPU6502::ZP0)
-    {
+    case AddressModeKind::ZP0:
         if (cycle == 2)
         {
             m_addrAbs = Read(m_pc++);
             return;
         }
         StepDataPhase(instruction, cycle, 3);
-        return;
-    }
+        break;
 
-    if (mode == &CPU6502::ZPX || mode == &CPU6502::ZPY)
+    case AddressModeKind::ZPX:
+    case AddressModeKind::ZPY:
     {
-        const std::uint8_t index = mode == &CPU6502::ZPX ? m_x : m_y;
+        const std::uint8_t index =
+            m_addressModeKind == AddressModeKind::ZPX ? m_x : m_y;
         if (cycle == 2)
         {
             m_addrAbs = Read(m_pc++);
@@ -1061,11 +1075,10 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             StepDataPhase(instruction, cycle, 4);
         }
-        return;
+        break;
     }
 
-    if (mode == &CPU6502::ABS)
-    {
+    case AddressModeKind::ABS:
         if (cycle == 2)
         {
             m_addrAbs = Read(m_pc++);
@@ -1079,12 +1092,13 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             StepDataPhase(instruction, cycle, 4);
         }
-        return;
-    }
+        break;
 
-    if (mode == &CPU6502::ABX || mode == &CPU6502::ABY)
+    case AddressModeKind::ABX:
+    case AddressModeKind::ABY:
     {
-        const std::uint8_t index = mode == &CPU6502::ABX ? m_x : m_y;
+        const std::uint8_t index =
+            m_addressModeKind == AddressModeKind::ABX ? m_x : m_y;
         if (cycle == 2)
         {
             m_addrAbs = Read(m_pc++);
@@ -1126,11 +1140,10 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             StepDataPhase(instruction, cycle, 5);
         }
-        return;
+        break;
     }
 
-    if (mode == &CPU6502::IZX)
-    {
+    case AddressModeKind::IZX:
         if (cycle == 2)
         {
             m_addrBase = Read(m_pc++);
@@ -1155,11 +1168,9 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             StepDataPhase(instruction, cycle, 6);
         }
-        return;
-    }
+        break;
 
-    if (mode == &CPU6502::IZY)
-    {
+    case AddressModeKind::IZY:
         if (cycle == 2)
         {
             m_addrBase = Read(m_pc++);
@@ -1204,7 +1215,7 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             StepDataPhase(instruction, cycle, 6);
         }
-        return;
+        break;
     }
 }
 

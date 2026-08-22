@@ -90,6 +90,14 @@ target_link_libraries(DendyForgeApuTimingRunner PRIVATE
     DendyForgeCore
 )
 
+add_executable(DendyForgeConsoleBenchmark
+    tools/console_benchmark.cpp
+)
+
+target_link_libraries(DendyForgeConsoleBenchmark PRIVATE
+    DendyForgeCore
+)
+
 add_custom_command(TARGET DendyForgeApp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:SDL3::SDL3>"

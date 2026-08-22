@@ -120,8 +120,9 @@ behavior are covered by tests. The `nestest` golden-trace regression is
 committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
 bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`.
 
-The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) has landed
-its Phase 5: read-type, write-type, immediate, implied and both JMP classes
+The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) completed
+all six phases on 2026-08-22. Phases 1-5 make read-type, write-type,
+immediate, implied and both JMP classes
 execute one bus transaction per cycle with the hardware dummy reads
 (zp,X/(zp,X) read the unindexed base; abs,X/abs,Y/(zp),Y read the unfixed
 address when crossing); read-modify-write, stack (PHA/PHP/PLA/PLP),
@@ -138,12 +139,14 @@ flag masking IRQ at the poll; `IRQ(bool line)` is level-triggered so a
 dropped line clears a stale latch. Exact sequences are pinned by
 `tests/cpu/cpu_bus_cycle_tests.cpp`.
 
-The conversion is **in execution** (Phases 1-5 complete, one commit each).
-See `CPU_CYCLE_ACCURACY_PLAN.md` in the repository root for the full phased
-plan, its test strategy, gates, and risks. Phase 6 (final regression,
-performance, documentation) is next; its first task is recovering the
-Release speed dip (~2.4x vs the ~2.8x baseline). Do not begin it as a side
-effect of other tasks.
+The conversion is **complete** (Phases 1-6, one commit each for Phases 1-5).
+Phase 6 verified Debug and Release CTest, the nestest trace, `apu_mixer` 4/4,
+blargg APU timing 11/11, and the user gameplay regressions for Super Mario
+Bros., Pac-Man, Contra and Jackal. Release performance was recovered with
+cached address-mode dispatch and built-in bus-range fast paths: the standard
+20 M-cycle Mapper 0 `nestest.nes` benchmark measured 11,944,313 console
+clocks/s (6.67x realtime), above the 2.8x pre-conversion baseline. See
+`CPU_CYCLE_ACCURACY_PLAN.md` for the full plan, test strategy and risks.
 
 Important CPU rules:
 
@@ -371,7 +374,7 @@ timing-sensitive code.
 | Super Mario Bros. | Fully playable in the current build | Keep VBlank-only presentation; use as a scrolling PPU regression check. |
 | Pac-Man | Fully playable | Useful simple rendering/input regression. |
 | Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
-| Jackal | Does not work | Root cause diagnosed 2026-08-22, see "Jackal root-cause diagnosis" below. Not a mapper problem; fixed by the cycle-accurate CPU work. |
+| Jackal | Fully playable | Its early-NMI boot VBlank handshake now completes after the cycle-accurate CPU conversion; no game-specific workaround was added. |
 
 `README.md` must preserve these distinctions. In particular, it is valid to
 describe a game as practically playable while PPU/APU items remain yellow.
@@ -495,9 +498,9 @@ hardware. Instrumented findings (temporary probes, since reverted):
 
 The fix was the cycle-accurate CPU (per-cycle bus transactions on their
 hardware cycles plus the penultimate-cycle interrupt poll), completed as
-Phases 2-5 of `CPU_CYCLE_ACCURACY_PLAN.md` on 2026-08-22. Re-test Jackal
-after the Phase 6 gameplay regression; do not add a Jackal-specific
-workaround.
+Phases 2-5 of `CPU_CYCLE_ACCURACY_PLAN.md` on 2026-08-22. Phase 6 gameplay
+regression confirmed that Jackal is fully playable. No Jackal-specific
+workaround was added.
 
 ### PPU precise handoff point
 
