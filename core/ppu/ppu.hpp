@@ -88,6 +88,9 @@ private:
                           std::uint16_t source) const;
     bool RenderingEnabled() const;
     std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
+    // Tracks the hardware /NMI line: output = vblank flag AND nmi enable.
+    // A rising edge latches one NMI for the Console to poll.
+    void UpdateNmiOutput();
 
     Cartridge* m_cartridge{nullptr};
     Mirroring m_mirroring{Mirroring::Horizontal};
@@ -115,6 +118,10 @@ private:
     std::uint8_t m_fineX{0}; // x: fine horizontal scroll
     bool m_writeLatch{false};
     bool m_nmiPending{false};
+    bool m_nmiOutput{false};
+    // Set by a $2002 read landing one dot before the VBlank flag-set dot;
+    // suppresses the flag and the NMI for that frame only.
+    bool m_suppressVblank{false};
     bool m_frameComplete{false};
     bool m_oddFrame{false};
     std::int16_t m_scanline{-1};

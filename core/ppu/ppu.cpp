@@ -34,6 +34,7 @@ void PPU::Clock()
     {
         m_status &= ~0xE0;
         m_nmiPending = false;
+        UpdateNmiOutput();
         BeginFrame();
     }
 
@@ -67,21 +68,31 @@ void PPU::Clock()
         {
             CopyVerticalBits(m_vramAddress, m_temporaryAddress);
         }
+
+        if (m_cycle == 257)
+        {
+            const std::uint16_t nextScanline = m_scanline + 1;
+            EvaluateSpritesForScanline(nextScanline);
+        }
+        if (m_cycle == 321)
+        {
+            FetchScanlineSprites(m_scanline + 1);
+        }
     }
 
-    if (renderingScanline && RenderingEnabled() && m_cycle == 257)
+    if (m_scanline == 241 && m_cycle == 1)
     {
-        const std::uint16_t nextScanline = m_scanline + 1;
-        EvaluateSpritesForScanline(nextScanline);
-    }
-    if (renderingScanline && RenderingEnabled() && m_cycle == 321)
-    {
-        FetchScanlineSprites(m_scanline + 1);
-    }
-    else if (m_scanline == 241 && m_cycle == 1)
-    {
-        m_status |= 0x80;
-        m_nmiPending = (m_control & 0x80) != 0;
+        // A $2002 read that landed on the dot before this one suppresses
+        // the flag and the NMI for this frame only.
+        if (m_suppressVblank)
+        {
+            m_suppressVblank = false;
+        }
+        else
+        {
+            m_status |= 0x80;
+            UpdateNmiOutput();
+        }
         m_frameComplete = true;
     }
 
@@ -442,10 +453,19 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
     {
     case 0x0002:
     {
+        // Race window: a read landing one dot before the VBlank flag-set
+        // dot returns 0 and suppresses both the flag and the NMI for this
+        // frame. The set dot is scanline 241, cycle 1, and CPU accesses
+        // fall between PPU dots, so the read sees cycle 1 pending.
+        if (m_scanline == 241 && m_cycle == 1)
+        {
+            m_suppressVblank = true;
+        }
         const std::uint8_t data = (m_status & 0xE0) | (m_dataBuffer & 0x1F);
         m_status &= ~0x80;
         m_nmiPending = false;
         m_writeLatch = false;
+        UpdateNmiOutput();
         return data;
     }
     case 0x0004:
@@ -479,10 +499,7 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         m_control = data;
         m_temporaryAddress = (m_temporaryAddress & 0xF3FF) |
                              ((static_cast<std::uint16_t>(data) & 0x03) << 10);
-        if ((m_status & 0x80) != 0 && (m_control & 0x80) != 0)
-        {
-            m_nmiPending = true;
-        }
+        UpdateNmiOutput();
         break;
     case 0x0001:
         m_mask = data;
@@ -680,6 +697,17 @@ void PPU::CopyVerticalBits(std::uint16_t& destination,
 bool PPU::RenderingEnabled() const
 {
     return (m_mask & 0x18) != 0;
+}
+
+void PPU::UpdateNmiOutput()
+{
+    const bool output =
+        (m_status & 0x80) != 0 && (m_control & 0x80) != 0;
+    if (output && !m_nmiOutput)
+    {
+        m_nmiPending = true;
+    }
+    m_nmiOutput = output;
 }
 
 std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index) const
