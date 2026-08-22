@@ -180,8 +180,8 @@ private:
     std::uint8_t Fetch();
     std::uint8_t FetchData();
 
-    // Per-cycle execution (cycle-accurate CPU work, Phases 2-3 of
-    // CPU_CYCLE_ACCURACY_PLAN.md). Most instruction classes perform one bus
+    // Per-cycle execution (cycle-accurate CPU work, Phases 2-4 of
+    // CPU_CYCLE_ACCURACY_PLAN.md). Instruction classes perform one bus
     // transaction per cycle, including the hardware dummy reads; classes
     // not yet converted keep the legacy atomic execution.
     enum class ExecutionKind
@@ -198,7 +198,8 @@ private:
         Jsr,             // JSR with the stack and operand fetches on their cycles
         Rts,             // RTS with the stack pulls on their cycles
         Rti,             // RTI with the status and address pulls on their cycles
-        Brk              // BRK software interrupt entry across seven cycles
+        Brk,             // BRK software interrupt entry across seven cycles
+        Branch           // conditional branch: dummy fetch when taken, internal fix-up on page cross
     };
 
     ExecutionKind ClassifyExecution(const Instruction& instruction) const;
@@ -236,6 +237,11 @@ private:
     int m_stepCycle{0};
     bool m_operandReady{false};
     std::uint16_t m_addrBase{0};
+
+    // The branch operate stage records its condition here on the operand
+    // cycle; the sequencer performs the taken branch's dummy fetch and PC
+    // update on the next cycle.
+    bool m_branchTaken{false};
 
     // Hardware polls interrupt lines at an instruction boundary, so a
     // signalled interrupt must not cut into the cycle burn of the current

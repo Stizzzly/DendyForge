@@ -121,24 +121,27 @@ committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
 bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`.
 
 The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) has landed
-its Phase 3: read-type, write-type, immediate, implied and both JMP classes
+its Phase 4: read-type, write-type, immediate, implied and both JMP classes
 execute one bus transaction per cycle with the hardware dummy reads
 (zp,X/(zp,X) read the unindexed base; abs,X/abs,Y/(zp),Y read the unfixed
-address when crossing), and read-modify-write, stack (PHA/PHP/PLA/PLP),
+address when crossing); read-modify-write, stack (PHA/PHP/PLA/PLP),
 subroutine (JSR/RTS/RTI) and BRK instructions execute per cycle with the
-NMOS read -> write-old -> write-new pattern and dummy stack reads. Exact
-sequences are pinned by `tests/cpu/cpu_bus_cycle_tests.cpp`. Branches and
-hardware interrupt entry still execute atomically until Phases 4-5; their
-cycle totals are unchanged. Because the PC now advances within an
-instruction, the blargg timing runner detects the final loop as a short
-periodic PC sequence instead of a constant PC.
+NMOS read -> write-old -> write-new pattern and dummy stack reads; and
+branches execute per cycle (not taken 2 cycles, taken 3 with a dummy fetch
+of the next opcode address, taken crossing a page 4 with an internal
+fix-up cycle). Exact sequences are pinned by
+`tests/cpu/cpu_bus_cycle_tests.cpp`. Hardware interrupt entry and reset
+still execute atomically until Phase 5; their cycle totals are unchanged.
+Because the PC now advances within an instruction, the blargg timing
+runner detects the final loop as a short periodic PC sequence instead of a
+constant PC.
 
-The conversion is **in execution** (Phases 1-3 complete, one commit each).
+The conversion is **in execution** (Phases 1-4 complete, one commit each).
 See `CPU_CYCLE_ACCURACY_PLAN.md` in the repository root for the full phased
-plan, its test strategy, gates, and risks. Phase 4 (branches) is next; the
-first Phase 5 task is restoring blargg `08.irq_timing` by owning the
-interrupt poll point. Do not begin later phases as a side effect of other
-tasks.
+plan, its test strategy, gates, and risks. Phase 5 (hardware interrupt
+entry and reset) is next; its first task is restoring blargg
+`08.irq_timing` by owning the interrupt poll point. Do not begin later
+phases as a side effect of other tasks.
 
 Important CPU rules:
 
@@ -599,7 +602,7 @@ cmake --build --preset mingw-clang-release --target DendyForgeApuTimingRunner
 & .\out\build\mingw-clang-release\DendyForgeApuTimingRunner.exe .\blargg_apu_2005.07.30\*.nes
 ```
 
-The current baseline (2026-08-22, re-verified after CPU Phase 3): ten of
+The current baseline (2026-08-22, re-verified after CPU Phase 4): ten of
 eleven ROMs report code 1 (pass). `08.irq_timing` fails with code 3: the
 per-cycle CPU moved the effective interrupt poll point and no
 `APU::FrameIrqLineLatencyCycles` value (now 2) satisfies both loop phases

@@ -574,3 +574,81 @@ TEST_CASE("Sequenced stores perform one bus transaction per cycle")
     CHECK(machine.bus.log.back().write);
     CHECK(machine.bus.memory[0x0282] == 0x77);
 }
+
+TEST_CASE("A not-taken branch reads only the opcode and operand")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0xA9; // LDA #$00 sets Z
+    machine.bus.memory[0x0201] = 0x00;
+    machine.RunInstruction();
+    machine.bus.log.clear();
+    machine.cpu.SetProgramCounter(0x0200);
+
+    machine.bus.memory[0x0200] = 0xD0; // BNE +05 (not taken)
+    machine.bus.memory[0x0201] = 0x05;
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) == "R0200 R0201");
+    CHECK(clocks == 2);
+    CHECK(machine.cpu.ProgramCounter() == 0x0202);
+}
+
+TEST_CASE("A taken branch dummy-fetches the next opcode before redirecting")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0xA9; // LDA #$01 clears Z
+    machine.bus.memory[0x0201] = 0x01;
+    machine.RunInstruction();
+    machine.bus.log.clear();
+    machine.cpu.SetProgramCounter(0x0200);
+
+    machine.bus.memory[0x0200] = 0xD0; // BNE +05 (taken, same page)
+    machine.bus.memory[0x0201] = 0x05;
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) == "R0200 R0201 R0202");
+    CHECK(clocks == 3);
+    CHECK(machine.cpu.ProgramCounter() == 0x0207);
+}
+
+TEST_CASE("A taken branch crossing a page spends its fourth cycle internally")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0xA9; // LDA #$01 clears Z
+    machine.bus.memory[0x0201] = 0x01;
+    machine.RunInstruction();
+    machine.bus.log.clear();
+    machine.cpu.SetProgramCounter(0x02F0);
+
+    machine.bus.memory[0x02F0] = 0xD0; // BNE +0F: $02F2 -> $0301
+    machine.bus.memory[0x02F1] = 0x0F;
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) == "R02F0 R02F1 R02F2");
+    CHECK(clocks == 4);
+    CHECK(machine.bus.log.size() == 3);
+    CHECK(machine.cpu.ProgramCounter() == 0x0301);
+}
+
+TEST_CASE("A backward taken branch crossing a page also takes four cycles")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0xA9; // LDA #$01 clears Z
+    machine.bus.memory[0x0201] = 0x01;
+    machine.RunInstruction();
+    machine.bus.log.clear();
+    machine.cpu.SetProgramCounter(0x0300);
+
+    machine.bus.memory[0x0300] = 0xD0; // BNE -03: $0302 -> $02FF
+    machine.bus.memory[0x0301] = 0xFD;
+
+    const int clocks = machine.RunInstruction();
+
+    CHECK(FormatLog(machine.bus.log) == "R0300 R0301 R0302");
+    CHECK(clocks == 4);
+    CHECK(machine.bus.log.size() == 3);
+    CHECK(machine.cpu.ProgramCounter() == 0x02FF);
+}

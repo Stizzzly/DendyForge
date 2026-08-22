@@ -94,10 +94,20 @@ TEST_CASE("CPU6502 applies page-crossing and branch cycle penalties")
     }
 
     CompleteInstruction(cpu);
+    // The branch executes per cycle (Phase 4): after its opcode-fetch
+    // cycle only the operand read remains scheduled, the taken target
+    // applies on the dummy-fetch cycle, and the total keeps the base two
+    // cycles plus one for taken and one for the page cross.
     cpu.Clock();
+    CHECK(cpu.Cycles() == 1);
+    int branchClocks = 1;
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+        ++branchClocks;
+    }
+    CHECK(branchClocks == 4);
     CHECK(cpu.ProgramCounter() == 0x8100);
-    CHECK(cpu.Cycles() == 3);
-    CompleteInstruction(cpu);
 
     CompleteInstruction(cpu);
 

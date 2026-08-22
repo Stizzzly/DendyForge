@@ -572,6 +572,7 @@ void CPU6502::Reset()
     m_currentInstruction = nullptr;
     m_stepCycle = 0;
     m_operandReady = false;
+    m_branchTaken = false;
     m_pendingInterrupt = PendingInterrupt::None;
 
     const std::uint16_t lo = Read(0xFFFC);
@@ -623,9 +624,7 @@ CPU6502::ExecutionKind CPU6502::ClassifyExecution(
         operate == &CPU6502::BNE || operate == &CPU6502::BEQ;
     if (branchOperate)
     {
-        // Branches keep the atomic execution model until Phase 4 of
-        // CPU_CYCLE_ACCURACY_PLAN.md.
-        return ExecutionKind::Legacy;
+        return ExecutionKind::Branch;
     }
 
     if (operate == &CPU6502::PHA || operate == &CPU6502::PHP)
@@ -888,6 +887,40 @@ void CPU6502::StepInstruction()
             m_pc = static_cast<std::uint16_t>(
                 (Read(0xFFFF) << 8) | m_addrAbs);
         }
+        break;
+
+    case ExecutionKind::Branch:
+        // The condition settles on the operand cycle: a taken branch adds
+        // its dummy-fetch cycle now, plus one internal cycle when the
+        // target leaves the operand's page.
+        if (cycle == 2)
+        {
+            m_addrRel = Read(m_pc++);
+            if (m_addrRel & 0x0080)
+            {
+                m_addrRel |= 0xFF00;
+            }
+            m_branchTaken = false;
+            RunOperate(instruction);
+            if (m_branchTaken)
+            {
+                ++m_cycles;
+                const std::uint16_t targetAddress =
+                    static_cast<std::uint16_t>(m_pc + m_addrRel);
+                if ((targetAddress & 0xFF00) != (m_pc & 0xFF00))
+                {
+                    ++m_cycles;
+                }
+            }
+        }
+        else if (cycle == 3)
+        {
+            // Dummy fetch of the next opcode address; the byte is
+            // discarded and PC still points there while the offset lands.
+            Read(m_pc);
+            m_pc = static_cast<std::uint16_t>(m_pc + m_addrRel);
+        }
+        // The page-cross fix-up cycle is internal: no bus transaction.
         break;
 
     case ExecutionKind::JumpAbsolute:
@@ -2075,22 +2108,12 @@ std::uint8_t CPU6502::RTI()
     return 0;
 }
 
+// The sequenced branch (ExecutionKind::Branch) evaluates its condition on
+// the operand cycle and records the decision here; the sequencer owns the
+// taken branch's extra cycles, dummy fetch and PC update.
 void CPU6502::BranchIf(bool condition)
 {
-    if (!condition)
-    {
-        return;
-    }
-
-    ++m_cycles;
-
-    const std::uint16_t targetAddress = m_pc + m_addrRel;
-    if ((targetAddress & 0xFF00) != (m_pc & 0xFF00))
-    {
-        ++m_cycles;
-    }
-
-    m_pc = targetAddress;
+    m_branchTaken = condition;
 }
 
 void CPU6502::EnterInterrupt(std::uint16_t vector, bool breakInstruction)

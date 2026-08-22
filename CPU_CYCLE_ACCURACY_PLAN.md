@@ -6,8 +6,11 @@ write-type, immediate, implied and both JMP classes execute per cycle with
 hardware dummy reads. Phase 3 complete (2026-08-22): read-modify-write,
 stack (PHA/PHP/PLA/PLP), subroutine (JSR/RTS/RTI) and BRK instructions
 execute per cycle with the hardware read -> write-old -> write-new pattern
-and dummy stack reads; branches and hardware interrupt entry remain legacy
-atomic until Phases 4-5.** Known follow-ups carried into later phases:
+and dummy stack reads. Phase 4 complete (2026-08-22): branches execute per
+cycle — not taken 2 cycles, taken 3 with the dummy fetch of the next
+opcode address, taken crossing a page 4 with an internal fix-up cycle;
+hardware interrupt entry and reset remain legacy atomic until Phase 5.**
+Known follow-ups carried into later phases:
 blargg `08.irq_timing` regressed to code 3 because sequenced reads moved
 the effective interrupt poll point — no `FrameIrqLineLatencyCycles` value
 satisfies both loop phases, so fixing it is the first Phase 5 task; and
