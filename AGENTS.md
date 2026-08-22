@@ -63,9 +63,18 @@ cmake --build --preset mingw-clang-debug
 ctest --test-dir out/build/mingw-clang-debug --output-on-failure
 ```
 
-The active build directory is `out/build/mingw-clang-debug`. Do not rely on
-the legacy `build/` directory: it can contain a cache made in another
+The active build directory for tests is `out/build/mingw-clang-debug`. Do not
+rely on the legacy `build/` directory: it can contain a cache made in another
 environment (`/home/...`) and is not a valid Windows build tree.
+
+**Playing games requires the Release build.** Measured on the project machine
+(2026-08-22, Ryzen 5 7530U): the Release core sustains about 2.8x realtime
+(~5 M console clocks/s), while the Debug core (`-O0`) sustains only ~0.9x
+realtime and cannot hold full speed — games stutter and audio starves. Run:
+
+```powershell
+.\out\build\mingw-clang-release\DendyForgeApp.exe ".\roms\game.nes"
+```
 
 Run a local ROM by passing its path as the first argument. The ROM is not
 loaded merely by placing it in `roms/`:
