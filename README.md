@@ -187,6 +187,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Pac-Man
 * ✅ Super Mario Bros.
 * ✅ Contra
+* ✅ Mega Man
 * ⬜ Duck Hunt (without Zapper)
 * ⬜ Mega Man
 * ⬜ Kirby's Adventure

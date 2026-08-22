@@ -172,8 +172,8 @@ bank at `$C000-$FFFF`. Both Mapper 0 and Mapper 2 use CHR ROM when supplied
 and otherwise provide 8 KiB of CHR RAM; Mapper 1 likewise falls back to 8 KiB
 CHR RAM. No other mapper must be assumed to work. Mapper 1 is covered by
 `tests/mapper/mapper1_tests.cpp` (bank mapping, serial loading, reset write,
-CHR RAM, live mirroring through the PPU); no MMC1 game ROM was available for
-a manual gameplay regression on 2026-08-22, so none is claimed.
+CHR RAM, live mirroring through the PPU). Mega Man (MMC1) is user-confirmed
+fully playable on 2026-08-22, the first mapper-1 gameplay regression.
 
 The current CPU map implemented by `Bus` is:
 
@@ -386,6 +386,7 @@ timing-sensitive code.
 | Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
 | Jackal | Fully playable | Its early-NMI boot VBlank handshake now completes after the cycle-accurate CPU conversion; no game-specific workaround was added. |
 | Bomberman | Fully playable | Another simple-game rendering/input regression alongside Pac-Man (user-confirmed 2026-08-22). |
+| Mega Man | Fully playable | First MMC1 (mapper 1) regression (user-confirmed 2026-08-22). Use it to catch serial-register loading, CHR bank switching and live nametable-mirroring regressions; vertical corridors rely on one-screen mirroring. |
 
 `README.md` must preserve these distinctions. In particular, it is valid to
 describe a game as practically playable while PPU/APU items remain yellow.
