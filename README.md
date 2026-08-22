@@ -189,8 +189,9 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Super Mario Bros.
 * ✅ Contra
 * ✅ Mega Man
+* ✅ Tetris
+* ✅ Ninja Gaiden
 * ⬜ Duck Hunt (without Zapper)
-* ⬜ Mega Man
 * ⬜ Kirby's Adventure
 
 ### Test ROMs
