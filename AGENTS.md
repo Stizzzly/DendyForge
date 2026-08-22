@@ -568,8 +568,7 @@ The suites live locally under `roms/nes-test-roms/` (gitignored) and are
 run one directory at a time, e.g.:
 
 ```powershell
-& .\outuild\mingw-clang-release\DendyForgePpuRunner.exe .oms
-es-test-romsbl_nmi_timing\*.nes
+& .\out\build\mingw-clang-release\DendyForgePpuRunner.exe .\roms\nes-test-roms\vbl_nmi_timing\*.nes
 ```
 
 ### APU public integration contract
