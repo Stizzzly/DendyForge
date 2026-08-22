@@ -182,6 +182,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 ### Games
 
 * ✅ Battle City
+* ✅ Bomberman
 * ✅ Jackal
 * ✅ Pac-Man
 * ✅ Super Mario Bros.

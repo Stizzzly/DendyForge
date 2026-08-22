@@ -375,6 +375,7 @@ timing-sensitive code.
 | Pac-Man | Fully playable | Useful simple rendering/input regression. |
 | Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
 | Jackal | Fully playable | Its early-NMI boot VBlank handshake now completes after the cycle-accurate CPU conversion; no game-specific workaround was added. |
+| Bomberman | Fully playable | Another simple-game rendering/input regression alongside Pac-Man (user-confirmed 2026-08-22). |
 
 `README.md` must preserve these distinctions. In particular, it is valid to
 describe a game as practically playable while PPU/APU items remain yellow.
