@@ -21,6 +21,7 @@ public:
     bool LoadRom(const std::string& path);
     void Reset();
     void Clock();
+    std::uint8_t ReadCpuRamForDiagnostics(std::uint16_t address);
     std::uint8_t ReadCartridgeRamForDiagnostics(std::uint16_t address);
 
     CPU6502& Cpu();

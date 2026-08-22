@@ -21,3 +21,12 @@ TEST_CASE("Console diagnostics exposes cartridge PRG RAM only")
 
     CHECK(console.ReadCartridgeRamForDiagnostics(0x8000) == 0);
 }
+
+TEST_CASE("Console diagnostics exposes mirrored CPU RAM only")
+{
+    dendyforge::Console console;
+
+    CHECK(console.ReadCpuRamForDiagnostics(0x0000) == 0);
+    CHECK(console.ReadCpuRamForDiagnostics(0x0800) == 0);
+    CHECK(console.ReadCpuRamForDiagnostics(0x2000) == 0);
+}

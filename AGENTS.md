@@ -261,6 +261,16 @@ high-pass filters plus a 14 kHz low-pass filter before reaching SDL. These
 filters remove the DC component produced by the raw digital mixer and reduce
 high-frequency aliasing; keep them in the APU rather than the SDL frontend.
 
+The local `blargg_apu_2005.07.30` suite was run on 2026-08-22 through
+`DendyForgeApuTimingRunner`. It reports its final result in CPU RAM `$00F0`
+after entering a stable final loop; code 1 is pass. `01.len_ctr`,
+`02.len_table`, `03.irq_flag`, and `09.reset_timing` pass. `04.clock_jitter`
+fails with code 3 (frame IRQ late); `05.len_timing_mode0` and
+`06.len_timing_mode1` with code 5; `07.irq_flag_timing` with code 3;
+`08.irq_timing` with code 2; `10.len_halt_timing` with code 3; and
+`11.len_reload_timing` with code 3. Keep the APU Roadmap items in progress
+until the frame counter's exact write, IRQ, and length-clock ordering is fixed.
+
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
 It is acceptable to add private structures for rendering state. Avoid adding
