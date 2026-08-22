@@ -132,7 +132,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 
 * ✅ Controller Port
 * ✅ Input Latching
-* ✅ Zapper (mouse aim, left button trigger, port 2 `$4017`)
+* ✅ Zapper (mouse aim, left button trigger, port 2 `$4017`; crosshair shown with `--zapper`)
 
 Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 `Enter` — Start, `K` — A, `L` — B.

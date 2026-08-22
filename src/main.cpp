@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 #include "console/console.hpp"
@@ -103,7 +104,22 @@ int main(int argc, char* argv[])
                     "Could not open audio output: %s", SDL_GetError());
     }
     dendyforge::Console console;
-    const bool romLoaded = argc > 1 && console.LoadRom(argv[1]);
+    // The first non-flag argument is the ROM path; `--zapper` shows the
+    // crosshair overlay (mouse aiming itself is always active).
+    bool zapperCrosshair = false;
+    const char* romPath = nullptr;
+    for (int index = 1; index < argc; ++index)
+    {
+        if (std::string_view(argv[index]) == "--zapper")
+        {
+            zapperCrosshair = true;
+        }
+        else if (romPath == nullptr)
+        {
+            romPath = argv[index];
+        }
+    }
+    const bool romLoaded = romPath != nullptr && console.LoadRom(romPath);
 
     dendyforge::PPU demoPpu;
     if (!romLoaded)
@@ -229,7 +245,9 @@ int main(int argc, char* argv[])
             SDL_RenderClear(renderer);
             SDL_RenderTexture(renderer, texture, nullptr, nullptr);
 
-            // Draw the Zapper crosshair at the mouse position.
+            // Draw the Zapper crosshair at the mouse position when the
+            // launch flag asks for it.
+            if (zapperCrosshair)
             {
                 float mouseX = 0.0f;
                 float mouseY = 0.0f;

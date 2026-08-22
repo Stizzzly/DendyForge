@@ -201,9 +201,11 @@ returns the light sensor in bit 3 (0 = light) and the trigger in bit 4
 past the aimed column over a bright framebuffer pixel (threshold picks the
 $20-$30 brights), which lets games reconstruct both coordinates as on
 hardware. The SDL frontend aims through the mouse (mapped through the
-logical presentation), uses the left button as the trigger and draws a
-crosshair; `Console::SecondaryZapper()` is the plumbing point. Duck Hunt
-(World) boots on it (user-local ROM in Downloads).
+logical presentation) and uses the left button as the trigger; the
+crosshair overlay is drawn only when the app is launched with `--zapper`
+(anywhere after the executable, mouse aiming itself is always active).
+`Console::SecondaryZapper()` is the plumbing point. Duck Hunt (World)
+boots on it (user-local ROM in Downloads).
 
 ## PPU: what is implemented
 
