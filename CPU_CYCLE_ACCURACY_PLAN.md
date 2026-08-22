@@ -2,9 +2,12 @@
 
 Status: **in execution. Phase 1 complete (nestest golden-trace regression
 committed and passing). Phase 2 complete (2026-08-22): read-type,
-write-type, implied, immediate and both JMP classes execute per cycle with
-hardware dummy reads; RMW/stack/branches/interrupt entry remain legacy
-atomic until Phases 3-5.** Known follow-ups carried into later phases:
+write-type, immediate, implied and both JMP classes execute per cycle with
+hardware dummy reads. Phase 3 complete (2026-08-22): read-modify-write,
+stack (PHA/PHP/PLA/PLP), subroutine (JSR/RTS/RTI) and BRK instructions
+execute per cycle with the hardware read -> write-old -> write-new pattern
+and dummy stack reads; branches and hardware interrupt entry remain legacy
+atomic until Phases 4-5.** Known follow-ups carried into later phases:
 blargg `08.irq_timing` regressed to code 3 because sequenced reads moved
 the effective interrupt poll point — no `FrameIrqLineLatencyCycles` value
 satisfies both loop phases, so fixing it is the first Phase 5 task; and

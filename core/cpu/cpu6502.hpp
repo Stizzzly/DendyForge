@@ -180,24 +180,32 @@ private:
     std::uint8_t Fetch();
     std::uint8_t FetchData();
 
-    // Per-cycle execution (cycle-accurate CPU work, Phase 2 of
+    // Per-cycle execution (cycle-accurate CPU work, Phases 2-3 of
     // CPU_CYCLE_ACCURACY_PLAN.md). Most instruction classes perform one bus
     // transaction per cycle, including the hardware dummy reads; classes
     // not yet converted keep the legacy atomic execution.
     enum class ExecutionKind
     {
-        Legacy,        // executed atomically on the opcode-fetch cycle
-        Implied,       // dummy read at PC, then operate
-        Read,          // read-type instruction with sequenced addressing
-        Write,         // store-type instruction with sequenced addressing
-        JumpAbsolute,  // JMP $nnnn
-        JumpIndirect   // JMP ($nnnn) with page wrap
+        Legacy,          // executed atomically on the opcode-fetch cycle
+        Implied,         // dummy read at PC, then operate
+        Read,            // read-type instruction with sequenced addressing
+        Write,           // store-type instruction with sequenced addressing
+        ReadModifyWrite, // sequenced addressing, then read, write old, write new
+        JumpAbsolute,    // JMP $nnnn
+        JumpIndirect,    // JMP ($nnnn) with page wrap
+        Push,            // PHA/PHP: dummy read at PC, then write the stack
+        Pull,            // PLA/PLP: dummy reads at PC and the stack, then pop
+        Jsr,             // JSR with the stack and operand fetches on their cycles
+        Rts,             // RTS with the stack pulls on their cycles
+        Rti,             // RTI with the status and address pulls on their cycles
+        Brk              // BRK software interrupt entry across seven cycles
     };
 
     ExecutionKind ClassifyExecution(const Instruction& instruction) const;
     void BeginInstruction();
     void StepInstruction();
     void StepMemoryInstruction(const Instruction& instruction, int cycle);
+    void StepDataPhase(const Instruction& instruction, int cycle, int dataCycle);
     void RunOperate(const Instruction& instruction);
 
     // Stack operations

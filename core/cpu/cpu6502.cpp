@@ -565,6 +565,15 @@ void CPU6502::Reset()
     m_status = static_cast<std::uint8_t>(Flags::U) |
                static_cast<std::uint8_t>(Flags::I);
 
+    // The reset burn cycles must not continue the previously executed
+    // instruction's sequencer, and a latched interrupt must not survive a
+    // reset.
+    m_executionKind = ExecutionKind::Legacy;
+    m_currentInstruction = nullptr;
+    m_stepCycle = 0;
+    m_operandReady = false;
+    m_pendingInterrupt = PendingInterrupt::None;
+
     const std::uint16_t lo = Read(0xFFFC);
     const std::uint16_t hi = Read(0xFFFD);
 
@@ -583,6 +592,10 @@ void CPU6502::Clock()
                                              : 0xFFFE;
             m_pendingInterrupt = PendingInterrupt::None;
             EnterInterrupt(vector, false);
+            // The interrupt entry burn cycles must not continue the
+            // interrupted instruction's sequencer.
+            m_executionKind = ExecutionKind::Legacy;
+            m_currentInstruction = nullptr;
             m_cycles = 7;
             --m_cycles;
             return;
@@ -603,26 +616,41 @@ CPU6502::ExecutionKind CPU6502::ClassifyExecution(
 {
     const auto operate = instruction.operate;
 
-    const bool legacyOperate =
-        operate == &CPU6502::ASL || operate == &CPU6502::LSR ||
-        operate == &CPU6502::ROL || operate == &CPU6502::ROR ||
-        operate == &CPU6502::INC || operate == &CPU6502::DEC ||
-        operate == &CPU6502::SLO || operate == &CPU6502::RLA ||
-        operate == &CPU6502::SRE || operate == &CPU6502::RRA ||
-        operate == &CPU6502::DCP || operate == &CPU6502::ISB ||
-        operate == &CPU6502::PHA || operate == &CPU6502::PHP ||
-        operate == &CPU6502::PLA || operate == &CPU6502::PLP ||
-        operate == &CPU6502::JSR || operate == &CPU6502::RTS ||
-        operate == &CPU6502::RTI || operate == &CPU6502::BRK ||
+    const bool branchOperate =
         operate == &CPU6502::BPL || operate == &CPU6502::BMI ||
         operate == &CPU6502::BVC || operate == &CPU6502::BVS ||
         operate == &CPU6502::BCC || operate == &CPU6502::BCS ||
         operate == &CPU6502::BNE || operate == &CPU6502::BEQ;
-    if (legacyOperate)
+    if (branchOperate)
     {
-        // Read-modify-write, stack, subroutine and branch instructions keep
-        // the atomic execution model until their per-cycle forms land.
+        // Branches keep the atomic execution model until Phase 4 of
+        // CPU_CYCLE_ACCURACY_PLAN.md.
         return ExecutionKind::Legacy;
+    }
+
+    if (operate == &CPU6502::PHA || operate == &CPU6502::PHP)
+    {
+        return ExecutionKind::Push;
+    }
+    if (operate == &CPU6502::PLA || operate == &CPU6502::PLP)
+    {
+        return ExecutionKind::Pull;
+    }
+    if (operate == &CPU6502::JSR)
+    {
+        return ExecutionKind::Jsr;
+    }
+    if (operate == &CPU6502::RTS)
+    {
+        return ExecutionKind::Rts;
+    }
+    if (operate == &CPU6502::RTI)
+    {
+        return ExecutionKind::Rti;
+    }
+    if (operate == &CPU6502::BRK)
+    {
+        return ExecutionKind::Brk;
     }
 
     if (operate == &CPU6502::JMP)
@@ -636,6 +664,17 @@ CPU6502::ExecutionKind CPU6502::ClassifyExecution(
         operate == &CPU6502::STY || operate == &CPU6502::SAX)
     {
         return ExecutionKind::Write;
+    }
+
+    if (instruction.addressMode != &CPU6502::IMP &&
+        (operate == &CPU6502::ASL || operate == &CPU6502::LSR ||
+         operate == &CPU6502::ROL || operate == &CPU6502::ROR ||
+         operate == &CPU6502::INC || operate == &CPU6502::DEC ||
+         operate == &CPU6502::SLO || operate == &CPU6502::RLA ||
+         operate == &CPU6502::SRE || operate == &CPU6502::RRA ||
+         operate == &CPU6502::DCP || operate == &CPU6502::ISB))
+    {
+        return ExecutionKind::ReadModifyWrite;
     }
 
     if (instruction.addressMode == &CPU6502::IMP)
@@ -682,6 +721,13 @@ void CPU6502::RunOperate(const Instruction& instruction)
 
 void CPU6502::StepInstruction()
 {
+    if (m_currentInstruction == nullptr)
+    {
+        // Interrupt-entry and reset burn cycles perform no instruction
+        // sequencer step.
+        return;
+    }
+
     const auto& instruction = *m_currentInstruction;
     const int cycle = m_stepCycle + 1;
     m_stepCycle = cycle;
@@ -700,7 +746,148 @@ void CPU6502::StepInstruction()
 
     case ExecutionKind::Read:
     case ExecutionKind::Write:
+    case ExecutionKind::ReadModifyWrite:
         StepMemoryInstruction(instruction, cycle);
+        break;
+
+    case ExecutionKind::Push:
+        // PHA/PHP read the next opcode address without consuming it, then
+        // write the stack on the final cycle.
+        if (cycle == 2)
+        {
+            Read(m_pc);
+        }
+        else
+        {
+            RunOperate(instruction);
+        }
+        break;
+
+    case ExecutionKind::Pull:
+        // PLA/PLP dummy-read the next opcode address and the stack
+        // location below the pulled byte before the pop cycle.
+        if (cycle == 2)
+        {
+            Read(m_pc);
+        }
+        else if (cycle == 3)
+        {
+            Read(static_cast<std::uint16_t>(0x0100 + m_sp));
+        }
+        else
+        {
+            RunOperate(instruction);
+        }
+        break;
+
+    case ExecutionKind::Jsr:
+        // The target's high byte is fetched only after both return-address
+        // bytes have been pushed.
+        if (cycle == 2)
+        {
+            m_addrAbs = Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            Read(static_cast<std::uint16_t>(0x0100 + m_sp));
+        }
+        else if (cycle == 4)
+        {
+            Push((m_pc >> 8) & 0x00FF);
+        }
+        else if (cycle == 5)
+        {
+            Push(m_pc & 0x00FF);
+        }
+        else
+        {
+            m_pc = static_cast<std::uint16_t>(
+                (Read(m_pc) << 8) | (m_addrAbs & 0x00FF));
+        }
+        break;
+
+    case ExecutionKind::Rts:
+        if (cycle == 2)
+        {
+            Read(m_pc);
+        }
+        else if (cycle == 3)
+        {
+            Read(static_cast<std::uint16_t>(0x0100 + m_sp));
+        }
+        else if (cycle == 4)
+        {
+            m_addrAbs = Pop();
+        }
+        else if (cycle == 5)
+        {
+            m_pc = static_cast<std::uint16_t>((Pop() << 8) | m_addrAbs);
+        }
+        else
+        {
+            // Internal cycle: the pulled address is incremented past the
+            // subroutine's high-byte slot without a bus access.
+            ++m_pc;
+        }
+        break;
+
+    case ExecutionKind::Rti:
+        if (cycle == 2)
+        {
+            Read(m_pc);
+        }
+        else if (cycle == 3)
+        {
+            Read(static_cast<std::uint16_t>(0x0100 + m_sp));
+        }
+        else if (cycle == 4)
+        {
+            m_status = Pop();
+            SetFlag(Flags::B, false);
+            SetFlag(Flags::U, true);
+        }
+        else if (cycle == 5)
+        {
+            m_addrAbs = Pop();
+        }
+        else
+        {
+            m_pc = static_cast<std::uint16_t>((Pop() << 8) | m_addrAbs);
+        }
+        break;
+
+    case ExecutionKind::Brk:
+        // BRK consumes the padding byte, pushes the return address and
+        // status with B set, then loads the IRQ vector.
+        if (cycle == 2)
+        {
+            Read(m_pc++);
+        }
+        else if (cycle == 3)
+        {
+            Push((m_pc >> 8) & 0x00FF);
+        }
+        else if (cycle == 4)
+        {
+            Push(m_pc & 0x00FF);
+        }
+        else if (cycle == 5)
+        {
+            Push(m_status | static_cast<std::uint8_t>(Flags::B) |
+                 static_cast<std::uint8_t>(Flags::U));
+            SetFlag(Flags::B, false);
+            SetFlag(Flags::U, true);
+            SetFlag(Flags::I, true);
+        }
+        else if (cycle == 6)
+        {
+            m_addrAbs = Read(0xFFFE);
+        }
+        else
+        {
+            m_pc = static_cast<std::uint16_t>(
+                (Read(0xFFFF) << 8) | m_addrAbs);
+        }
         break;
 
     case ExecutionKind::JumpAbsolute:
@@ -743,9 +930,50 @@ void CPU6502::StepInstruction()
     }
 }
 
+// Performs the data-phase transactions once addressing has settled.
+// dataCycle is the instruction-relative cycle of the first data access at
+// the effective address.
+void CPU6502::StepDataPhase(const Instruction& instruction, int cycle, int dataCycle)
+{
+    if (m_executionKind == ExecutionKind::Read)
+    {
+        if (cycle == dataCycle)
+        {
+            m_fetched = Read(m_addrAbs);
+            m_operandReady = true;
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    if (m_executionKind == ExecutionKind::Write)
+    {
+        if (cycle == dataCycle)
+        {
+            RunOperate(instruction);
+        }
+        return;
+    }
+
+    // Read-modify-write instructions read the operand, write the
+    // unmodified value back, then compute and write the new value.
+    if (cycle == dataCycle)
+    {
+        m_fetched = Read(m_addrAbs);
+        m_operandReady = true;
+    }
+    else if (cycle == dataCycle + 1)
+    {
+        Write(m_addrAbs, m_fetched);
+    }
+    else if (cycle == dataCycle + 2)
+    {
+        RunOperate(instruction);
+    }
+}
+
 void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
 {
-    const bool isWrite = m_executionKind == ExecutionKind::Write;
     const auto mode = instruction.addressMode;
 
     if (mode == &CPU6502::IMM)
@@ -764,16 +992,9 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         if (cycle == 2)
         {
             m_addrAbs = Read(m_pc++);
+            return;
         }
-        else
-        {
-            if (!isWrite)
-            {
-                m_fetched = Read(m_addrAbs);
-                m_operandReady = true;
-            }
-            RunOperate(instruction);
-        }
+        StepDataPhase(instruction, cycle, 3);
         return;
     }
 
@@ -792,12 +1013,7 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         }
         else
         {
-            if (!isWrite)
-            {
-                m_fetched = Read(m_addrAbs);
-                m_operandReady = true;
-            }
-            RunOperate(instruction);
+            StepDataPhase(instruction, cycle, 4);
         }
         return;
     }
@@ -815,12 +1031,7 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         }
         else
         {
-            if (!isWrite)
-            {
-                m_fetched = Read(m_addrAbs);
-                m_operandReady = true;
-            }
-            RunOperate(instruction);
+            StepDataPhase(instruction, cycle, 4);
         }
         return;
     }
@@ -841,17 +1052,15 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         {
             // Every indexed access reads the address with an unfixed high
             // byte; when the index carries into the high byte that read
-            // goes to the wrong page and the fixed address is read one
-            // cycle later.
+            // goes to the wrong page. Reads treat the access as data when
+            // no page was crossed and refetch from the fixed address
+            // otherwise; stores and read-modify-write instructions always
+            // discard it and use their own final data cycles.
             const std::uint16_t unfixed = static_cast<std::uint16_t>(
                 (m_addrBase & 0xFF00) | (m_addrAbs & 0x00FF));
             const bool crossed =
                 (m_addrAbs & 0xFF00) != (m_addrBase & 0xFF00);
-            if (isWrite)
-            {
-                Read(unfixed);
-            }
-            else
+            if (m_executionKind == ExecutionKind::Read)
             {
                 m_fetched = Read(unfixed);
                 m_operandReady = true;
@@ -860,16 +1069,16 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
                     ++m_cycles;
                     return;
                 }
+                RunOperate(instruction);
             }
-            RunOperate(instruction);
+            else
+            {
+                Read(unfixed);
+            }
         }
-        else if (cycle == 5 && !isWrite)
+        else
         {
-            // Page-cross refetch for read instructions; stores always write
-            // on their fixed cycle count.
-            m_fetched = Read(m_addrAbs);
-            m_operandReady = true;
-            RunOperate(instruction);
+            StepDataPhase(instruction, cycle, 5);
         }
         return;
     }
@@ -898,12 +1107,7 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         }
         else
         {
-            if (!isWrite)
-            {
-                m_fetched = Read(m_addrAbs);
-                m_operandReady = true;
-            }
-            RunOperate(instruction);
+            StepDataPhase(instruction, cycle, 6);
         }
         return;
     }
@@ -928,15 +1132,13 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
         }
         else if (cycle == 5)
         {
+            // Same unfixed-address rule as the absolute indexed modes; a
+            // read consumes it as data only without a page cross.
             const std::uint16_t unfixed = static_cast<std::uint16_t>(
                 (m_addrBase & 0xFF00) | (m_addrAbs & 0x00FF));
             const bool crossed =
                 (m_addrAbs & 0xFF00) != (m_addrBase & 0xFF00);
-            if (isWrite)
-            {
-                Read(unfixed);
-            }
-            else
+            if (m_executionKind == ExecutionKind::Read)
             {
                 m_fetched = Read(unfixed);
                 m_operandReady = true;
@@ -945,16 +1147,16 @@ void CPU6502::StepMemoryInstruction(const Instruction& instruction, int cycle)
                     ++m_cycles;
                     return;
                 }
+                RunOperate(instruction);
             }
-            RunOperate(instruction);
+            else
+            {
+                Read(unfixed);
+            }
         }
-        else if (cycle == 6 && !isWrite)
+        else
         {
-            // Page-cross refetch for read instructions; stores always write
-            // on their fixed cycle count.
-            m_fetched = Read(m_addrAbs);
-            m_operandReady = true;
-            RunOperate(instruction);
+            StepDataPhase(instruction, cycle, 6);
         }
         return;
     }
@@ -1364,6 +1566,8 @@ std::uint8_t CPU6502::RRA()
         (m_fetched >> 1) | (GetFlag(Flags::C) ? 0x80 : 0x00);
     SetFlag(Flags::C, (m_fetched & 0x01) != 0);
     Write(m_addrAbs, value);
+    // The ADC stage consumes the rotated memory value, not the raw one.
+    m_fetched = value;
     ADC();
     return 0;
 }
@@ -1384,6 +1588,8 @@ std::uint8_t CPU6502::ISB()
     FetchData();
     const std::uint8_t value = m_fetched + 1;
     Write(m_addrAbs, value);
+    // The SBC stage consumes the incremented memory value.
+    m_fetched = value;
     SBC();
     return 0;
 }

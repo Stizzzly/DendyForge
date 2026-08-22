@@ -192,18 +192,23 @@ TEST_CASE("CPU6502 stack and subroutine instructions preserve their stack contra
 
     cpu.Clock();
     CHECK(cpu.Cycles() == 2);
-    CHECK(bus.memory[0x01FD] == 0x42);
+    // Sequenced execution (Phase 3): the stack write happens on PHA's
+    // final cycle, not on the opcode-fetch cycle.
+    CHECK(bus.memory[0x01FD] == 0x00);
     CompleteInstruction(cpu);
+    CHECK(bus.memory[0x01FD] == 0x42);
 
     CompleteInstruction(cpu);
     CHECK((bus.memory[0x01FC] & 0x30) == 0x30);
 
     cpu.Clock();
     CHECK(cpu.Cycles() == 5);
-    CHECK(bus.memory[0x01FB] == 0x80);
-    CHECK(bus.memory[0x01FA] == 0x06);
+    // JSR pushes both return-address bytes only after its internal cycle,
+    // so the stack is still untouched on the opcode-fetch cycle.
     CompleteInstruction(cpu);
     CHECK(cpu.ProgramCounter() == 0x800A);
+    CHECK(bus.memory[0x01FB] == 0x80);
+    CHECK(bus.memory[0x01FA] == 0x06);
 
     CompleteInstruction(cpu);
     CHECK(cpu.ProgramCounter() == 0x8007);
@@ -235,17 +240,19 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
     cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
     cpu.Clock();
     CHECK(cpu.Cycles() == 6);
+    // Sequenced execution (Phase 3): BRK touches the stack and loads the
+    // vector only on its later cycles; only the opcode was fetched so far.
+    CHECK(cpu.StackPointer() == 0xFD);
+    while (cpu.Cycles() > 0)
+    {
+        cpu.Clock();
+    }
     CHECK(cpu.ProgramCounter() == 0x9000);
     CHECK(cpu.StackPointer() == 0xFA);
     CHECK(bus.memory[0x01FD] == 0x80);
     CHECK(bus.memory[0x01FC] == 0x02);
     CHECK((bus.memory[0x01FB] & 0x30) == 0x30);
     CHECK(cpu.GetFlag(dendyforge::CPU6502::Flags::I));
-
-    while (cpu.Cycles() > 0)
-    {
-        cpu.Clock();
-    }
 
     CompleteInstruction(cpu);
     CHECK(cpu.ProgramCounter() == 0x8002);
