@@ -12,6 +12,7 @@ class APU
 {
 public:
     static constexpr int SampleRate = 44'100;
+    static constexpr std::uint8_t FrameIrqLineLatencyCycles = 3;
     using DmcMemoryReader = std::function<std::uint8_t(std::uint16_t)>;
 
     void Reset();
@@ -29,7 +30,7 @@ private:
         void WriteControl(std::uint8_t data);
         void WriteSweep(std::uint8_t data);
         void WriteTimerLow(std::uint8_t data);
-        void WriteTimerHigh(std::uint8_t data);
+        void WriteTimerHigh(std::uint8_t data, bool lengthReloadBlocked);
         void SetEnabled(bool enabled);
         void ClockTimer();
         void ClockEnvelope();
@@ -57,7 +58,7 @@ private:
     {
         void WriteControl(std::uint8_t data);
         void WriteTimerLow(std::uint8_t data);
-        void WriteTimerHigh(std::uint8_t data);
+        void WriteTimerHigh(std::uint8_t data, bool lengthReloadBlocked);
         void SetEnabled(bool enabled);
         void ClockTimer();
         void ClockLinearCounter();
@@ -78,7 +79,7 @@ private:
     {
         void WriteControl(std::uint8_t data);
         void WritePeriod(std::uint8_t data);
-        void WriteLength(std::uint8_t data);
+        void WriteLength(std::uint8_t data, bool lengthReloadBlocked);
         void SetEnabled(bool enabled);
         void ClockTimer();
         void ClockEnvelope();
@@ -134,6 +135,7 @@ private:
     void ClockFrameCounter();
     void ClockQuarterFrame();
     void ClockHalfFrame();
+    bool LengthCounterClockPending() const;
     float ApplyOutputFilters(float sample);
     void QueueSample();
 
@@ -147,10 +149,13 @@ private:
     bool m_fiveStepFrameCounter{false};
     bool m_frameIrqInhibit{false};
     bool m_frameIrqFlag{false};
+    std::uint8_t m_frameIrqLineCountdown{0};
     bool m_pendingFiveStepFrameCounter{false};
     bool m_pendingFrameIrqInhibit{false};
     bool m_cpuCycleOdd{false};
     std::uint8_t m_frameResetDelay{0};
+    std::int8_t m_frameJitterOffset{0};
+    bool m_suppressHalfFrame{false};
     float m_highPass90PreviousInput{0.0F};
     float m_highPass90Output{0.0F};
     float m_highPass440PreviousInput{0.0F};

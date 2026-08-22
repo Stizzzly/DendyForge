@@ -50,6 +50,10 @@ void APU::Clock()
     m_noise.ClockTimer();
     m_dmc.ClockTimer(m_dmcMemoryReader);
     ClockFrameCounter();
+    if (m_frameIrqLineCountdown != 0)
+    {
+        --m_frameIrqLineCountdown;
+    }
 
     m_samplePhase += SampleRate;
     if (m_samplePhase >= CpuClockHz)
@@ -82,22 +86,55 @@ std::uint8_t APU::CpuRead(std::uint16_t address)
 
 void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
 {
+    // Writes touching length-counter state on the same CPU cycle as a half
+    // frame clock are ordered after that clock: the clock samples the halt
+    // flags from before the write (blargg 10.len_halt_timing), and a reload
+    // is ignored when the counter is then non-zero (blargg
+    // 11.len_reload_timing). The tick is applied before the write and this
+    // cycle's regular tick is suppressed.
+    const bool lengthClockThisCycle =
+        (address == 0x4000 || address == 0x4003 || address == 0x4004 ||
+         address == 0x4007 || address == 0x4008 || address == 0x400B ||
+         address == 0x400C || address == 0x400F || address == 0x4015) &&
+        LengthCounterClockPending();
+    if (lengthClockThisCycle)
+    {
+        ClockHalfFrame();
+        m_suppressHalfFrame = true;
+    }
+    const bool blockLengthReload =
+        lengthClockThisCycle &&
+        (address == 0x4003 || address == 0x4007 || address == 0x400B ||
+         address == 0x400F);
+
     switch (address)
     {
     case 0x4000: m_pulse1.WriteControl(data); break;
     case 0x4001: m_pulse1.WriteSweep(data); break;
     case 0x4002: m_pulse1.WriteTimerLow(data); break;
-    case 0x4003: m_pulse1.WriteTimerHigh(data); break;
+    case 0x4003:
+        m_pulse1.WriteTimerHigh(data, blockLengthReload &&
+                                          m_pulse1.m_lengthCounter != 0);
+        break;
     case 0x4004: m_pulse2.WriteControl(data); break;
     case 0x4005: m_pulse2.WriteSweep(data); break;
     case 0x4006: m_pulse2.WriteTimerLow(data); break;
-    case 0x4007: m_pulse2.WriteTimerHigh(data); break;
+    case 0x4007:
+        m_pulse2.WriteTimerHigh(data, blockLengthReload &&
+                                          m_pulse2.m_lengthCounter != 0);
+        break;
     case 0x4008: m_triangle.WriteControl(data); break;
     case 0x400A: m_triangle.WriteTimerLow(data); break;
-    case 0x400B: m_triangle.WriteTimerHigh(data); break;
+    case 0x400B:
+        m_triangle.WriteTimerHigh(data, blockLengthReload &&
+                                            m_triangle.m_lengthCounter != 0);
+        break;
     case 0x400C: m_noise.WriteControl(data); break;
     case 0x400E: m_noise.WritePeriod(data); break;
-    case 0x400F: m_noise.WriteLength(data); break;
+    case 0x400F:
+        m_noise.WriteLength(data, blockLengthReload &&
+                                      m_noise.m_lengthCounter != 0);
+        break;
     case 0x4010: m_dmc.WriteControl(data); break;
     case 0x4011: m_dmc.WriteDirectLoad(data); break;
     case 0x4012: m_dmc.WriteSampleAddress(data); break;
@@ -117,6 +154,11 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
             m_frameIrqFlag = false;
         }
         m_frameResetDelay = m_cpuCycleOdd ? 3 : 4;
+        // A $4017 write on an odd CPU cycle applies the reset one cycle
+        // earlier but leaves the divider on the opposite half-cycle, so all
+        // sequencer events for this frame land two CPU cycles later
+        // (blargg 04.clock_jitter, 07.irq_flag_timing).
+        m_frameJitterOffset = m_cpuCycleOdd ? 2 : 0;
         break;
     default:
         break;
@@ -140,7 +182,8 @@ bool APU::ConsumeDmcDmaStallCycle()
 
 bool APU::IrqPending() const
 {
-    return m_frameIrqFlag || m_dmc.IrqPending();
+    return (m_frameIrqFlag && m_frameIrqLineCountdown == 0) ||
+           m_dmc.IrqPending();
 }
 
 void APU::PulseChannel::WriteControl(std::uint8_t data)
@@ -159,14 +202,14 @@ void APU::PulseChannel::WriteTimerLow(std::uint8_t data)
     m_timerPeriod = (m_timerPeriod & 0x0700) | data;
 }
 
-void APU::PulseChannel::WriteTimerHigh(std::uint8_t data)
+void APU::PulseChannel::WriteTimerHigh(std::uint8_t data, bool lengthReloadBlocked)
 {
     m_timerPeriod = (m_timerPeriod & 0x00FF) |
                     ((static_cast<std::uint16_t>(data) & 0x07) << 8);
     m_timerCounter = m_timerPeriod * 2 + 1;
     m_sequenceStep = 0;
     m_envelopeStart = true;
-    if (m_enabled)
+    if (m_enabled && !lengthReloadBlocked)
     {
         m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
     }
@@ -291,12 +334,12 @@ void APU::TriangleChannel::WriteTimerLow(std::uint8_t data)
     m_timerPeriod = (m_timerPeriod & 0x0700) | data;
 }
 
-void APU::TriangleChannel::WriteTimerHigh(std::uint8_t data)
+void APU::TriangleChannel::WriteTimerHigh(std::uint8_t data, bool lengthReloadBlocked)
 {
     m_timerPeriod = (m_timerPeriod & 0x00FF) |
                     ((static_cast<std::uint16_t>(data) & 0x07) << 8);
     m_timerCounter = m_timerPeriod;
-    if (m_enabled)
+    if (m_enabled && !lengthReloadBlocked)
     {
         m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
     }
@@ -374,9 +417,9 @@ void APU::NoiseChannel::WritePeriod(std::uint8_t data)
     m_periodIndex = data & 0x0F;
 }
 
-void APU::NoiseChannel::WriteLength(std::uint8_t data)
+void APU::NoiseChannel::WriteLength(std::uint8_t data, bool lengthReloadBlocked)
 {
-    if (m_enabled)
+    if (m_enabled && !lengthReloadBlocked)
     {
         m_lengthCounter = LengthTable[(data >> 3) & 0x1F];
     }
@@ -594,6 +637,23 @@ bool APU::DmcChannel::Active() const
     return m_bytesRemaining != 0;
 }
 
+bool APU::LengthCounterClockPending() const
+{
+    if (m_frameResetDelay != 0)
+    {
+        return false;
+    }
+
+    const std::int32_t next = static_cast<std::int32_t>(m_frameCounter) + 1;
+    const std::int32_t offset = m_frameJitterOffset;
+    if (m_fiveStepFrameCounter)
+    {
+        return next == 14912 + offset || next == 37280 + offset;
+    }
+
+    return next == 14912 + offset || next == 29828 + offset;
+}
+
 void APU::ClockFrameCounter()
 {
     if (m_frameResetDelay != 0)
@@ -614,42 +674,69 @@ void APU::ClockFrameCounter()
     }
 
     ++m_frameCounter;
+    const std::int32_t offset = m_frameJitterOffset;
 
+    // Event offsets are in CPU cycles from the cycle that applied the
+    // sequencer reset, derived from blargg's 2005 APU timing suite: the
+    // half/quarter frame boundary is a three-CPU-cycle signal whose middle
+    // cycle clocks the length counters, and the frame IRQ flag is set on
+    // three consecutive cycles at the end of the frame.
     if (m_fiveStepFrameCounter)
     {
-        if (m_frameCounter == 7457 || m_frameCounter == 22371)
+        if (m_frameCounter == 7456 + offset || m_frameCounter == 22370 + offset)
         {
             ClockQuarterFrame();
         }
-        else if (m_frameCounter == 14913 || m_frameCounter == 37281)
+        else if (m_frameCounter == 14912 + offset || m_frameCounter == 37280 + offset)
         {
-            ClockQuarterFrame();
-            ClockHalfFrame();
-            if (m_frameCounter == 37281)
+            if (m_suppressHalfFrame)
             {
-                m_frameCounter = 0;
+                m_suppressHalfFrame = false;
             }
+            else
+            {
+                ClockHalfFrame();
+            }
+            ClockQuarterFrame();
+        }
+
+        if (m_frameCounter == 37282 + offset)
+        {
+            m_frameCounter = 0;
         }
         return;
     }
 
-    if (m_frameCounter == 7457 || m_frameCounter == 22371)
+    if (m_frameCounter == 7456 + offset || m_frameCounter == 22370 + offset)
     {
         ClockQuarterFrame();
     }
-    else if (m_frameCounter == 14913)
+    else if (m_frameCounter == 14912 + offset || m_frameCounter == 29828 + offset)
     {
-        ClockQuarterFrame();
-        ClockHalfFrame();
-    }
-    else if (m_frameCounter == 29829)
-    {
-        ClockQuarterFrame();
-        ClockHalfFrame();
-        if (!m_frameIrqInhibit)
+        if (m_suppressHalfFrame)
         {
-            m_frameIrqFlag = true;
+            m_suppressHalfFrame = false;
         }
+        else
+        {
+            ClockHalfFrame();
+        }
+        ClockQuarterFrame();
+    }
+
+    if (m_frameCounter >= 29827 + offset && m_frameCounter <= 29829 + offset &&
+        !m_frameIrqInhibit)
+    {
+        m_frameIrqFlag = true;
+        // The frame IRQ line reaches the CPU several cycles after the flag
+        // becomes readable through $4015; this delay models that latency
+        // against the instruction-boundary interrupt poll (blargg
+        // 08.irq_timing vs 07.irq_flag_timing).
+        m_frameIrqLineCountdown = FrameIrqLineLatencyCycles;
+    }
+
+    if (m_frameCounter == 29830 + offset)
+    {
         m_frameCounter = 0;
     }
 }

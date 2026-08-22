@@ -201,6 +201,17 @@ private:
     std::uint8_t m_fetched{0};
 
     std::uint8_t m_cycles{0};
+
+    // Hardware polls interrupt lines at an instruction boundary, so a
+    // signalled interrupt must not cut into the cycle burn of the current
+    // instruction (blargg 08.irq_timing).
+    enum class PendingInterrupt
+    {
+        None,
+        Irq,
+        Nmi
+    };
+    PendingInterrupt m_pendingInterrupt{PendingInterrupt::None};
 };
 
 } // namespace dendyforge

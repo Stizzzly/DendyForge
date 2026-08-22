@@ -245,7 +245,8 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
 
     cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
     cpu.IRQ();
-    CHECK(cpu.Cycles() == 7);
+    cpu.Clock(); // the latched interrupt is serviced at the next boundary
+    CHECK(cpu.Cycles() == 6);
     CHECK(cpu.ProgramCounter() == 0x9000);
     CHECK(bus.memory[0x01FD] == 0x80);
     CHECK(bus.memory[0x01FC] == 0x02);
@@ -263,7 +264,8 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
     CHECK(cpu.ProgramCounter() == 0x8000);
 
     cpu.NMI();
-    CHECK(cpu.Cycles() == 7);
+    cpu.Clock(); // the latched interrupt is serviced at the next boundary
+    CHECK(cpu.Cycles() == 6);
     CHECK(cpu.ProgramCounter() == 0xA000);
     CHECK(bus.memory[0x01FD] == 0x80);
     CHECK(bus.memory[0x01FC] == 0x00);

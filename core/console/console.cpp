@@ -46,12 +46,15 @@ void Console::Clock()
         m_bus.BeginPendingDma(m_cpuCycleIsOdd);
     }
 
-    m_bus.AudioProcessor().Clock();
-
+    // The CPU polls the interrupt line before the APU's end-of-cycle flag
+    // update, so a flag set in this cycle is only polled from the next
+    // cycle onward (blargg 08.irq_timing).
     if (m_bus.AudioProcessor().IrqPending())
     {
         m_cpu.IRQ();
     }
+
+    m_bus.AudioProcessor().Clock();
 
     for (int index = 0; index < 3; ++index)
     {

@@ -261,15 +261,21 @@ high-pass filters plus a 14 kHz low-pass filter before reaching SDL. These
 filters remove the DC component produced by the raw digital mixer and reduce
 high-frequency aliasing; keep them in the APU rather than the SDL frontend.
 
-The local `blargg_apu_2005.07.30` suite was run on 2026-08-22 through
-`DendyForgeApuTimingRunner`. It reports its final result in CPU RAM `$00F0`
-after entering a stable final loop; code 1 is pass. `01.len_ctr`,
-`02.len_table`, `03.irq_flag`, and `09.reset_timing` pass. `04.clock_jitter`
-fails with code 3 (frame IRQ late); `05.len_timing_mode0` and
-`06.len_timing_mode1` with code 5; `07.irq_flag_timing` with code 3;
-`08.irq_timing` with code 2; `10.len_halt_timing` with code 3; and
-`11.len_reload_timing` with code 3. Keep the APU Roadmap items in progress
-until the frame counter's exact write, IRQ, and length-clock ordering is fixed.
+The local `blargg_apu_2005.07.30` suite was re-run on 2026-08-22 after the
+frame-sequencer rework: **all eleven ROMs pass** (code 1) through
+`DendyForgeApuTimingRunner`, and the `apu_mixer` suite still passes. The
+frame counter now models, in CPU cycles relative to the application of a
+`$4017` write's delayed reset: quarter/half events at 7456/14912/22370 and
+29828 (four-step) or 37280 (five-step), the frame IRQ flag set on three
+consecutive cycles 29827-29829, a parity-dependent jitter offset (write on
+an odd CPU cycle shifts all sequencer events two counter cycles later), a
+3-cycle latency from flag to IRQ line (`FrameIrqLineLatencyCycles`), and
+half-frame clocks that sample halt state before the same cycle's CPU write
+while a same-cycle length reload is ignored when the counter is non-zero.
+`CPU6502` now latches IRQ/NMI and services them at the instruction
+boundary, and `Console::Clock()` polls the APU interrupt line before the
+APU's end-of-cycle update. Remaining before marking channel Roadmap items
+complete: the manual Contra listening regression.
 
 When choosing between a broad rewrite and a small change, preserve the existing
 public PPU interface where possible and land the smallest test-backed layer.
@@ -464,10 +470,10 @@ length, sample-buffer fetch, loop, IRQ and CPU stall. `$4015` enables/status,
 `$4017` four-/five-step mode and frame reset delay, nonlinear 2A03 mixing, and
 90 Hz + 440 Hz high-pass / 14 kHz low-pass filters are also present.
 
-This does **not** make the APU cycle-accurate. The frame counter presently has
-known errors verified by blargg tests. Keep all four channel entries yellow
-(`frame-timing gaps`) and keep only the Audio Mixer entry green until the
-timing suite passes.
+The frame counter's CPU-cycle timing is validated by the full blargg suite
+(all eleven ROMs pass). Keep the four channel Roadmap entries yellow only
+until the manual Contra listening regression confirms no metallic artifacts;
+the Audio Mixer entry is green.
 
 ### SDL3 audio contract
 
@@ -532,21 +538,9 @@ cmake --build --preset mingw-clang-release --target DendyForgeApuTimingRunner
 & .\out\build\mingw-clang-release\DendyForgeApuTimingRunner.exe .\blargg_apu_2005.07.30
 ```
 
-The exact baseline is:
-
-| ROM | Result | Interpreted diagnosis |
-| --- | --- | --- |
-| `01.len_ctr` | PASS | Basic length counter works. |
-| `02.len_table` | PASS | Length lookup table works. |
-| `03.irq_flag` | PASS | Basic frame IRQ flag works. |
-| `04.clock_jitter` | FAIL, code 3 | Frame IRQ is late. |
-| `05.len_timing_mode0` | FAIL, code 5 | Second length clock is late. |
-| `06.len_timing_mode1` | FAIL, code 5 | Second length clock is late. |
-| `07.irq_flag_timing` | FAIL, code 3 | First frame-IRQ assertion is late. |
-| `08.irq_timing` | FAIL, code 2 | An IRQ timing event is early. |
-| `09.reset_timing` | PASS in isolation | Do not count it as cumulative success after earlier failures. |
-| `10.len_halt_timing` | FAIL, code 3 | Expected length clock around CPU cycle 14915 is wrong. |
-| `11.len_reload_timing` | FAIL, code 3 | Reload just after length clock is ordered incorrectly. |
+The current baseline (2026-08-22, after the frame-sequencer rework): all
+eleven ROMs report code 1 (pass). Before the rework, `04`-`08`, `10` and
+`11` failed with the codes recorded in git history.
 
 The suite's own `tests.txt` declares dependencies between tests. Therefore
 later isolated passes do not prove full conformance once an earlier timing test
@@ -554,24 +548,15 @@ fails.
 
 ### Next APU implementation plan
 
-This is the highest-priority emulator work after the current handoff:
+The frame-sequencer timing work is complete (all blargg timing ROMs pass,
+see the status section above). Remaining follow-up:
 
-1. From NESdev documentation and blargg source, write down a deterministic
-   table of quarter-frame, half-frame and frame-IRQ CPU cycles for four-step
-   and five-step operation.
-2. Model a `$4017` write as a separately delayed event. Its effective delay
-   depends on CPU-cycle parity; do not fold it into a single averaged counter.
-3. Make the cycle-boundary order explicit: frame clocks, IRQ assertion,
-   IRQ-inhibit clearing and sequencer restart must happen in hardware order.
-4. Re-run the complete timing runner after every narrow change. Fix
-   `04.clock_jitter`, `07.irq_flag_timing` and `08.irq_timing` first; only then
-   trust the diagnostics of the dependent length timing tests.
-5. When all timing ROM pass, re-run `apu_mixer`, unit tests and Contra. Listen
-   specifically for the formerly metallic artifacts before marking channels
-   complete in the Roadmap.
-
-Avoid a broad APU rewrite. The evidence points to frame-sequencer ordering and
-`$4017` timing, not absence of the implemented channels or mixer.
+1. Manually regression-test Contra and listen for the formerly metallic
+   artifacts; only then mark the channel Roadmap items in `README.md`.
+2. If audio artifacts appear, check the frame IRQ path first: the CPU now
+   services interrupts only at instruction boundaries, and the frame IRQ
+   line uses `APU::FrameIrqLineLatencyCycles` (3) cycles of latency after
+   the `$4015`-visible flag.
 
 ### Diagnostics and runner-writing rules
 

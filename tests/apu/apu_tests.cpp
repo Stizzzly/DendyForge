@@ -129,6 +129,34 @@ TEST_CASE("APU four-step frame counter raises and clears its status IRQ")
     CHECK((apu.CpuRead(0x4015) & 0x40) == 0);
 }
 
+TEST_CASE("APU frame sequencer clocks length counters at blargg-validated cycles")
+{
+    // A $4017 write on an even CPU cycle applies its reset after four
+    // cycles and the first half frame clock lands 14915 CPU cycles after
+    // the write; the frame IRQ flag is set three cycles in a row starting
+    // 29831 cycles after the write (blargg 05/07.irq_flag_timing).
+    dendyforge::APU apu;
+    apu.CpuWrite(0x4015, 0x01);
+    apu.CpuWrite(0x4000, 0x10);
+    apu.CpuWrite(0x4001, 0x7F);
+    apu.CpuWrite(0x4003, 0x18); // length = 2
+
+    apu.CpuWrite(0x4017, 0xC0); // immediate half frame clock: length 2 -> 1
+    for (int cycle = 0; cycle < 6; ++cycle)
+    {
+        apu.Clock();
+    }
+    apu.CpuWrite(0x4017, 0x00);
+    for (int cycle = 0; cycle < 14'915; ++cycle)
+    {
+        apu.Clock();
+    }
+    CHECK((apu.CpuRead(0x4015) & 0x01) != 0); // not yet clocked
+
+    apu.Clock();
+    CHECK((apu.CpuRead(0x4015) & 0x01) == 0); // clocked to silence
+}
+
 TEST_CASE("APU five-step frame counter does not raise a frame IRQ")
 {
     dendyforge::APU apu;

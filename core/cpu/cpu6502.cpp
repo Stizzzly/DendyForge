@@ -576,6 +576,18 @@ void CPU6502::Clock()
 {
     if (m_cycles == 0)
     {
+        if (m_pendingInterrupt != PendingInterrupt::None)
+        {
+            const std::uint16_t vector = m_pendingInterrupt == PendingInterrupt::Nmi
+                                             ? 0xFFFA
+                                             : 0xFFFE;
+            m_pendingInterrupt = PendingInterrupt::None;
+            EnterInterrupt(vector, false);
+            m_cycles = 7;
+            --m_cycles;
+            return;
+        }
+
         Fetch();
 
         const auto& instruction = GetInstructionConfig(m_opcode);
@@ -595,19 +607,17 @@ void CPU6502::Clock()
 
 void CPU6502::IRQ()
 {
-    if (GetFlag(Flags::I))
+    if (GetFlag(Flags::I) || m_pendingInterrupt == PendingInterrupt::Nmi)
     {
         return;
     }
 
-    EnterInterrupt(0xFFFE, false);
-    m_cycles = 7;
+    m_pendingInterrupt = PendingInterrupt::Irq;
 }
 
 void CPU6502::NMI()
 {
-    EnterInterrupt(0xFFFA, false);
-    m_cycles = 7;
+    m_pendingInterrupt = PendingInterrupt::Nmi;
 }
 
 std::uint8_t CPU6502::Accumulator() const
