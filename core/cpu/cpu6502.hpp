@@ -48,6 +48,11 @@ public:
     void IRQ(bool line = true);
     void NMI();
 
+    // The /NMI line input, sampled once per CPU cycle by the console. A
+    // rising edge latches the internal NMI; the latch survives the line
+    // dropping again and is cleared only by servicing.
+    void NmiLine(bool asserted);
+
     bool GetFlag(Flags flag) const;
     void SetFlag(Flags flag, bool value);
 
@@ -289,6 +294,7 @@ private:
         Irq,
         Nmi
     };
+    bool m_nmiLinePrevious{false};
     PendingInterrupt m_pendingInterrupt{PendingInterrupt::None};
 
     // The lines are sampled during the penultimate cycle of an

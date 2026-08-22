@@ -30,6 +30,13 @@ TEST_CASE("Bus transfers a CPU memory page into PPU OAM through DMA")
     bus.CpuWrite(0x2003, 0x00);
     bus.CpuWrite(0x4014, 0x02);
 
+    // The transfer occupies 513 real CPU cycles; drain them before the
+    // OAM contents are complete.
+    bus.BeginPendingDma(false);
+    while (bus.ConsumeDmaStallCycle())
+    {
+    }
+
     bus.CpuWrite(0x2003, 0x00);
     CHECK(bus.CpuRead(0x2004) == 0x12);
     bus.CpuWrite(0x2003, 0xFF);

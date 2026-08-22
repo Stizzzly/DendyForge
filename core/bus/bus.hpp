@@ -24,7 +24,7 @@ public:
     void CpuWrite(std::uint16_t address, std::uint8_t data) override;
 
     void ClockPpu();
-    bool PollPpuNmi();
+    bool PpuNmiLine() const;
     void BeginPendingDma(bool cpuCycleIsOdd);
     bool ConsumeDmaStallCycle();
 
@@ -39,6 +39,11 @@ private:
     Controller m_controller1;
     bool m_dmaPending{false};
     std::uint16_t m_dmaStallCycles{0};
+    std::uint16_t m_dmaAlignmentCycles{0};
+    std::uint8_t m_dmaPage{0};
+    std::uint8_t m_dmaOffset{0};
+    bool m_dmaReadPhase{true};
+    std::uint8_t m_dmaValue{0};
 
     std::array<std::uint8_t, 2048> m_cpuRam{};
 };

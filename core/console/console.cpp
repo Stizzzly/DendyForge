@@ -53,15 +53,16 @@ void Console::Clock()
     // 08.irq_timing).
     m_cpu.IRQ(m_bus.AudioProcessor().IrqPending());
 
-    for (int index = 0; index < 3; ++index)
-    {
-        m_bus.ClockPpu();
-    }
-
-    if (m_bus.PollPpuNmi())
-    {
-        m_cpu.NMI();
-    }
+    // One CPU cycle spans three PPU dots and the /NMI line is sampled
+    // once per CPU cycle at phi2, between the second and third dot. A
+    // pulse shorter than the distance to the next sample point - for
+    // example VBlank raised at the last dot and cleared by the CPU's
+    // next $2002 read - is missed entirely, which is how the hardware
+    // NMI suppression windows arise (blargg vbl_nmi_timing 5-7).
+    m_bus.ClockPpu();
+    m_cpu.NmiLine(m_bus.PpuNmiLine());
+    m_bus.ClockPpu();
+    m_bus.ClockPpu();
 
     m_cpuCycleIsOdd = !m_cpuCycleIsOdd;
 }

@@ -64,8 +64,7 @@ TEST_CASE("PPU enters VBlank and raises one NMI when enabled")
         ppu.Clock();
     }
 
-    CHECK(ppu.PollNmi());
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
     CHECK(ppu.ConsumeFrameComplete());
     CHECK_FALSE(ppu.ConsumeFrameComplete());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
@@ -81,8 +80,7 @@ TEST_CASE("PPU raises an NMI when it is enabled during VBlank")
     }
 
     ppu.CpuWrite(0x2000, 0x80);
-    CHECK(ppu.PollNmi());
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
 }
 
 TEST_CASE("PPU skips one pre-render cycle on alternating rendered frames")
@@ -411,7 +409,7 @@ TEST_CASE("PPU renders visible scanlines before VBlank")
     }
 
     CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK_FALSE(ppu.NmiLineLevel());
 }
 
 TEST_CASE("PPU emits background pixels one PPU clock at a time")

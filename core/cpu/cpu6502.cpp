@@ -1243,6 +1243,15 @@ void CPU6502::NMI()
     m_pendingInterrupt = PendingInterrupt::Nmi;
 }
 
+void CPU6502::NmiLine(bool asserted)
+{
+    if (asserted && !m_nmiLinePrevious)
+    {
+        m_pendingInterrupt = PendingInterrupt::Nmi;
+    }
+    m_nmiLinePrevious = asserted;
+}
+
 std::uint8_t CPU6502::Accumulator() const
 {
     return m_a;

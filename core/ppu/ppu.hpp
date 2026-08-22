@@ -14,6 +14,8 @@ class Cartridge;
 class PPU
 {
 public:
+    PPU();
+
     struct ScrollAddressState
     {
         std::uint16_t vramAddress;
@@ -25,7 +27,10 @@ public:
     void ConnectCartridge(Cartridge* cartridge);
 
     void Clock();
-    bool PollNmi();
+    // The /NMI line level: high while the VBlank flag and the NMI enable
+    // are both set. The Console samples this once per CPU cycle and the
+    // CPU latches an NMI on a rising edge.
+    bool NmiLineLevel() const;
     bool ConsumeFrameComplete();
     void RenderBackground();
     void RenderSprites();
@@ -95,9 +100,6 @@ private:
                           std::uint16_t source) const;
     bool RenderingEnabled() const;
     std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
-    // Tracks the hardware /NMI line: output = vblank flag AND nmi enable.
-    // A rising edge latches one NMI for the Console to poll.
-    void UpdateNmiOutput();
 
     Cartridge* m_cartridge{nullptr};
     Mirroring m_mirroring{Mirroring::Horizontal};
@@ -133,8 +135,11 @@ private:
     std::uint8_t m_oamAddress{0};
     std::uint8_t m_dataBuffer{0};
     // PPU open-bus latch: holds the last value driven onto the CPU data
-    // bus by any $2000-$2007 read or write. Decay is not modeled.
+    // bus by any $2000-$2007 read or write. The capacitor leaks: without
+    // an access for about half a second of PPU dots the latch reads zero
+    // (blargg ppu_open_bus decay test).
     std::uint8_t m_openBusLatch{0};
+    std::uint32_t m_openBusDecayDots{0};
     // The PPU scrolling registers conventionally call these v, t, and x.
     // CPU register writes prepare t and x; only a completed $2006 write
     // copies t into v. The renderer will progressively take ownership of v.
@@ -142,8 +147,6 @@ private:
     std::uint16_t m_temporaryAddress{0}; // t: temporary VRAM address
     std::uint8_t m_fineX{0}; // x: fine horizontal scroll
     bool m_writeLatch{false};
-    bool m_nmiPending{false};
-    bool m_nmiOutput{false};
     // Set by a $2002 read landing one dot before the VBlank flag-set dot;
     // suppresses the flag and the NMI for that frame only.
     bool m_suppressVblank{false};

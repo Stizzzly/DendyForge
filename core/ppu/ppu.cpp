@@ -21,6 +21,24 @@ constexpr std::array<std::uint32_t, 64> SystemPalette{
 
 }
 
+// The palette RAM contents an NTSC PPU powers up with (blargg's
+// power_up_palette table); games always overwrite it.
+constexpr std::array<std::uint8_t, 32> PowerUpPalette{
+    0x09, 0x01, 0x00, 0x01, 0x00, 0x02, 0x02, 0x0D,
+    0x08, 0x10, 0x08, 0x24, 0x00, 0x00, 0x04, 0x2C,
+    0x09, 0x01, 0x34, 0x03, 0x00, 0x04, 0x00, 0x14,
+    0x08, 0x3A, 0x00, 0x02, 0x00, 0x20, 0x2C, 0x08,
+};
+
+// About half a second of PPU dots: long enough for normal register
+// traffic, short enough to decay within blargg's one-second window.
+constexpr std::uint32_t OpenBusDecayDots = 89342 * 30;
+
+PPU::PPU()
+    : m_paletteRam(PowerUpPalette)
+{
+}
+
 void PPU::ConnectCartridge(Cartridge* cartridge)
 {
     m_cartridge = cartridge;
@@ -30,11 +48,14 @@ void PPU::ConnectCartridge(Cartridge* cartridge)
 
 void PPU::Clock()
 {
+    if (m_openBusLatch != 0 && ++m_openBusDecayDots >= OpenBusDecayDots)
+    {
+        m_openBusLatch = 0;
+    }
+
     if (m_scanline == -1 && m_cycle == 1)
     {
         m_status &= ~0xE0;
-        m_nmiPending = false;
-        UpdateNmiOutput();
         BeginFrame();
     }
 
@@ -131,14 +152,16 @@ void PPU::Clock()
         else
         {
             m_status |= 0x80;
-            UpdateNmiOutput();
         }
         m_frameComplete = true;
     }
 
+    const bool skipOddFrameDot =
+        m_scanline == -1 && m_cycle == 339 && m_oddFrame &&
+        RenderingEnabled();
+
     ++m_cycle;
-    if (m_scanline == -1 && m_cycle == 340 && m_oddFrame &&
-        RenderingEnabled())
+    if (skipOddFrameDot && m_scanline == -1 && m_cycle == 340)
     {
         m_cycle = 0;
         m_scanline = 0;
@@ -743,11 +766,9 @@ void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
     }
 }
 
-bool PPU::PollNmi()
+bool PPU::NmiLineLevel() const
 {
-    const bool pending = m_nmiPending;
-    m_nmiPending = false;
-    return pending;
+    return (m_status & 0x80) != 0 && (m_control & 0x80) != 0;
 }
 
 bool PPU::ConsumeFrameComplete()
@@ -771,14 +792,22 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
         {
             m_suppressVblank = true;
         }
+        // Only the top three status bits are driven; the low five bits
+        // keep their decayed open-bus value, and the decay timer keeps
+        // running (blargg ppu_open_bus).
         data = (m_status & 0xE0) | (m_openBusLatch & 0x1F);
         m_status &= ~0x80;
-        m_nmiPending = false;
         m_writeLatch = false;
-        UpdateNmiOutput();
-        break;
+        m_openBusLatch =
+            (m_openBusLatch & 0x1F) | (data & 0xE0);
+        return data;
     case 0x0004:
         data = m_oam[m_oamAddress];
+        // Bits 2-4 of an attribute byte do not exist on the chip.
+        if ((m_oamAddress & 0x03) == 0x02)
+        {
+            data &= 0xE3;
+        }
         break;
     case 0x0007:
     {
@@ -789,7 +818,11 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
         if (vramAddress >= 0x3F00)
         {
             m_dataBuffer = PpuRead(vramAddress - 0x1000);
-            data = value;
+            // Palette RAM is six bits wide: the top two bits keep their
+            // decayed open-bus value (blargg ppu_open_bus).
+            data = (value & 0x3F) | (m_openBusLatch & 0xC0);
+            m_openBusLatch = data;
+            return data;
         }
         else
         {
@@ -799,17 +832,21 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
         break;
     }
     default:
-        // Write-only registers leave the open-bus latch on the CPU bus.
-        break;
+        // Write-only registers drive nothing onto the CPU bus: the
+        // decayed latch value comes back unchanged and the decay timer
+        // keeps running (blargg ppu_open_bus).
+        return m_openBusLatch;
     }
 
     m_openBusLatch = data;
+    m_openBusDecayDots = 0;
     return data;
 }
 
 void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
 {
     m_openBusLatch = data;
+    m_openBusDecayDots = 0;
 
     switch (address & 0x0007)
     {
@@ -817,7 +854,6 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         m_control = data;
         m_temporaryAddress = (m_temporaryAddress & 0xF3FF) |
                              ((static_cast<std::uint16_t>(data) & 0x03) << 10);
-        UpdateNmiOutput();
         break;
     case 0x0001:
         m_mask = data;
@@ -1017,16 +1053,6 @@ bool PPU::RenderingEnabled() const
     return (m_mask & 0x18) != 0;
 }
 
-void PPU::UpdateNmiOutput()
-{
-    const bool output =
-        (m_status & 0x80) != 0 && (m_control & 0x80) != 0;
-    if (output && !m_nmiOutput)
-    {
-        m_nmiPending = true;
-    }
-    m_nmiOutput = output;
-}
 
 std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index) const
 {

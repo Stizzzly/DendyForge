@@ -94,14 +94,14 @@ void Bus::CpuWrite(
     }
 
     // $4014
-    // OAM DMA transfers one CPU memory page into PPU sprite memory.
+    // OAM DMA transfers one CPU memory page into PPU sprite memory over
+    // 512 real CPU cycles (one read and one write cycle per byte) after
+    // one or two alignment cycles; the Console stalls the CPU while the
+    // PPU and APU keep clocking.
     if (address == 0x4014)
     {
-        const std::uint16_t baseAddress = static_cast<std::uint16_t>(data) << 8;
-        for (std::uint16_t offset = 0; offset < 256; ++offset)
-        {
-            m_ppu.CpuWrite(0x2004, CpuRead(baseAddress + offset));
-        }
+        m_dmaPage = data;
+        m_dmaOffset = 0;
         m_dmaPending = true;
         return;
     }
@@ -130,9 +130,9 @@ void Bus::ClockPpu()
     m_ppu.Clock();
 }
 
-bool Bus::PollPpuNmi()
+bool Bus::PpuNmiLine() const
 {
-    return m_ppu.PollNmi();
+    return m_ppu.NmiLineLevel();
 }
 
 void Bus::BeginPendingDma(bool cpuCycleIsOdd)
@@ -142,7 +142,11 @@ void Bus::BeginPendingDma(bool cpuCycleIsOdd)
         return;
     }
 
+    // 513 cycles on an even CPU cycle, 514 on an odd one: the transfer
+    // needs 512 cycles and the remainder is the alignment gap.
     m_dmaStallCycles = cpuCycleIsOdd ? 514 : 513;
+    m_dmaAlignmentCycles =
+        static_cast<std::uint16_t>(m_dmaStallCycles - 512);
     m_dmaPending = false;
 }
 
@@ -151,6 +155,28 @@ bool Bus::ConsumeDmaStallCycle()
     if (m_dmaStallCycles != 0)
     {
         --m_dmaStallCycles;
+        if (m_dmaAlignmentCycles > 0)
+        {
+            --m_dmaAlignmentCycles;
+        }
+        else
+        {
+            // After the alignment gap, alternating cycles read from the
+            // CPU page and write the byte into OAM.
+            if (m_dmaReadPhase)
+            {
+                m_dmaValue = CpuRead(
+                    (static_cast<std::uint16_t>(m_dmaPage) << 8) |
+                    m_dmaOffset);
+                m_dmaReadPhase = false;
+            }
+            else
+            {
+                m_ppu.CpuWrite(0x2004, m_dmaValue);
+                ++m_dmaOffset;
+                m_dmaReadPhase = true;
+            }
+        }
         return true;
     }
 

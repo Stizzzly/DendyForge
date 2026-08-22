@@ -31,16 +31,16 @@ void ClockDots(dendyforge::PPU& ppu, std::int64_t dots)
 
 } // namespace
 
-TEST_CASE("VBlank sets at scanline 241 cycle 1 and latches exactly one NMI")
+TEST_CASE("VBlank sets at scanline 241 cycle 1 and raises the NMI line")
 {
     dendyforge::PPU ppu;
     ppu.CpuWrite(0x2000, 0x80);
 
     ClockDots(ppu, DotsUntilVBlankSetDot + 1);
 
-    CHECK(ppu.PollNmi());
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
+    CHECK_FALSE(ppu.NmiLineLevel());
     CHECK(ppu.ConsumeFrameComplete());
     CHECK_FALSE(ppu.ConsumeFrameComplete());
 }
@@ -56,49 +56,54 @@ TEST_CASE("A $2002 read one dot before the set dot suppresses flag and NMI")
 
     // The rest of this frame's VBlank must stay suppressed.
     ClockDots(ppu, DotsUntil(241, 100) - DotsUntilVBlankSetDot);
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK_FALSE(ppu.NmiLineLevel());
     CHECK((ppu.CpuRead(0x2002) & 0x80) == 0);
 
     // The suppression is frame-local: the next frame raises VBlank again.
     ClockDots(ppu, DotsPerFrame + DotsUntilVBlankSetDot + 1 -
                   DotsUntil(241, 100));
-    CHECK(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
 }
 
-TEST_CASE("$2000 NMI enable follows the NMI line, one NMI per rising edge")
+TEST_CASE("$2000 NMI enable drives the line level, edges are latched by the CPU")
 {
     dendyforge::PPU ppu;
 
     ClockDots(ppu, DotsUntil(241, 100) + 1);
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK_FALSE(ppu.NmiLineLevel());
 
-    // Enabling NMI while the VBlank flag is set raises the line: one NMI.
+    // Move on to the next frame's VBlank with the flag untouched: the
+    // flag is set but the enable is still clear, so the line stays low.
+    ClockDots(ppu, DotsPerFrame - 1);
+    CHECK_FALSE(ppu.NmiLineLevel());
+
     ppu.CpuWrite(0x2000, 0x80);
-    CHECK(ppu.PollNmi());
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
 
-    // Rewriting the same value must not retrigger.
-    ppu.CpuWrite(0x2000, 0x80);
-    CHECK_FALSE(ppu.PollNmi());
-
-    // Disabling, then re-enabling inside the same VBlank is a new edge.
+    // Disabling drops the line; re-enabling raises it again (a new edge
+    // for the CPU's detector).
     ppu.CpuWrite(0x2000, 0x00);
-    CHECK_FALSE(ppu.PollNmi());
+    CHECK_FALSE(ppu.NmiLineLevel());
     ppu.CpuWrite(0x2000, 0x80);
-    CHECK(ppu.PollNmi());
+    CHECK(ppu.NmiLineLevel());
+
+    // Clearing the flag with $2002 drops the line while enabled.
+    ppu.CpuRead(0x2002);
+    CHECK_FALSE(ppu.NmiLineLevel());
 }
 
-TEST_CASE("A $2002 read during VBlank clears the flag and the pending NMI")
+TEST_CASE("A $2002 read during VBlank clears the flag and drops the line")
 {
     dendyforge::PPU ppu;
     ppu.CpuWrite(0x2000, 0x80);
 
     ClockDots(ppu, DotsUntil(241, 2) + 1);
 
+    CHECK(ppu.NmiLineLevel());
     CHECK((ppu.CpuRead(0x2002) & 0x80) != 0);
+    CHECK_FALSE(ppu.NmiLineLevel());
     CHECK((ppu.CpuRead(0x2002) & 0x80) == 0);
-    CHECK_FALSE(ppu.PollNmi());
 }
 
 namespace
