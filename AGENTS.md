@@ -308,3 +308,325 @@ marks SDL3 window, framebuffer renderer, keyboard input, controller port,
 input latching, and Battle City as complete. Game Loop, most PPU areas, APU,
 additional mappers, debugger, Libretro, and Android remain unfinished. Update
 checkboxes only after the corresponding capability is implemented and verified.
+
+## Operational appendix — current verified handoff (2026-08-22)
+
+This appendix is newer than the narrative above. If a statement in the earlier
+sections conflicts with this appendix, **this appendix takes precedence**. It
+records the changes made during the PPU/APU work and the exact commands used to
+verify them.
+
+### Verified game-facing status
+
+The following is a practical, user-confirmed regression list. It is not a
+replacement for hardware conformance tests, but it is valuable when changing
+timing-sensitive code.
+
+| ROM/game | Current practical result | Meaning for future work |
+| --- | --- | --- |
+| Super Mario Bros. | Fully playable in the current build | Keep VBlank-only presentation; use as a scrolling PPU regression check. |
+| Pac-Man | Fully playable | Useful simple rendering/input regression. |
+| Contra | Fully playable and sound was audibly checked | Use to catch APU mixing, DMC and frontend-audio regressions. |
+| Jackal | Does not work | Do not claim Mapper 2 alone solves it; diagnose board/mapper requirements from its header and documented hardware. |
+
+`README.md` must preserve these distinctions. In particular, it is valid to
+describe a game as practically playable while PPU/APU items remain yellow.
+
+### Current, non-negotiable frame presentation path
+
+There was a user-visible regression where partial lines of Mario were shown
+while the game scrolled, described as playing on a CRT. The cause was uploading
+the PPU framebuffer before the frame had been completely rendered. The current
+path is deliberately different:
+
+1. `Console` advances CPU, APU and PPU in their clock relationship.
+2. PPU enters VBlank on scanline 241 and raises its one-shot frame-complete
+   event.
+3. `main.cpp` consumes that event.
+4. Only then does it call the SDL texture upload, clear, texture render and
+   present sequence.
+
+The frontend uses a real-time CPU-clock accumulator plus VSync. It must not
+restore an unconditional `SDL_UpdateTexture`/`SDL_RenderPresent` in the outer
+event loop and must not use a fixed arbitrary batch, such as 1,000 clocks, as
+the decision to present. A batch may be an internal scheduling detail only if
+the frame-complete boundary is still the sole upload boundary.
+
+If the game runs too fast after a frontend change, inspect the accumulator and
+ensure there is exactly one caller of `Console::Clock()`. Rendering a frame is
+not permission to advance the emulated machine by another frame.
+
+### Exact component layout and CMake targets
+
+The earlier repository map is structurally correct; the following additions
+are important for current work:
+
+```text
+core/apu/apu.hpp, core/apu/apu.cpp       APU implementation.
+core/mapper/mapper2.hpp/.cpp             UxROM/UNROM implementation.
+tests/apu/apu_tests.cpp                  APU unit coverage.
+tools/apu_mixer_runner.cpp               Headless Shay Green mixer-ROM runner.
+tools/apu_timing_runner.cpp              Headless blargg APU timing-ROM runner.
+```
+
+`CMakeLists.txt` builds both runner executables in addition to the library,
+tests and SDL application:
+
+- `DendyForgeApuMixerRunner`;
+- `DendyForgeApuTimingRunner`.
+
+Do not add test ROM binaries to a target as C++ sources. A runner receives the
+directory containing `.nes` files as a command-line argument.
+
+### Console clocking and DMA invariants
+
+`Console` owns the master scheduling relationship:
+
+```text
+one Console cycle
+  ├─ CPU executes one cycle unless OAM/DMC has stolen it
+  ├─ APU::Clock() once
+  ├─ PPU::Clock() three times
+  ├─ delivery of pending PPU NMI to CPU
+  └─ update CPU-cycle parity
+```
+
+The two DMA mechanisms intentionally have different ownership and timing:
+
+- Writing `$4014` triggers OAM DMA: 256 reads from the requested CPU page and
+  256 OAM writes, then a CPU stall of 513 or 514 cycles according to parity.
+  PPU and APU must continue to clock during this stall.
+- DMC fetches one byte through the memory-reader callback installed by `Bus`.
+  The APU publishes a four-cycle CPU stall through
+  `ConsumeDmcDmaStallCycle()`. It is not an OAM DMA and must not copy OAM.
+
+When fixing frame timing, avoid changing DMA behavior unless a failing test
+demonstrates an interaction. A broad scheduler rewrite risks corrupting both
+working PPU and already passing APU mixer tests.
+
+### Cartridge and Mapper 2 handoff
+
+Cartridge PRG-RAM is now used by diagnostic ROMs at `$6000-$7FFF`; the default
+for an iNES header declaring zero PRG-RAM remains one 8 KiB bank. The core
+currently supports only Mapper 0 and Mapper 2. Mapper 2 contract:
+
+```text
+$8000-$BFFF  selected 16 KiB PRG bank
+$C000-$FFFF  permanently mapped final 16 KiB PRG bank
+write $8000-$FFFF  selects the lower bank (masked to available banks)
+```
+
+Do not special-case Jackal by filename. First inspect its iNES header and
+confirm the mapper/board, then implement the missing general hardware with
+small mapping tests. Possible future cartridge work includes trainer handling,
+NES 2.0 metadata, battery-backed PRG-RAM persistence and further mappers; none
+should be implied by the current Mapper 0/2 support.
+
+### PPU precise handoff point
+
+The PPU is intentionally paused at a strong, usable baseline. It includes
+background fetch/shifter state, live scroll registers, scanline sprite
+selection/fetch, odd-frame behaviour, palette/nametable handling, OAM DMA,
+VBlank/NMI and a whole-frame framebuffer event. Do not discard that pipeline
+to pursue cycle accuracy.
+
+The next PPU work, when it resumes, should be narrow and test-backed:
+
+1. Mid-scanline `$2000/$2005/$2006/$2007` scroll/address races and split
+   scrolling.
+2. Hardware sprite-overflow bug and exact sprite-zero-hit windows.
+3. Dummy fetch/open-bus effects and VBlank/NMI edge cases.
+
+For each item: reproduce with a focused test ROM or unit test, make the
+smallest possible change, run all unit tests, then manually regression-test
+Mario, Pac-Man and Contra. Do not update the PPU Roadmap merely because a
+single screenshot looks correct.
+
+### APU public integration contract
+
+`APU` is owned by `Bus`; SDL remains strictly in `src/main.cpp`. The relevant
+public API is:
+
+```cpp
+void Reset();
+void Clock();
+std::uint8_t CpuRead(std::uint16_t address);
+void CpuWrite(std::uint16_t address, std::uint8_t value);
+void SetDmcMemoryReader(DmcMemoryReader reader);
+bool ConsumeDmcDmaStallCycle();
+bool IrqPending() const;
+std::vector<float> TakeSamples();
+```
+
+The implemented audio features are pulse 1/2 duty/envelope/sweep/length,
+triangle timer/linear/length, noise LFSR/envelope/length and DMC address,
+length, sample-buffer fetch, loop, IRQ and CPU stall. `$4015` enables/status,
+`$4017` four-/five-step mode and frame reset delay, nonlinear 2A03 mixing, and
+90 Hz + 440 Hz high-pass / 14 kHz low-pass filters are also present.
+
+This does **not** make the APU cycle-accurate. The frame counter presently has
+known errors verified by blargg tests. Keep all four channel entries yellow
+(`frame-timing gaps`) and keep only the Audio Mixer entry green until the
+timing suite passes.
+
+### SDL3 audio contract
+
+The app sends APU-generated float mono PCM at 44,100 Hz to `SDL_AudioStream`.
+It starts the device paused, queues about 50 ms before resuming, caps the SDL
+input queue near 100 ms and retains extra locally generated audio pending a
+future feed rather than dropping it. This buffering avoids underrun pops and
+the observed metallic sound artifacts.
+
+If audio artifacts return, check in this order:
+
+1. CPU accumulator rate and duplicate/missing `Console::Clock()` calls.
+2. Whether SDL's stream is started only after its prebuffer is ready.
+3. SDL queued bytes and the local pending sample count.
+4. Whether a new change bypassed the APU filters or changed the sample format.
+5. APU register/timing correctness with the ROM runners.
+
+Do not solve clicks by discarding queued samples or permanently pausing and
+clearing the stream. That creates discontinuities rather than removing their
+cause. Consult current SDL3 documentation (Context7 can be used if available)
+before changing SDL3 audio calls, then compile against the local installed SDL3.
+
+### APU ROM-test protocol and recorded baseline
+
+There are two distinct suites. Both require a freshly constructed console per
+ROM; they must never share APU state between files.
+
+#### Shay Green / `apu_mixer`
+
+Local path:
+
+```text
+roms/nes-test-roms/apu_mixer
+```
+
+The suite publishes status in cartridge PRG-RAM: `$6000 == 0` means pass and
+diagnostic text begins near `$6004`. The runner handles the fresh reset and
+waits up to 30 seconds of emulated time.
+
+```powershell
+cmake --build --preset mingw-clang-release --target DendyForgeApuMixerRunner
+& .\out\build\mingw-clang-release\DendyForgeApuMixerRunner.exe .\roms\nes-test-roms\apu_mixer
+```
+
+Recorded result: `dmc`, `noise`, `square`, and `triangle` all pass with code
+0. This is the evidence for the green **Audio Mixer** Roadmap item.
+
+#### blargg / `blargg_apu_2005.07.30`
+
+Local user-owned path:
+
+```text
+blargg_apu_2005.07.30
+```
+
+Read `readme.txt` and `tests.txt` in the suite before modifying behaviour.
+The runner detects the stable final CPU loop and reads CPU RAM `$00F0`; value
+`1` is pass. Its timeout is five seconds of emulated time per ROM.
+
+```powershell
+cmake --build --preset mingw-clang-release --target DendyForgeApuTimingRunner
+& .\out\build\mingw-clang-release\DendyForgeApuTimingRunner.exe .\blargg_apu_2005.07.30
+```
+
+The exact baseline is:
+
+| ROM | Result | Interpreted diagnosis |
+| --- | --- | --- |
+| `01.len_ctr` | PASS | Basic length counter works. |
+| `02.len_table` | PASS | Length lookup table works. |
+| `03.irq_flag` | PASS | Basic frame IRQ flag works. |
+| `04.clock_jitter` | FAIL, code 3 | Frame IRQ is late. |
+| `05.len_timing_mode0` | FAIL, code 5 | Second length clock is late. |
+| `06.len_timing_mode1` | FAIL, code 5 | Second length clock is late. |
+| `07.irq_flag_timing` | FAIL, code 3 | First frame-IRQ assertion is late. |
+| `08.irq_timing` | FAIL, code 2 | An IRQ timing event is early. |
+| `09.reset_timing` | PASS in isolation | Do not count it as cumulative success after earlier failures. |
+| `10.len_halt_timing` | FAIL, code 3 | Expected length clock around CPU cycle 14915 is wrong. |
+| `11.len_reload_timing` | FAIL, code 3 | Reload just after length clock is ordered incorrectly. |
+
+The suite's own `tests.txt` declares dependencies between tests. Therefore
+later isolated passes do not prove full conformance once an earlier timing test
+fails.
+
+### Next APU implementation plan
+
+This is the highest-priority emulator work after the current handoff:
+
+1. From NESdev documentation and blargg source, write down a deterministic
+   table of quarter-frame, half-frame and frame-IRQ CPU cycles for four-step
+   and five-step operation.
+2. Model a `$4017` write as a separately delayed event. Its effective delay
+   depends on CPU-cycle parity; do not fold it into a single averaged counter.
+3. Make the cycle-boundary order explicit: frame clocks, IRQ assertion,
+   IRQ-inhibit clearing and sequencer restart must happen in hardware order.
+4. Re-run the complete timing runner after every narrow change. Fix
+   `04.clock_jitter`, `07.irq_flag_timing` and `08.irq_timing` first; only then
+   trust the diagnostics of the dependent length timing tests.
+5. When all timing ROM pass, re-run `apu_mixer`, unit tests and Contra. Listen
+   specifically for the formerly metallic artifacts before marking channels
+   complete in the Roadmap.
+
+Avoid a broad APU rewrite. The evidence points to frame-sequencer ordering and
+`$4017` timing, not absence of the implemented channels or mixer.
+
+### Diagnostics and runner-writing rules
+
+`Console::ReadCpuRamForDiagnostics(address)` is intentionally limited to CPU
+RAM (`$0000-$1FFF`); `ReadCartridgeRamForDiagnostics(address)` is limited to
+PRG-RAM (`$6000-$7FFF`). They exist only for runner observability. Production
+emulation must still go through the normal bus.
+
+For every new test ROM runner:
+
+1. Read the suite documentation and, if available, its source.
+2. Record the status address, pass code, reset requirement and terminal-loop
+   protocol in code comments and this file.
+3. Use emulated-cycle/time limits, never a machine-speed wall-clock timeout.
+4. Use a clean `Console` for every ROM.
+5. Surface status and diagnostic text in stdout so CI and humans can compare it.
+
+### Linux/AppImage handoff
+
+There is a separate WSL Debian checkout at `/home/aleksandr/DendyForge`; it can
+be dirty or on a different commit from the Windows checkout. Treat it as a
+separate working copy and verify its `git status`, branch and commit before
+building. A prior manual artifact exists at:
+
+```text
+/home/aleksandr/DendyForge/DendyForge-x86_64.AppImage
+```
+
+On NixOS, a typical compatibility invocation is:
+
+```bash
+nix-shell -p appimage-run --run 'appimage-run ./DendyForge-x86_64.AppImage'
+```
+
+Future release work should add a versioned script or CI pipeline that starts
+from a clean checkout, builds Release, creates AppDir/AppImage, bundles needed
+runtime libraries, smoke-tests it and records a checksum. Do not edit the WSL
+copy or rebuild an artifact unless that is the requested task.
+
+### Final pre-commit checklist
+
+For a C++ change:
+
+```powershell
+git diff --check
+cmake --build --preset mingw-clang-debug
+ctest --test-dir out/build/mingw-clang-debug --output-on-failure
+git status --short
+```
+
+Then run the feature-specific ROM runner(s) and manual game regression check.
+For a documentation-only change, `git diff --check` and a careful diff review
+are sufficient; do not claim a build was run if it was not.
+
+Stage exact paths only, preserve all user-owned untracked ROM suites, commit
+one logical change with an imperative subject, and push `main` after successful
+verification. In the final handoff, state the commit hash, exact tests run,
+and remaining known limitations.
