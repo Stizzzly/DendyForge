@@ -519,7 +519,8 @@ Mapper 4 (MMC3) contract, implemented in `core/mapper/mapper4.cpp`:
 
 ```text
 $8000/$8001   bank select (R0-R7, PRG mode bit 6, CHR mode bit 7) / bank data
-$A000/$A001   nametable arrangement: bit 0 set = vertical / PRG-RAM enable
+$A000/$A001   nametable arrangement: bit 0 clear = vertical, set = horizontal /
+              PRG-RAM enable
               (bit 7) and write-protect (bit 6)
 $C000/$C001   IRQ latch / reload request
 $E000/$E001   IRQ disable + acknowledge / enable

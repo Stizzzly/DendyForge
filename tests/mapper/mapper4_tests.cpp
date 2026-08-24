@@ -182,6 +182,21 @@ TEST_CASE("Mapper 4 retains all eight CHR bank-select bits")
     CHECK(ReadPpu(cartridge, 0x1000) == 49);
 }
 
+TEST_CASE("Mapper 4 retains high CHR bits in the 2 KiB registers")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 32); // 256 x 1 KiB CHR banks
+
+    cartridge.CpuWrite(0x8000, 0x00); // R0 at PPU $0000-$07FF
+    cartridge.CpuWrite(0x8001, 0x68);
+    cartridge.CpuWrite(0x8000, 0x01); // R1 at PPU $0800-$0FFF
+    cartridge.CpuWrite(0x8001, 0x6A);
+
+    CHECK(ReadPpu(cartridge, 0x0000) == 0x68);
+    CHECK(ReadPpu(cartridge, 0x0400) == 0x69);
+    CHECK(ReadPpu(cartridge, 0x0800) == 0x6A);
+    CHECK(ReadPpu(cartridge, 0x0C00) == 0x6B);
+}
+
 TEST_CASE("Mapper 4 applies CHR bank registers to CHR RAM")
 {
     auto cartridge = MakeMmc3Cartridge(4, 0);
@@ -225,10 +240,10 @@ TEST_CASE("Mapper 4 switches the nametable arrangement through $A000")
 
     cartridge.CpuWrite(0xA000, 0x00);
     CHECK(cartridge.CurrentMirroring() ==
-          dendyforge::Mirroring::Horizontal);
+          dendyforge::Mirroring::Vertical);
     cartridge.CpuWrite(0xA000, 0x01);
     CHECK(cartridge.CurrentMirroring() ==
-          dendyforge::Mirroring::Vertical);
+          dendyforge::Mirroring::Horizontal);
 }
 
 TEST_CASE("Mapper 4 asserts IRQ when its counter reaches zero")

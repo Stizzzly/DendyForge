@@ -81,7 +81,9 @@ bool Mapper4::CpuWrite(std::uint16_t address, std::uint8_t data,
         if ((address & 0x01) == 0)
         {
             m_controlLoaded = true;
-            m_verticalMirroring = (data & 0x01) != 0;
+            // MMC3 drives CIRAM A10 directly when the bit is clear
+            // (vertical arrangement); setting it selects horizontal.
+            m_verticalMirroring = (data & 0x01) == 0;
         }
         else
         {
@@ -142,7 +144,7 @@ bool Mapper4::PpuRead(std::uint16_t address,
         if (address < 0x1000)
         {
             const std::uint8_t bank2k = static_cast<std::uint8_t>(
-                m_registers[address >> 11] & 0x1E);
+                m_registers[address >> 11] & 0xFE);
             bank1k = static_cast<std::uint8_t>(
                 bank2k | ((address >> 10) & 0x01));
         }
@@ -163,7 +165,7 @@ bool Mapper4::PpuRead(std::uint16_t address,
         else
         {
             const std::uint8_t bank2k = static_cast<std::uint8_t>(
-                m_registers[(address - 0x1000) >> 11] & 0x1E);
+                m_registers[(address - 0x1000) >> 11] & 0xFE);
             bank1k = static_cast<std::uint8_t>(
                 bank2k | ((address >> 10) & 0x01));
         }
