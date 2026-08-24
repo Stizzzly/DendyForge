@@ -581,20 +581,14 @@ void CPU6502::SetFlag(Flags flag, bool value)
 
 void CPU6502::Reset()
 {
-    m_a = 0;
-    m_x = 0;
-    m_y = 0;
-    m_pc = 0;
-    m_sp = 0;
-    m_status = static_cast<std::uint8_t>(Flags::U) |
-               static_cast<std::uint8_t>(Flags::I);
-
     // Reset is a seven-cycle sequence drained by subsequent Clock()
-    // calls: two dummy fetches at the zeroed PC, the three suppressed
+    // calls: two dummy fetches at the current PC, the three suppressed
     // pushes as reads with SP decrementing, then the FFFC/FFFD vector
-    // fetch. No sequencer state of a previously executing instruction
-    // may survive, and a latched or sampled interrupt must not survive
-    // a reset.
+    // fetch. Hardware reset does not clear A, X, Y, or SP: its three
+    // suppressed stack accesses decrement the existing SP, and it merely
+    // forces I while preserving the other status bits. No sequencer state
+    // of a previously executing instruction may survive, and a latched or
+    // sampled interrupt must not survive a reset.
     m_executionKind = ExecutionKind::Legacy;
     m_currentInstruction = nullptr;
     m_stepCycle = 0;
@@ -934,12 +928,26 @@ void CPU6502::StepInstruction()
         }
         else if (cycle == 6)
         {
-            m_addrAbs = Read(0xFFFE);
+            // An NMI latched while BRK is in progress takes over BRK's
+            // vector fetch. The BRK stack frame has already been written,
+            // including B=1, so RTI returns through the BRK padding byte.
+            // This is the NMOS/2A03 "NMI interrupts BRK" edge case covered
+            // by blargg cpu_interrupts_v2.
+            m_interruptVector = m_pendingInterrupt == PendingInterrupt::Nmi
+                ? 0xFFFA
+                : 0xFFFE;
+            if (m_interruptVector == 0xFFFA)
+            {
+                m_pendingInterrupt = PendingInterrupt::None;
+                m_recognizedInterrupt = PendingInterrupt::None;
+            }
+            m_addrAbs = Read(m_interruptVector);
         }
         else
         {
             m_pc = static_cast<std::uint16_t>(
-                (Read(0xFFFF) << 8) | m_addrAbs);
+                (Read(static_cast<std::uint16_t>(m_interruptVector + 1)) << 8) |
+                m_addrAbs);
         }
         break;
 

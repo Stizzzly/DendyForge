@@ -11,7 +11,7 @@ namespace
 void CheckBlarggPass(std::string_view romName)
 {
     const auto result = dendyforge::test::RunBlarggRom(
-        "blargg_instr_test_v5/" + std::string(romName));
+        "blargg_timing/" + std::string(romName));
     REQUIRE_MESSAGE(result.detected, "Blargg result protocol was not reached before timeout");
     CHECK_MESSAGE(result.status == 0,
                   romName,
@@ -23,15 +23,15 @@ void CheckBlarggPass(std::string_view romName)
 
 } // namespace
 
-TEST_CASE("Console passes Blargg NES instruction tests v5")
+TEST_CASE("Console passes Blargg timing and dummy-read tests")
 {
-    SUBCASE("official instructions")
+    SUBCASE("all instruction timings")
     {
-        CheckBlarggPass("official_only.nes");
+        CheckBlarggPass("instr_timing.nes");
     }
 
-    SUBCASE("official and unofficial instructions")
+    SUBCASE("address wrapping and dummy reads")
     {
-        CheckBlarggPass("all_instrs.nes");
+        CheckBlarggPass("instr_misc.nes");
     }
 }

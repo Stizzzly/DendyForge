@@ -931,6 +931,39 @@ TEST_CASE("NMI entry uses the NMI vector and bypasses the I flag")
     CHECK(machine.cpu.StackPointer() == 0xFA);
 }
 
+TEST_CASE("NMI latched during BRK takes over BRK's vector fetch")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0x00; // BRK
+    machine.bus.memory[0x0201] = 0xEA; // BRK padding byte
+    machine.bus.memory[0xFFFA] = 0x50; // NMI vector $0450
+    machine.bus.memory[0xFFFB] = 0x04;
+    machine.bus.memory[0xFFFE] = 0x10; // IRQ vector $0310
+    machine.bus.memory[0xFFFF] = 0x03;
+    machine.cpu.SetProgramCounter(0x0200);
+    machine.bus.log.clear();
+
+    machine.cpu.Clock(); // BRK opcode fetch
+    machine.cpu.Clock(); // padding-byte fetch
+    machine.cpu.Clock(); // push return-address high byte
+    machine.cpu.Clock(); // push return-address low byte
+    machine.cpu.NMI();
+    machine.cpu.Clock(); // BRK status push (with B set)
+    machine.cpu.Clock(); // NMI vector low byte
+    machine.cpu.Clock(); // NMI vector high byte
+
+    CHECK(FormatLog(machine.bus.log) ==
+          "R0200 R0201 W01FD=02 W01FC=02 W01FB=34 RFFFA RFFFB");
+    CHECK(machine.cpu.ProgramCounter() == 0x0450);
+    CHECK(machine.cpu.StackPointer() == 0xFA);
+
+    // The pending NMI was consumed by BRK; no second interrupt entry follows.
+    machine.bus.memory[0x0450] = 0xEA;
+    machine.bus.log.clear();
+    CHECK(machine.RunInstruction() == 2);
+    CHECK(FormatLog(machine.bus.log) == "R0450 R0451");
+}
+
 TEST_CASE("Reset performs seven dummy-read cycles and reloads the vector")
 {
     RecordingCpuBus bus;

@@ -88,11 +88,13 @@ cmake --build --preset mingw-clang-debug
 - ✅ Pass Klaus Dormann 6502 Functional Test
 - ✅ Pass nestest.nes (reference trace: PC, registers, and cycles)
 - ✅ Pass Blargg CPU Tests
+- ✅ Pass Blargg instruction timing, dummy-read, and reset ROMs
 - ⬜ Verify cycle accuracy against reference documentation
 
 ### Undocumented Instructions
 
 - ✅ Implement unofficial (illegal) opcodes
+- ✅ Validate BRK/NMI vector hijack and reset bus sequences
 - ⬜ Match original CPU6502 hardware behavior
 - ✅ Validate unofficial opcode behavior
 

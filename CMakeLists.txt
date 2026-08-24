@@ -49,6 +49,8 @@ add_executable(DendyForgeTests
     tests/cpu/cpu_bus_cycle_tests.cpp
     tests/cpu/klaus_functional_tests.cpp
     tests/cpu/blargg_cpu_tests.cpp
+    tests/cpu/blargg_timing_tests.cpp
+    tests/cpu/blargg_reset_tests.cpp
     tests/cpu/nestest_trace_tests.cpp
     tests/bus/bus_tests.cpp
     tests/ppu/ppu_tests.cpp

@@ -305,7 +305,9 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
         cpu.Clock();
     }
     CHECK(cpu.ProgramCounter() == 0x8000);
-    CHECK(cpu.StackPointer() == 0xFD);
+    // Reset performs three suppressed stack reads. It does not reload SP,
+    // so a reset entered with $FD leaves it at $FA.
+    CHECK(cpu.StackPointer() == 0xFA);
 
     cpu.SetFlag(dendyforge::CPU6502::Flags::I, true);
     cpu.IRQ(); // masked by I: the line never latches
@@ -313,7 +315,7 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
     bus.memory[0x8000] = 0xEA; // NOP: one instruction precedes the entry
     CompleteInstruction(cpu);
     CHECK(cpu.ProgramCounter() == 0x8001);
-    CHECK(cpu.StackPointer() == 0xFD);
+    CHECK(cpu.StackPointer() == 0xFA);
 
     cpu.Clock(); // NMI-entry cycle 1: dummy fetch at PC
     CHECK(cpu.Cycles() == 6);
@@ -322,10 +324,10 @@ TEST_CASE("CPU6502 services BRK, IRQ, and NMI through the stack and vectors")
         cpu.Clock();
     }
     CHECK(cpu.ProgramCounter() == 0xA000);
-    CHECK(cpu.StackPointer() == 0xFA);
-    CHECK(bus.memory[0x01FD] == 0x80);
-    CHECK(bus.memory[0x01FC] == 0x01);
-    CHECK((bus.memory[0x01FB] & 0x30) == 0x20);
+    CHECK(cpu.StackPointer() == 0xF7);
+    CHECK(bus.memory[0x01FA] == 0x80);
+    CHECK(bus.memory[0x01F9] == 0x01);
+    CHECK((bus.memory[0x01F8] & 0x30) == 0x20);
 }
 
 TEST_CASE("CPU6502 rotates and shifts the accumulator with the carry flag")
