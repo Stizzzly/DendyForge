@@ -528,7 +528,8 @@ CHR           R0/R1 2 KiB + R2-R5 1 KiB, layout chosen by the CHR mode bit
 IRQ           clocked on a rising PPU A12 edge only after A12 has been low
               for at least eight PPU dots; a zero counter/reload loads the
               latch, otherwise it decrements, and zero asserts the level
-              line (ORed with the APU IRQ in Console::Clock)
+              line (ORed with the APU IRQ in Console::Clock). Internal
+              palette-RAM lookups do not drive this mapper-visible bus.
 ```
 
 Known MMC3 simplifications: the board's exact A12 electrical timing,

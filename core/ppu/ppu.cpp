@@ -911,7 +911,11 @@ std::uint8_t PPU::PpuRead(std::uint16_t address)
     address = NormalizeAddress(address);
     std::uint8_t data = 0;
 
-    if (m_cartridge)
+    // Palette RAM is inside the PPU. Its logical reads (including the
+    // lookup performed for every rendered pixel) do not drive the
+    // cartridge-visible PPU address bus, so they must not create MMC3
+    // A12 edges. Pattern-table and nametable fetches do drive it.
+    if (m_cartridge && address <= 0x3EFF)
     {
         m_cartridge->ObservePpuAddress(address);
     }
@@ -935,7 +939,9 @@ void PPU::PpuWrite(std::uint16_t address, std::uint8_t data)
 {
     address = NormalizeAddress(address);
 
-    if (m_cartridge)
+    // See PpuRead: palette RAM is internal to the PPU and invisible to
+    // mappers monitoring PPU A12.
+    if (m_cartridge && address <= 0x3EFF)
     {
         m_cartridge->ObservePpuAddress(address);
     }

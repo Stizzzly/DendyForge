@@ -290,6 +290,21 @@ TEST_CASE("Mapper 4 receives qualified A12 edges from the PPU bus")
     CHECK(cartridge.IrqPending());
 }
 
+TEST_CASE("PPU palette reads do not create mapper-visible A12 edges")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 4);
+    dendyforge::PPU ppu;
+    ppu.ConnectCartridge(&cartridge);
+
+    cartridge.CpuWrite(0xC000, 0);
+    cartridge.CpuWrite(0xE001, 0);
+
+    // $3F00 has logical address bit 12 set but the palette is internal to
+    // the PPU; reporting it to MMC3 would create a false IRQ every pixel.
+    ppu.PpuRead(0x3F00);
+    CHECK_FALSE(cartridge.IrqPending());
+}
+
 TEST_CASE("Mapper 4 IRQ disable acknowledges and enable waits for the next wrap")
 {
     auto cartridge = MakeMmc3Cartridge(4, 4);
