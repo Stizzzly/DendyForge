@@ -98,6 +98,7 @@ private:
     void LoadBackgroundShifters();
     void ShiftBackgroundShifters();
     void IncrementVramAddress();
+    void ClockPendingVramAddressUpdate();
     void IncrementCoarseX(std::uint16_t& address) const;
     void IncrementY(std::uint16_t& address) const;
     void CopyHorizontalBits(std::uint16_t& destination,
@@ -152,6 +153,8 @@ private:
     // copies t into v. The renderer will progressively take ownership of v.
     std::uint16_t m_vramAddress{0}; // v: current VRAM address
     std::uint16_t m_temporaryAddress{0}; // t: temporary VRAM address
+    std::uint16_t m_pendingVramAddress{0};
+    std::uint8_t m_vramAddressUpdateDelay{0};
     std::uint8_t m_fineX{0}; // x: fine horizontal scroll
     bool m_writeLatch{false};
     // Set by a $2002 read landing one dot before the VBlank flag-set dot;

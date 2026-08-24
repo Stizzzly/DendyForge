@@ -241,6 +241,10 @@ TEST_CASE("PPU register accesses share one open-bus latch")
     ppu.PpuWrite(0x3F00, 0x1F);
     ppu.CpuWrite(0x2006, 0x3F);
     ppu.CpuWrite(0x2006, 0x00);
+    for (int dot = 0; dot < 3; ++dot)
+    {
+        ppu.Clock();
+    }
     CHECK(ppu.CpuRead(0x2007) == 0x1F);
     CHECK(ppu.CpuRead(0x2000) == 0x1F);
 

@@ -164,6 +164,8 @@ void PPU::Clock()
         m_frameComplete = true;
     }
 
+    ClockPendingVramAddressUpdate();
+
     const bool skipOddFrameDot =
         m_scanline == -1 && m_cycle == 339 && m_oddFrame &&
         RenderingEnabled();
@@ -902,7 +904,18 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         else
         {
             m_temporaryAddress = (m_temporaryAddress & 0xFF00) | data;
-            m_vramAddress = m_temporaryAddress;
+            if (RenderingEnabled())
+            {
+                // During rendering, the PPU applies a completed $2006
+                // address write after three PPU dots. MMC3 IRQ handlers
+                // rely on this latency for split-scroll changes.
+                m_pendingVramAddress = m_temporaryAddress;
+                m_vramAddressUpdateDelay = 3;
+            }
+            else
+            {
+                m_vramAddress = m_temporaryAddress;
+            }
         }
         m_writeLatch = !m_writeLatch;
         break;
@@ -1026,6 +1039,20 @@ void PPU::IncrementVramAddress()
 {
     m_vramAddress += (m_control & 0x04) ? 32 : 1;
     m_vramAddress &= 0x3FFF;
+}
+
+void PPU::ClockPendingVramAddressUpdate()
+{
+    if (m_vramAddressUpdateDelay == 0)
+    {
+        return;
+    }
+
+    --m_vramAddressUpdateDelay;
+    if (m_vramAddressUpdateDelay == 0)
+    {
+        m_vramAddress = m_pendingVramAddress;
+    }
 }
 
 void PPU::IncrementCoarseX(std::uint16_t& address) const

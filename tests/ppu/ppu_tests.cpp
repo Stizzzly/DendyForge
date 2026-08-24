@@ -164,6 +164,21 @@ TEST_CASE("PPUSCROLL prepares t without moving the PPUDATA address")
     CHECK(ppu.CpuRead(0x2007) == 0xBB);
 }
 
+TEST_CASE("PPU delays a completed PPUADDR write while rendering")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x08); // background rendering enabled
+    ppu.CpuWrite(0x2006, 0x24);
+    ppu.CpuWrite(0x2006, 0x00);
+
+    CHECK(ppu.AddressState().vramAddress == 0x0000);
+    ppu.Clock();
+    ppu.Clock();
+    CHECK(ppu.AddressState().vramAddress == 0x0000);
+    ppu.Clock();
+    CHECK(ppu.AddressState().vramAddress == 0x2400);
+}
+
 TEST_CASE("PPU renders a background tile into the frame buffer")
 {
     dendyforge::PPU ppu;
