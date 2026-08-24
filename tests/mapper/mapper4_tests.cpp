@@ -60,6 +60,18 @@ std::uint8_t ReadPpu(dendyforge::Cartridge& cartridge, std::uint16_t address)
     return data;
 }
 
+void ClockMmc3A12(dendyforge::Cartridge& cartridge)
+{
+    // MMC3 only accepts a rising A12 edge after the line was low for at
+    // least eight PPU dots.
+    cartridge.ObservePpuAddress(0x0000);
+    for (int dot = 0; dot < 8; ++dot)
+    {
+        cartridge.PpuClock();
+    }
+    cartridge.ObservePpuAddress(0x1000);
+}
+
 } // namespace
 
 TEST_CASE("Mapper 4 PRG mode 0 fixes the last banks and banks R6/R7 low")
@@ -103,23 +115,26 @@ TEST_CASE("Mapper 4 PRG bank numbers wrap to the available banks")
     CHECK(ReadCpu(cartridge, 0xE000) == 3);
 }
 
+TEST_CASE("Mapper 4 preserves all six PRG bank-select bits")
+{
+    auto cartridge = MakeMmc3Cartridge(24, 4); // 48 x 8 KiB PRG banks
+
+    cartridge.CpuWrite(0x8000, 0x06);
+    cartridge.CpuWrite(0x8001, 0x5F);
+
+    // MMC3's R6/R7 are six bits wide: 0x5F selects bank 31 rather than
+    // using the top two bits to wrap into bank 47.
+    CHECK(ReadCpu(cartridge, 0x8000) == 31);
+}
+
 TEST_CASE("Mapper 4 CHR mode 0 banks 2 KiB low and 1 KiB high")
 {
-    auto cartridge = MakeMmc3Cartridge(4, 4); // 8 x 1 KiB CHR banks
+    auto cartridge = MakeMmc3Cartridge(4, 4); // 32 x 1 KiB CHR banks
 
     // R0 selects 1K banks 2-3, R1 selects 1K banks 0-1, R2..R5 select
     // 1K banks 6,0,1,2 directly.
     cartridge.CpuWrite(0x8000, 0x00);
     cartridge.CpuWrite(0x8001, 0x02);
-    {
-        std::uint8_t early = 0;
-        cartridge.PpuRead(0x0000, early);
-        const auto& chr = cartridge.CHRRom();
-        std::printf("read=%d raw: [400]=%d [800]=%d [C00]=%d [1000]=%d [1800]=%d size=%d\n",
-                    (int)early, (int)chr[0x400], (int)chr[0x800],
-                    (int)chr[0xC00], (int)chr[0x1000], (int)chr[0x1800],
-                    (int)chr.size());
-    }
     cartridge.CpuWrite(0x8000, 0x01);
     cartridge.CpuWrite(0x8001, 0x00);
     cartridge.CpuWrite(0x8000, 0x02);
@@ -134,10 +149,6 @@ TEST_CASE("Mapper 4 CHR mode 0 banks 2 KiB low and 1 KiB high")
 
     // The 2 KiB register's low bit is masked off and the half within the
     // pair comes from PPU A10.
-    std::uint8_t probeData = 0;
-    cartridge.PpuRead(0x0000, probeData);
-    std::printf("R0 read: %d chrRomSize=%d\n", (int)probeData,
-                (int)cartridge.CHRRom().size());
     CHECK(ReadPpu(cartridge, 0x0000) == 2);
     CHECK(ReadPpu(cartridge, 0x03FF) == 2);
     CHECK(ReadPpu(cartridge, 0x0400) == 3);
@@ -149,6 +160,43 @@ TEST_CASE("Mapper 4 CHR mode 0 banks 2 KiB low and 1 KiB high")
     CHECK(ReadPpu(cartridge, 0x1400) == 0);
     CHECK(ReadPpu(cartridge, 0x1800) == 1);
     CHECK(ReadPpu(cartridge, 0x1C00) == 2);
+}
+
+TEST_CASE("Mapper 4 counts CHR-ROM capacity in iNES 8 KiB banks")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 4); // 32 x 1 KiB CHR banks
+
+    cartridge.CpuWrite(0x8000, 0x02);
+    cartridge.CpuWrite(0x8001, 0x1D);
+
+    CHECK(ReadPpu(cartridge, 0x1000) == 29);
+}
+
+TEST_CASE("Mapper 4 retains all eight CHR bank-select bits")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 8); // 64 x 1 KiB CHR banks
+
+    cartridge.CpuWrite(0x8000, 0x02);
+    cartridge.CpuWrite(0x8001, 0x31);
+
+    CHECK(ReadPpu(cartridge, 0x1000) == 49);
+}
+
+TEST_CASE("Mapper 4 applies CHR bank registers to CHR RAM")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 0);
+
+    cartridge.CpuWrite(0x8000, 0x02);
+    cartridge.CpuWrite(0x8001, 0x05);
+    REQUIRE(cartridge.PpuWrite(0x1000, 0xA5));
+
+    cartridge.CpuWrite(0x8001, 0x00);
+    REQUIRE(cartridge.PpuWrite(0x1000, 0x5A));
+
+    cartridge.CpuWrite(0x8001, 0x05);
+    CHECK(ReadPpu(cartridge, 0x1000) == 0xA5);
+    cartridge.CpuWrite(0x8001, 0x00);
+    CHECK(ReadPpu(cartridge, 0x1000) == 0x5A);
 }
 
 TEST_CASE("Mapper 4 CHR mode 1 banks 1 KiB low and 2 KiB high")
@@ -183,7 +231,7 @@ TEST_CASE("Mapper 4 switches the nametable arrangement through $A000")
           dendyforge::Mirroring::Vertical);
 }
 
-TEST_CASE("Mapper 4 asserts the scanline IRQ one clock after the latch counts down")
+TEST_CASE("Mapper 4 asserts IRQ when its counter reaches zero")
 {
     auto cartridge = MakeMmc3Cartridge(4, 4);
 
@@ -192,12 +240,53 @@ TEST_CASE("Mapper 4 asserts the scanline IRQ one clock after the latch counts do
     cartridge.CpuWrite(0xC001, 0x00); // reload request
 
     REQUIRE_FALSE(cartridge.IrqPending());
-    cartridge.PpuScanlineClock(); // reload (2)
-    cartridge.PpuScanlineClock(); // 1
+    ClockMmc3A12(cartridge); // reload (2)
+    ClockMmc3A12(cartridge); // 1
     REQUIRE_FALSE(cartridge.IrqPending());
-    cartridge.PpuScanlineClock(); // 0
-    REQUIRE_FALSE(cartridge.IrqPending());
-    cartridge.PpuScanlineClock(); // counter at zero: fire and reload
+    ClockMmc3A12(cartridge); // 0: fire on this edge
+    CHECK(cartridge.IrqPending());
+}
+
+TEST_CASE("Mapper 4 ignores an A12 rise after fewer than eight low dots")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 4);
+
+    // Establish a high A12 level while IRQs are disabled, then enable a
+    // zero latch which would assert on the next qualified rising edge.
+    cartridge.ObservePpuAddress(0x1000);
+    cartridge.CpuWrite(0xC000, 0);
+    cartridge.CpuWrite(0xE001, 0);
+
+    cartridge.ObservePpuAddress(0x0000);
+    for (int dot = 0; dot < 7; ++dot)
+    {
+        cartridge.PpuClock();
+    }
+    cartridge.ObservePpuAddress(0x1000);
+    CHECK_FALSE(cartridge.IrqPending());
+
+    ClockMmc3A12(cartridge);
+    CHECK(cartridge.IrqPending());
+}
+
+TEST_CASE("Mapper 4 receives qualified A12 edges from the PPU bus")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 4);
+    dendyforge::PPU ppu;
+    ppu.ConnectCartridge(&cartridge);
+
+    cartridge.CpuWrite(0xC000, 0);
+    cartridge.CpuWrite(0xE001, 0);
+    ppu.CpuWrite(0x2000, 0x10); // background pattern table at $1000
+    ppu.CpuWrite(0x2001, 0x08); // background rendering enabled
+
+    // The pre-render scanline performs regular background fetches. A
+    // qualified pattern-table A12 rise must reach the mapper through the
+    // PPU bus, without any scanline-specific callback.
+    for (int dot = 0; dot < 341; ++dot)
+    {
+        ppu.Clock();
+    }
     CHECK(cartridge.IrqPending());
 }
 
@@ -208,7 +297,7 @@ TEST_CASE("Mapper 4 IRQ disable acknowledges and enable waits for the next wrap"
     cartridge.CpuWrite(0xC000, 0); // latch = 0: every clock fires
     cartridge.CpuWrite(0xE001, 0x00);
 
-    cartridge.PpuScanlineClock();
+    ClockMmc3A12(cartridge);
     CHECK(cartridge.IrqPending());
 
     cartridge.CpuWrite(0xE000, 0x00); // disable + acknowledge
@@ -217,7 +306,7 @@ TEST_CASE("Mapper 4 IRQ disable acknowledges and enable waits for the next wrap"
     cartridge.CpuWrite(0xE001, 0x00); // re-enable
     CHECK_FALSE(cartridge.IrqPending());
 
-    cartridge.PpuScanlineClock(); // fires again when enabled
+    ClockMmc3A12(cartridge); // fires again when enabled
     CHECK(cartridge.IrqPending());
 }
 
@@ -226,9 +315,30 @@ TEST_CASE("Mapper 4 does not assert the IRQ while disabled at the wrap")
     auto cartridge = MakeMmc3Cartridge(4, 4);
 
     cartridge.CpuWrite(0xC000, 0);
-    cartridge.PpuScanlineClock();
-    cartridge.PpuScanlineClock();
+    ClockMmc3A12(cartridge);
+    ClockMmc3A12(cartridge);
     CHECK_FALSE(cartridge.IrqPending());
+}
+
+TEST_CASE("Mapper 4 controls PRG RAM enable and write protection through $A001")
+{
+    auto cartridge = MakeMmc3Cartridge(4, 4);
+    std::uint8_t data = 0;
+
+    REQUIRE(cartridge.CpuWrite(0x6000, 0x12));
+    REQUIRE(cartridge.CpuRead(0x6000, data));
+    CHECK(data == 0x12);
+
+    cartridge.CpuWrite(0xA001, 0x00); // disable PRG RAM
+    CHECK_FALSE(cartridge.CpuRead(0x6000, data));
+    CHECK_FALSE(cartridge.CpuWrite(0x6000, 0x34));
+
+    cartridge.CpuWrite(0xA001, 0xC0); // enable, but write-protect
+    REQUIRE(cartridge.CpuRead(0x6000, data));
+    CHECK(data == 0x12);
+    REQUIRE(cartridge.CpuWrite(0x6000, 0x56));
+    REQUIRE(cartridge.CpuRead(0x6000, data));
+    CHECK(data == 0x12);
 }
 
 TEST_CASE("Mapper 4 register writes never modify PRG ROM")

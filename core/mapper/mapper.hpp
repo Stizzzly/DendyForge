@@ -36,9 +36,18 @@ public:
     // this; the default keeps the arrangement from the iNES header.
     virtual Mirroring MirroringMode(Mirroring headerMirroring) const;
 
-    // Mappers with a scanline IRQ counter (MMC3) are clocked once per
-    // rendering scanline by the PPU sprite-fetch phase.
-    virtual void PpuScanlineClock();
+    // The PPU reports its address bus on every memory access and advances
+    // mapper timing once per dot. MMC3 uses these to qualify rising A12
+    // edges; a scanline callback is not accurate enough for split-scroll
+    // and nonstandard pattern-table use.
+    virtual void PpuClock();
+    virtual void ObservePpuAddress(std::uint16_t address);
+
+    // PRG-RAM control. Most mappers leave RAM continuously enabled and
+    // writable; MMC3 exposes the $A001 enable/write-protect bits.
+    virtual bool PrgRamEnabled() const;
+    virtual bool PrgRamWriteProtected() const;
+
     // The mapper's request for a CPU IRQ line (level; MMC3 until
     // acknowledged).
     virtual bool IrqPending() const;

@@ -18,26 +18,26 @@ bool Mapper4::CpuRead(std::uint16_t address,
 
     // PRG is mapped in 8 KiB units; the mapper counts 16 KiB banks, so
     // the fixed banks are the last two 8 KiB banks.
-    const std::uint8_t banks8k = static_cast<std::uint8_t>(m_prgBanks * 2);
+    const std::uint16_t banks8k =
+        static_cast<std::uint16_t>(m_prgBanks) * 2;
     const auto wrap = [banks8k](std::uint8_t bank) {
-        return static_cast<std::uint8_t>(bank % banks8k);
+        return static_cast<std::uint16_t>(bank % banks8k);
     };
-    const std::uint8_t last = static_cast<std::uint8_t>(banks8k - 1);
-    const std::uint8_t penultimate =
-        static_cast<std::uint8_t>(last - 1);
+    const std::uint16_t last = banks8k - 1;
+    const std::uint16_t penultimate = last - 1;
 
-    std::uint8_t bank;
+    std::uint16_t bank;
     if (address < 0xA000)
     {
-        bank = m_prgMode ? penultimate : wrap(m_registers[6] & 0x0F);
+        bank = m_prgMode ? penultimate : wrap(m_registers[6] & 0x3F);
     }
     else if (address < 0xC000)
     {
-        bank = wrap(m_registers[7] & 0x0F);
+        bank = wrap(m_registers[7] & 0x3F);
     }
     else if (address < 0xE000)
     {
-        bank = m_prgMode ? wrap(m_registers[6] & 0x0F) : penultimate;
+        bank = m_prgMode ? wrap(m_registers[6] & 0x3F) : penultimate;
     }
     else
     {
@@ -76,12 +76,17 @@ bool Mapper4::CpuWrite(std::uint16_t address, std::uint8_t data,
         break;
     case 1:
         // $A000-$BFFF: even addresses switch the nametable arrangement;
-        // odd addresses are the WRAM protect register, which the
-        // cartridge's always-enabled PRG RAM ignores.
+        // odd addresses control PRG-RAM: bit 7 enables the chip and bit 6
+        // blocks writes while preserving reads.
         if ((address & 0x01) == 0)
         {
             m_controlLoaded = true;
             m_verticalMirroring = (data & 0x01) != 0;
+        }
+        else
+        {
+            m_prgRamEnabled = (data & 0x80) != 0;
+            m_prgRamWriteProtected = (data & 0x40) != 0;
         }
         break;
     case 2:
@@ -121,16 +126,13 @@ bool Mapper4::PpuRead(std::uint16_t address,
         return false;
     }
 
-    if (m_chrBanks == 0)
-    {
-        // CHR RAM boards are not banked.
-        mappedAddress = address;
-        return true;
-    }
-
-    const std::uint8_t banks1k = static_cast<std::uint8_t>(m_chrBanks * 2);
+    // Both CHR ROM and CHR RAM are selected by the MMC3's 1 KiB bank
+    // registers. iNES stores CHR-ROM capacity in 8 KiB units.
+    const std::uint16_t banks1k = m_chrBanks == 0
+        ? 8
+        : static_cast<std::uint16_t>(m_chrBanks) * 8;
     const auto wrap = [banks1k](std::uint8_t bank) {
-        return static_cast<std::uint8_t>(bank % banks1k);
+        return static_cast<std::uint16_t>(bank % banks1k);
     };
 
     std::uint8_t bank1k;
@@ -147,7 +149,7 @@ bool Mapper4::PpuRead(std::uint16_t address,
         else
         {
             bank1k = static_cast<std::uint8_t>(
-                m_registers[2 + ((address - 0x1000) >> 10)] & 0x1F);
+                m_registers[2 + ((address - 0x1000) >> 10)]);
         }
     }
     else
@@ -156,7 +158,7 @@ bool Mapper4::PpuRead(std::uint16_t address,
         if (address < 0x1000)
         {
             bank1k = static_cast<std::uint8_t>(
-                m_registers[2 + (address >> 10)] & 0x1F);
+                m_registers[2 + (address >> 10)]);
         }
         else
         {
@@ -180,8 +182,8 @@ bool Mapper4::PpuWrite(std::uint16_t address,
         return false;
     }
 
-    mappedAddress = address;
-    return true;
+    // CHR-RAM boards still pass through the MMC3 CHR bank registers.
+    return PpuRead(address, mappedAddress);
 }
 
 Mirroring Mapper4::MirroringMode(Mirroring headerMirroring) const
@@ -194,25 +196,57 @@ Mirroring Mapper4::MirroringMode(Mirroring headerMirroring) const
                                : Mirroring::Horizontal;
 }
 
-void Mapper4::PpuScanlineClock()
+void Mapper4::PpuClock()
 {
-    // A clocked counter reloads silently on request, or asserts the IRQ
-    // and reloads when it has counted down to zero; the asserted line
-    // lasts until acknowledged through $E000.
-    if (m_irqReload)
+    if (!m_a12High && m_a12LowCycles < 8)
     {
-        m_irqCounter = m_irqLatch;
-        m_irqReload = false;
+        ++m_a12LowCycles;
     }
-    else if (m_irqCounter == 0)
+}
+
+void Mapper4::ObservePpuAddress(std::uint16_t address)
+{
+    const bool a12High = (address & 0x1000) != 0;
+    if (a12High && !m_a12High && m_a12LowCycles >= 8)
     {
-        m_irqActive = m_irqEnabled;
+        ClockIrqCounter();
+    }
+    else if (!a12High && m_a12High)
+    {
+        m_a12LowCycles = 0;
+    }
+    m_a12High = a12High;
+}
+
+bool Mapper4::PrgRamEnabled() const
+{
+    return m_prgRamEnabled;
+}
+
+bool Mapper4::PrgRamWriteProtected() const
+{
+    return m_prgRamWriteProtected;
+}
+
+void Mapper4::ClockIrqCounter()
+{
+    // On each qualified rising A12 edge, a zero counter or a pending
+    // reload loads the latch. Otherwise it decrements. Reaching zero on
+    // this very edge raises /IRQ; it remains asserted until $E000.
+    if (m_irqCounter == 0 || m_irqReload)
+    {
         m_irqCounter = m_irqLatch;
     }
     else
     {
         --m_irqCounter;
     }
+
+    if (m_irqCounter == 0 && m_irqEnabled)
+    {
+        m_irqActive = true;
+    }
+    m_irqReload = false;
 }
 
 bool Mapper4::IrqPending() const

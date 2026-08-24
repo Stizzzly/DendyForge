@@ -519,23 +519,24 @@ Mapper 4 (MMC3) contract, implemented in `core/mapper/mapper4.cpp`:
 
 ```text
 $8000/$8001   bank select (R0-R7, PRG mode bit 6, CHR mode bit 7) / bank data
-$A000         nametable arrangement: bit 0 set = vertical
+$A000/$A001   nametable arrangement: bit 0 set = vertical / PRG-RAM enable
+              (bit 7) and write-protect (bit 6)
 $C000/$C001   IRQ latch / reload request
 $E000/$E001   IRQ disable + acknowledge / enable
 PRG           R6/R7 8 KiB switchable, last two 8 KiB fixed (mode-ordered)
 CHR           R0/R1 2 KiB + R2-R5 1 KiB, layout chosen by the CHR mode bit
-IRQ           clocked once per rendering scanline at PPU dot 257 by the
-              sprite garbage nametable fetch; level line ORed with the APU
-              IRQ in Console::Clock (Cartridge::IrqPending)
+IRQ           clocked on a rising PPU A12 edge only after A12 has been low
+              for at least eight PPU dots; a zero counter/reload loads the
+              latch, otherwise it decrements, and zero asserts the level
+              line (ORed with the APU IRQ in Console::Clock)
 ```
 
-Known MMC3 simplifications: the IRQ uses the one-clock-per-scanline model
-of the A12 rises rather than a cycle-true A12 edge filter, the WRAM
-protect register and the read-based IRQ acknowledge are not implemented,
-and $8000/$8001 write races are ignored. Unit coverage is
-`tests/mapper/mapper4_tests.cpp` (both PRG/CHR modes, wrap, mirroring,
-IRQ latch/reload/disable/re-enable); no MMC3 game regression has been run
-yet.
+Known MMC3 simplifications: the board's exact A12 electrical timing,
+read-based IRQ acknowledgement, four-screen boards, and $8000/$8001 write
+races are not implemented. Unit coverage is `tests/mapper/mapper4_tests.cpp`
+(both PRG/CHR-ROM/RAM modes, wrap, mirroring, qualified A12 IRQ edges,
+reload/disable/re-enable, and PRG-RAM protection); no MMC3 game regression
+has been run yet.
 
 Do not special-case Jackal by filename. First inspect its iNES header and
 confirm the mapper/board, then implement the missing general hardware with

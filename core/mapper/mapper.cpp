@@ -16,8 +16,22 @@ Mirroring Mapper::MirroringMode(Mirroring headerMirroring) const
     return headerMirroring;
 }
 
-void Mapper::PpuScanlineClock()
+void Mapper::PpuClock()
 {
+}
+
+void Mapper::ObservePpuAddress(std::uint16_t)
+{
+}
+
+bool Mapper::PrgRamEnabled() const
+{
+    return true;
+}
+
+bool Mapper::PrgRamWriteProtected() const
+{
+    return false;
 }
 
 bool Mapper::IrqPending() const

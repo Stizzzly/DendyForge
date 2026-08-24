@@ -48,6 +48,11 @@ void PPU::ConnectCartridge(Cartridge* cartridge)
 
 void PPU::Clock()
 {
+    if (m_cartridge)
+    {
+        m_cartridge->PpuClock();
+    }
+
     if (m_openBusLatch != 0 && ++m_openBusDecayDots >= OpenBusDecayDots)
     {
         m_openBusLatch = 0;
@@ -107,13 +112,6 @@ void PPU::Clock()
                     m_scanlineSpriteCount = 0;
                 }
             }
-            // MMC3-style scanline counters are clocked by the first
-            // sprite garbage nametable fetch of the scanline.
-            if (m_cycle == 257 && m_cartridge)
-            {
-                m_cartridge->PpuScanlineClock();
-            }
-
             switch ((m_cycle - 257) & 0x07)
             {
             case 0:
@@ -913,6 +911,11 @@ std::uint8_t PPU::PpuRead(std::uint16_t address)
     address = NormalizeAddress(address);
     std::uint8_t data = 0;
 
+    if (m_cartridge)
+    {
+        m_cartridge->ObservePpuAddress(address);
+    }
+
     if (address <= 0x1FFF)
     {
         if (m_cartridge && m_cartridge->PpuRead(address, data))
@@ -931,6 +934,11 @@ std::uint8_t PPU::PpuRead(std::uint16_t address)
 void PPU::PpuWrite(std::uint16_t address, std::uint8_t data)
 {
     address = NormalizeAddress(address);
+
+    if (m_cartridge)
+    {
+        m_cartridge->ObservePpuAddress(address);
+    }
 
     if (address <= 0x1FFF)
     {

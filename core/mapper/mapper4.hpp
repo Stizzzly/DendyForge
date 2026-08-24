@@ -12,8 +12,7 @@ namespace dendyforge
 // the bank-select register: two switchable 8 KiB PRG banks plus two fixed
 // at the end (order chosen by the PRG mode bit), six CHR banks in 1/2 KiB
 // units (arrangement chosen by the CHR mode bit), nametable mirroring,
-// and a scanline IRQ counter clocked once per rendering scanline by the
-// PPU sprite-fetch phase.
+// and an IRQ counter clocked from qualified rising edges of PPU A12.
 class Mapper4 : public Mapper
 {
 public:
@@ -29,10 +28,15 @@ public:
                   std::uint32_t& mappedAddress) override;
 
     Mirroring MirroringMode(Mirroring headerMirroring) const override;
-    void PpuScanlineClock() override;
+    void PpuClock() override;
+    void ObservePpuAddress(std::uint16_t address) override;
+    bool PrgRamEnabled() const override;
+    bool PrgRamWriteProtected() const override;
     bool IrqPending() const override;
 
 private:
+    void ClockIrqCounter();
+
     std::uint8_t m_bankSelect{0};
     std::array<std::uint8_t, 8> m_registers{};
     std::uint8_t m_irqLatch{0};
@@ -44,6 +48,10 @@ private:
     bool m_chrMode{false};
     bool m_controlLoaded{false};
     bool m_verticalMirroring{false};
+    bool m_prgRamEnabled{true};
+    bool m_prgRamWriteProtected{false};
+    bool m_a12High{false};
+    std::uint8_t m_a12LowCycles{8};
 };
 
 } // namespace dendyforge

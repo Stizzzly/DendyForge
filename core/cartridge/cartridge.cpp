@@ -73,9 +73,14 @@ Mirroring Cartridge::CurrentMirroring() const
     return m_mapper->MirroringMode(m_info.MirroringMode());
 }
 
-void Cartridge::PpuScanlineClock()
+void Cartridge::PpuClock()
 {
-    m_mapper->PpuScanlineClock();
+    m_mapper->PpuClock();
+}
+
+void Cartridge::ObservePpuAddress(std::uint16_t address)
+{
+    m_mapper->ObservePpuAddress(address);
 }
 
 bool Cartridge::IrqPending() const
@@ -99,6 +104,10 @@ bool Cartridge::CpuRead(
 {
     if (address >= 0x6000 && address <= 0x7FFF)
     {
+        if (!m_mapper->PrgRamEnabled())
+        {
+            return false;
+        }
         data = m_prgRam[address & 0x1FFF];
         return true;
     }
@@ -125,7 +134,14 @@ bool Cartridge::CpuWrite(
 {
     if (address >= 0x6000 && address <= 0x7FFF)
     {
-        m_prgRam[address & 0x1FFF] = data;
+        if (!m_mapper->PrgRamEnabled())
+        {
+            return false;
+        }
+        if (!m_mapper->PrgRamWriteProtected())
+        {
+            m_prgRam[address & 0x1FFF] = data;
+        }
         return true;
     }
 
