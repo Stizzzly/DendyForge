@@ -6,7 +6,7 @@ A modern Dendy/NES emulator written in C++20.
 
 - Written from scratch
 - Modern C++20
-- SDL3 frontend
+- SDL3 + Dear ImGui frontend
 - Cross-platform
 - Clean architecture
 - Accurate 6502 emulation
@@ -21,12 +21,19 @@ Install SDL3 in the same MinGW environment as the compiler:
 C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3
 ```
 
-Then build and run the PPU frame-buffer window:
+Then build and run the game library:
 
 ```powershell
 cmake --build --preset mingw-clang-debug
 .\out\build\mingw-clang-debug\DendyForgeApp.exe
 ```
+
+Put personal ROM files in `roms/library/`. The library scans subfolders and
+shows each `.nes` file as a playable tile. To show a real cover, place a PNG,
+JPG, or JPEG with the same base filename next to the ROM, or put it under
+`roms/library/covers/`. The ROM folder remains ignored by Git. Passing a ROM
+path on the command line still starts it directly; press `Esc` in a game to
+return to the library.
 
 ## Roadmap
 
@@ -157,6 +164,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Frame Buffer Renderer
 * ✅ Audio Output
 * ✅ Keyboard Input
+* ✅ Dear ImGui game library (searchable ROM tiles and optional cover art)
 * 🟡 Game Loop
 
 ### Debugger

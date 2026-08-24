@@ -80,6 +80,22 @@ add_test(NAME DendyForgeTests COMMAND DendyForgeTests)
 
 add_executable(DendyForgeApp
     src/main.cpp
+    third_party/imgui/imgui.cpp
+    third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp
+    third_party/imgui/imgui_widgets.cpp
+    third_party/imgui/backends/imgui_impl_sdl3.cpp
+    third_party/imgui/backends/imgui_impl_sdlrenderer3.cpp
+)
+
+target_include_directories(DendyForgeApp PRIVATE
+    third_party/imgui
+    third_party/imgui/backends
+    third_party/stb
+)
+
+target_compile_definitions(DendyForgeApp PRIVATE
+    DENDYFORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 target_link_libraries(DendyForgeApp PRIVATE

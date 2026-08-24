@@ -38,7 +38,7 @@ core/
   ines/         iNES header types and reader
   cartridge/    cartridge data plus mapper dispatch
   mapper/       mapper abstraction and Mappers 0, 1, 2
-src/main.cpp    SDL3 window, event loop, texture upload and keyboard mapping
+src/main.cpp    SDL3 + Dear ImGui game library, event loop, texture upload and keyboard mapping
 tests/          doctest tests and versioned CPU test ROM fixtures
 roms/           user-local game ROMs; ignored by Git
 ```
@@ -83,9 +83,11 @@ loaded merely by placing it in `roms/`:
 .\out\build\mingw-clang-debug\DendyForgeApp.exe ".\roms\game.nes"
 ```
 
-With no argument, the app shows a generated PPU demo frame. A blank/checkered
-window while testing a game commonly means the executable was launched without
-the ROM path.
+With no argument, the app opens its game library. Put personal ROMs in
+`roms/library/`; optional PNG/JPG/JPEG covers can be placed next to a ROM or
+under `roms/library/covers/`. The ROM folder is ignored by Git. Press `Esc`
+while playing to return to the library. A blank/checkered window while testing
+a game commonly means the executable was launched without the ROM path.
 
 Tests use doctest. CPU ROM fixtures are intentionally versioned under
 `tests/cpu/roms/`; arbitrary `*.nes` files and `roms/` are ignored. The

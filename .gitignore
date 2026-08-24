@@ -16,3 +16,24 @@ roms/
 # CMake build directories created by local presets
 out/
 tests/cpu/roms/nestestres.log
+
+# Dear ImGui is vendored as the small SDL3 frontend subset. Keep its examples,
+# documentation, and optional backends out of the working-tree status.
+third_party/imgui/*
+!third_party/imgui/LICENSE.txt
+!third_party/imgui/imconfig.h
+!third_party/imgui/imgui.h
+!third_party/imgui/imgui_internal.h
+!third_party/imgui/imgui.cpp
+!third_party/imgui/imgui_draw.cpp
+!third_party/imgui/imgui_tables.cpp
+!third_party/imgui/imgui_widgets.cpp
+!third_party/imgui/imstb_rectpack.h
+!third_party/imgui/imstb_textedit.h
+!third_party/imgui/imstb_truetype.h
+!third_party/imgui/backends/
+third_party/imgui/backends/*
+!third_party/imgui/backends/imgui_impl_sdl3.cpp
+!third_party/imgui/backends/imgui_impl_sdl3.h
+!third_party/imgui/backends/imgui_impl_sdlrenderer3.cpp
+!third_party/imgui/backends/imgui_impl_sdlrenderer3.h
