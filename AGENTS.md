@@ -57,7 +57,7 @@ The supported Windows configuration is MinGW64 + Clang + Ninja via CMake
 presets. SDL3 must be installed in that MinGW environment:
 
 ```powershell
-C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3
+C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3 mingw-w64-x86_64-openssl
 cmake --preset mingw-clang-debug
 cmake --build --preset mingw-clang-debug
 ctest --test-dir out/build/mingw-clang-debug --output-on-failure
@@ -88,6 +88,13 @@ With no argument, the app opens its game library. Put personal ROMs in
 under `roms/library/covers/`. The ROM folder is ignored by Git. Press `Esc`
 while playing to return to the library. A blank/checkered window while testing
 a game commonly means the executable was launched without the ROM path.
+
+The game library can also download missing NES box art from TheGamesDB. The
+user pastes a personal API key into the UI and the app saves it only in
+`roms/library/.dendyforge-covers.json`; downloaded artwork is cached under
+`roms/library/covers/.dendyforge-cache/`. Do not commit either. HTTP runs on a
+background task through the vendored header-only `cpp-httplib`; response and
+configuration JSON use vendored `nlohmann/json`. Both use OpenSSL for HTTPS.
 
 Tests use doctest. CPU ROM fixtures are intentionally versioned under
 `tests/cpu/roms/`; arbitrary `*.nes` files and `roms/` are ignored. The

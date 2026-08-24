@@ -18,7 +18,7 @@ A modern Dendy/NES emulator written in C++20.
 Install SDL3 in the same MinGW environment as the compiler:
 
 ```powershell
-C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3
+C:\msys64\usr\bin\pacman.exe -S mingw-w64-x86_64-sdl3 mingw-w64-x86_64-openssl
 ```
 
 Then build and run the game library:
@@ -34,6 +34,11 @@ JPG, or JPEG with the same base filename next to the ROM, or put it under
 `roms/library/covers/`. The ROM folder remains ignored by Git. Passing a ROM
 path on the command line still starts it directly; press `Esc` in a game to
 return to the library.
+
+To fetch missing covers automatically, create a personal API key at
+[TheGamesDB](https://api.thegamesdb.net/key.php), paste it into the library's
+`TheGamesDB API key` field, click **Save key**, then **Download covers**. The
+key and cached artwork stay only under `roms/library/`, which Git ignores.
 
 ## Roadmap
 
@@ -164,7 +169,7 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Frame Buffer Renderer
 * ✅ Audio Output
 * ✅ Keyboard Input
-* ✅ Dear ImGui game library (searchable ROM tiles and optional cover art)
+* ✅ Dear ImGui game library (searchable ROM tiles and automatic TheGamesDB cover cache)
 * 🟡 Game Loop
 
 ### Debugger

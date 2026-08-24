@@ -1,1 +1,3 @@
 third_party/imgui/** -whitespace
+third_party/httplib/** -whitespace
+third_party/nlohmann/** -whitespace

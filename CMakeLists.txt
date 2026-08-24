@@ -4,7 +4,14 @@ project(DendyForge LANGUAGES CXX)
 
 enable_testing()
 
+if(MINGW)
+    get_filename_component(DENDYFORGE_MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(DENDYFORGE_MINGW_ROOT "${DENDYFORGE_MINGW_BIN_DIR}" DIRECTORY)
+    list(PREPEND CMAKE_PREFIX_PATH "${DENDYFORGE_MINGW_ROOT}")
+endif()
+
 find_package(SDL3 CONFIG REQUIRED)
+find_package(OpenSSL CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -91,6 +98,8 @@ add_executable(DendyForgeApp
 target_include_directories(DendyForgeApp PRIVATE
     third_party/imgui
     third_party/imgui/backends
+    third_party/httplib
+    third_party
     third_party/stb
 )
 
@@ -98,10 +107,23 @@ target_compile_definitions(DendyForgeApp PRIVATE
     DENDYFORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
+if(WIN32)
+    target_compile_definitions(DendyForgeApp PRIVATE
+        _WIN32_WINNT=0x0A00
+        WINVER=0x0A00
+    )
+endif()
+
 target_link_libraries(DendyForgeApp PRIVATE
     DendyForgeCore
     SDL3::SDL3
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
+
+if(WIN32)
+    target_link_libraries(DendyForgeApp PRIVATE ws2_32 crypt32)
+endif()
 
 add_executable(DendyForgeApuMixerRunner
     tools/apu_mixer_runner.cpp
@@ -141,8 +163,16 @@ add_custom_command(TARGET DendyForgeApp POST_BUILD
         "$<TARGET_FILE_DIR:DendyForgeApp>"
 )
 
+foreach(opensslRuntime OpenSSL::SSL OpenSSL::Crypto)
+    add_custom_command(TARGET DendyForgeApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${opensslRuntime}>"
+            "$<TARGET_FILE_DIR:DendyForgeApp>"
+    )
+endforeach()
+
 if(MINGW)
-    get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(MINGW_BIN_DIR "${DENDYFORGE_MINGW_BIN_DIR}")
 
     foreach(runtimeDll
         libgcc_s_seh-1.dll

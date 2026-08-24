@@ -4,6 +4,10 @@
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_sdlrenderer3.h>
 
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include <httplib.h>
+#include <nlohmann/json.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
 #include <stb_image.h>
@@ -11,8 +15,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
+#include <fstream>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -61,6 +69,29 @@ struct GameLibrary
     }
 };
 
+struct CoverServiceConfig
+{
+    std::string theGamesDbApiKey;
+};
+
+struct CoverDownloadResult
+{
+    std::filesystem::path romPath;
+    std::filesystem::path cachePath;
+    std::string message;
+    bool downloaded = false;
+};
+
+struct LibraryUiAction
+{
+    std::optional<std::size_t> selectedGame;
+    bool refresh = false;
+    bool saveApiKey = false;
+    bool downloadMissingCovers = false;
+};
+
+using Json = nlohmann::json;
+
 std::string DisplayTitle(const std::filesystem::path& romPath)
 {
     std::string title = romPath.stem().string();
@@ -107,6 +138,247 @@ SDL_Texture* LoadCoverTexture(SDL_Renderer* renderer,
     return texture;
 }
 
+std::filesystem::path CoverConfigPath(const GameLibrary& library)
+{
+    return library.root / ".dendyforge-covers.json";
+}
+
+std::filesystem::path CachedCoverPath(const GameLibrary& library,
+                                      const std::filesystem::path& romPath)
+{
+    std::uint64_t hash = 14695981039346656037ull;
+    for (unsigned char character : romPath.lexically_normal().generic_string())
+    {
+        hash = (hash ^ character) * 1099511628211ull;
+    }
+    return library.root / "covers" / ".dendyforge-cache" /
+        (std::to_string(hash) + ".jpg");
+}
+
+CoverServiceConfig LoadCoverServiceConfig(const GameLibrary& library)
+{
+    std::ifstream input(CoverConfigPath(library));
+    if (!input)
+    {
+        return {};
+    }
+
+    try
+    {
+        const Json config = Json::parse(input, nullptr, true, true);
+        return {config.value("thegamesdb_api_key", "")};
+    }
+    catch (const Json::exception&)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Ignoring invalid cover service configuration.");
+        return {};
+    }
+}
+
+bool SaveCoverServiceConfig(const GameLibrary& library, const CoverServiceConfig& config)
+{
+    std::ofstream output(CoverConfigPath(library), std::ios::trunc);
+    if (!output)
+    {
+        return false;
+    }
+    output << Json{{"thegamesdb_api_key", config.theGamesDbApiKey}}.dump(2) << '\n';
+    return static_cast<bool>(output);
+}
+
+std::string UrlEncode(std::string_view value)
+{
+    static constexpr char Hex[] = "0123456789ABCDEF";
+    std::string encoded;
+    encoded.reserve(value.size());
+    for (unsigned char character : value)
+    {
+        if (std::isalnum(character) || character == '-' || character == '_' ||
+            character == '.' || character == '~')
+        {
+            encoded.push_back(static_cast<char>(character));
+        }
+        else
+        {
+            encoded.push_back('%');
+            encoded.push_back(Hex[character >> 4]);
+            encoded.push_back(Hex[character & 0x0F]);
+        }
+    }
+    return encoded;
+}
+
+std::string Lowercase(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+    return value;
+}
+
+template <std::size_t Size>
+void CopyToBuffer(std::array<char, Size>& destination, std::string_view source)
+{
+    destination.fill('\0');
+    const std::size_t count = std::min(source.size(), destination.size() - 1);
+    std::copy_n(source.data(), count, destination.data());
+}
+
+std::optional<std::string> DownloadHttps(std::string_view url, std::string& error)
+{
+    constexpr std::string_view httpsPrefix = "https://";
+    if (!url.starts_with(httpsPrefix))
+    {
+        error = "The artwork service returned a non-HTTPS URL.";
+        return std::nullopt;
+    }
+
+    const std::size_t hostStart = httpsPrefix.size();
+    const std::size_t pathStart = url.find('/', hostStart);
+    const std::string host(url.substr(hostStart, pathStart - hostStart));
+    const std::string path(pathStart == std::string_view::npos ? "/" : url.substr(pathStart));
+    httplib::SSLClient client(host);
+    client.set_connection_timeout(5, 0);
+    client.set_read_timeout(15, 0);
+    client.set_follow_location(true);
+    const auto response = client.Get(path);
+    if (!response)
+    {
+        error = "Could not reach the cover service.";
+        return std::nullopt;
+    }
+    if (response->status != 200)
+    {
+        error = "The cover service returned HTTP " + std::to_string(response->status) + ".";
+        return std::nullopt;
+    }
+    if (response->body.size() > 15 * 1024 * 1024)
+    {
+        error = "The downloaded cover is too large.";
+        return std::nullopt;
+    }
+    return response->body;
+}
+
+CoverDownloadResult DownloadCoverFromTheGamesDb(const GameLibrary& library,
+                                                const std::filesystem::path& romPath,
+                                                const std::string& title,
+                                                const CoverServiceConfig& config)
+{
+    CoverDownloadResult result;
+    result.romPath = romPath;
+    result.cachePath = CachedCoverPath(library, romPath);
+    if (config.theGamesDbApiKey.empty())
+    {
+        result.message = "Enter and save a TheGamesDB API key first.";
+        return result;
+    }
+
+    std::string error;
+    const std::string searchUrl = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" +
+        UrlEncode(config.theGamesDbApiKey) + "&name=" + UrlEncode(title) +
+        "&include=boxart,platform";
+    const std::optional<std::string> responseBody = DownloadHttps(searchUrl, error);
+    if (!responseBody)
+    {
+        result.message = error;
+        return result;
+    }
+
+    try
+    {
+        const Json response = Json::parse(*responseBody);
+        const Json games = response.at("data").at("games");
+        if (!games.is_array() || games.empty())
+        {
+            result.message = "TheGamesDB did not find " + title + ".";
+            return result;
+        }
+
+        const auto isNesGame = [&response](const Json& game)
+        {
+            const std::string platformId = std::to_string(game.value("platform", 0));
+            const Json& platforms = response.at("include").at("platform").at("data");
+            const auto platform = platforms.find(platformId);
+            return platform != platforms.end() &&
+                Lowercase(platform->value("name", "")).find("nintendo entertainment system") !=
+                    std::string::npos;
+        };
+
+        const Json* chosenGame = &games.front();
+        const Json* exactTitleGame = nullptr;
+        const std::string normalizedTitle = Lowercase(title);
+        for (const Json& game : games)
+        {
+            if (Lowercase(game.value("game_title", "")) == normalizedTitle)
+            {
+                exactTitleGame = &game;
+                if (isNesGame(game))
+                {
+                    chosenGame = &game;
+                    break;
+                }
+            }
+            if (isNesGame(game))
+            {
+                chosenGame = &game;
+            }
+        }
+        if (exactTitleGame && !isNesGame(*chosenGame))
+        {
+            chosenGame = exactTitleGame;
+        }
+        const std::string gameId = std::to_string(chosenGame->at("id").get<int>());
+        const Json& boxart = response.at("include").at("boxart");
+        const Json& images = boxart.at("data").at(gameId);
+        if (!images.is_array() || images.empty())
+        {
+            result.message = "TheGamesDB has no box art for " + title + ".";
+            return result;
+        }
+
+        const Json* chosenImage = &images.front();
+        for (const Json& image : images)
+        {
+            if (image.value("type", "") == "boxart" && image.value("side", "") == "front")
+            {
+                chosenImage = &image;
+                break;
+            }
+        }
+        const std::string imageUrl = boxart.at("base_url").at("original").get<std::string>() +
+            chosenImage->at("filename").get<std::string>();
+        const std::optional<std::string> image = DownloadHttps(imageUrl, error);
+        if (!image)
+        {
+            result.message = error;
+            return result;
+        }
+
+        std::error_code filesystemError;
+        std::filesystem::create_directories(result.cachePath.parent_path(), filesystemError);
+        if (filesystemError)
+        {
+            result.message = "Could not create the local cover cache.";
+            return result;
+        }
+        std::ofstream output(result.cachePath, std::ios::binary | std::ios::trunc);
+        output.write(image->data(), static_cast<std::streamsize>(image->size()));
+        if (!output)
+        {
+            result.message = "Could not save the downloaded cover.";
+            return result;
+        }
+        result.downloaded = true;
+        result.message = "Downloaded cover for " + title + ".";
+    }
+    catch (const Json::exception&)
+    {
+        result.message = "TheGamesDB returned an unexpected response.";
+    }
+    return result;
+}
+
 std::filesystem::path FindCover(const GameLibrary& library,
                                 const std::filesystem::path& romPath)
 {
@@ -129,7 +401,8 @@ std::filesystem::path FindCover(const GameLibrary& library,
             return inCovers;
         }
     }
-    return {};
+    const std::filesystem::path cachedCover = CachedCoverPath(library, romPath);
+    return std::filesystem::is_regular_file(cachedCover) ? cachedCover : std::filesystem::path{};
 }
 
 void RefreshLibrary(GameLibrary& library, SDL_Renderer* renderer)
@@ -270,8 +543,11 @@ void SetupLibraryStyle()
     colours[ImGuiCol_Border] = ImVec4(0.22f, 0.29f, 0.42f, 0.7f);
 }
 
-std::optional<std::size_t> DrawGameLibrary(GameLibrary& library,
-                                           std::array<char, 128>& searchBuffer)
+LibraryUiAction DrawGameLibrary(GameLibrary& library,
+                                std::array<char, 128>& searchBuffer,
+                                std::array<char, 128>& apiKeyBuffer,
+                                std::string_view coverStatus,
+                                bool downloadInProgress)
 {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -309,8 +585,28 @@ std::optional<std::size_t> DrawGameLibrary(GameLibrary& library,
     ImGui::SameLine(contentWidth - 82.0f);
     const bool refreshRequested = ImGui::Button("Refresh");
 
-    ImGui::SetCursorPos(ImVec2(36.0f, 154.0f));
-    ImGui::BeginChild("Library grid", ImVec2(contentWidth, windowSize.y - 184.0f),
+    int missingCoverCount = 0;
+    for (const GameEntry& game : library.games)
+    {
+        missingCoverCount += game.coverTexture == nullptr;
+    }
+    ImGui::SetCursorPos(ImVec2(36.0f, 150.0f));
+    ImGui::TextDisabled("%.*s", static_cast<int>(coverStatus.size()), coverStatus.data());
+    ImGui::SameLine(contentWidth - 485.0f);
+    ImGui::SetNextItemWidth(225.0f);
+    ImGui::InputTextWithHint("##thegamesdb-key", "TheGamesDB API key", apiKeyBuffer.data(),
+                             apiKeyBuffer.size(), ImGuiInputTextFlags_Password);
+    ImGui::SameLine();
+    const bool saveApiKeyRequested = ImGui::Button("Save key");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(downloadInProgress || missingCoverCount == 0);
+    const bool downloadRequested = ImGui::Button(downloadInProgress
+        ? "Downloading..."
+        : "Download covers");
+    ImGui::EndDisabled();
+
+    ImGui::SetCursorPos(ImVec2(36.0f, 194.0f));
+    ImGui::BeginChild("Library grid", ImVec2(contentWidth, windowSize.y - 224.0f),
                       ImGuiChildFlags_Borders);
 
     std::string search(searchBuffer.data());
@@ -404,7 +700,7 @@ std::optional<std::size_t> DrawGameLibrary(GameLibrary& library,
 
     ImGui::EndChild();
     ImGui::End();
-    return refreshRequested ? std::optional<std::size_t>(library.games.size()) : selectedGame;
+    return {selectedGame, refreshRequested, saveApiKeyRequested, downloadRequested};
 }
 
 }
@@ -452,12 +748,41 @@ int main(int argc, char* argv[])
     library.root = std::filesystem::path(DENDYFORGE_SOURCE_DIR) / "roms" / "library";
     RefreshLibrary(library, renderer);
     std::array<char, 128> searchBuffer{};
+    CoverServiceConfig coverServiceConfig = LoadCoverServiceConfig(library);
+    std::array<char, 128> apiKeyBuffer{};
+    CopyToBuffer(apiKeyBuffer, coverServiceConfig.theGamesDbApiKey);
+    std::deque<std::size_t> pendingCoverDownloads;
+    std::future<CoverDownloadResult> activeCoverDownload;
+    std::string coverStatus = coverServiceConfig.theGamesDbApiKey.empty()
+        ? "Save a TheGamesDB API key to fetch real covers automatically."
+        : "Ready to download missing covers.";
     std::unique_ptr<dendyforge::Console> console;
     std::vector<float> pendingAudio;
     bool gameRunning = false;
     bool zapperCrosshair = false;
     std::uint64_t previousTicks = SDL_GetTicksNS();
     double pendingCpuCycles = 0.0;
+
+    auto startNextCoverDownload = [&]()
+    {
+        if (activeCoverDownload.valid() || pendingCoverDownloads.empty())
+        {
+            return;
+        }
+        const std::size_t gameIndex = pendingCoverDownloads.front();
+        pendingCoverDownloads.pop_front();
+        if (gameIndex >= library.games.size() || library.games[gameIndex].coverTexture)
+        {
+            return;
+        }
+        const std::filesystem::path romPath = library.games[gameIndex].romPath;
+        const std::string title = library.games[gameIndex].title;
+        activeCoverDownload = std::async(std::launch::async,
+            [&library, romPath, title, coverServiceConfig]()
+            {
+                return DownloadCoverFromTheGamesDb(library, romPath, title, coverServiceConfig);
+            });
+    };
 
     auto returnToLibrary = [&]()
     {
@@ -540,26 +865,80 @@ int main(int argc, char* argv[])
 
         if (!gameRunning)
         {
+            if (activeCoverDownload.valid() &&
+                activeCoverDownload.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                try
+                {
+                    const CoverDownloadResult result = activeCoverDownload.get();
+                    coverStatus = result.message;
+                    if (result.downloaded)
+                    {
+                        for (GameEntry& game : library.games)
+                        {
+                            if (game.romPath == result.romPath)
+                            {
+                                SDL_DestroyTexture(game.coverTexture);
+                                game.coverTexture = LoadCoverTexture(renderer, result.cachePath);
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (const std::exception& exception)
+                {
+                    coverStatus = std::string("Cover download failed: ") + exception.what();
+                }
+            }
+            startNextCoverDownload();
+
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
-            const std::optional<std::size_t> selection = DrawGameLibrary(library, searchBuffer);
+            const LibraryUiAction action = DrawGameLibrary(
+                library, searchBuffer, apiKeyBuffer, coverStatus,
+                activeCoverDownload.valid() || !pendingCoverDownloads.empty());
             ImGui::Render();
             SDL_SetRenderDrawColor(renderer, 10, 15, 27, 255);
             SDL_RenderClear(renderer);
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
             SDL_RenderPresent(renderer);
 
-            if (selection)
+            if (action.saveApiKey)
             {
-                if (*selection == library.games.size())
+                coverServiceConfig.theGamesDbApiKey = apiKeyBuffer.data();
+                coverStatus = SaveCoverServiceConfig(library, coverServiceConfig)
+                    ? "TheGamesDB API key saved locally."
+                    : "Could not save the TheGamesDB API key.";
+            }
+            if (action.downloadMissingCovers && !activeCoverDownload.valid())
+            {
+                if (coverServiceConfig.theGamesDbApiKey.empty())
                 {
-                    RefreshLibrary(library, renderer);
+                    coverStatus = "Enter and save a TheGamesDB API key first.";
                 }
                 else
                 {
-                    launchGame(library.games[*selection].romPath);
+                    for (std::size_t index = 0; index < library.games.size(); ++index)
+                    {
+                        if (!library.games[index].coverTexture &&
+                            FindCover(library, library.games[index].romPath).empty())
+                        {
+                            pendingCoverDownloads.push_back(index);
+                        }
+                    }
+                    coverStatus = pendingCoverDownloads.empty()
+                        ? "Every game already has a cover."
+                        : "Downloading covers in the background...";
                 }
+            }
+            if (action.refresh && !activeCoverDownload.valid() && pendingCoverDownloads.empty())
+            {
+                RefreshLibrary(library, renderer);
+            }
+            if (action.selectedGame)
+            {
+                launchGame(library.games[*action.selectedGame].romPath);
             }
             SDL_Delay(1);
             continue;
@@ -639,6 +1018,10 @@ int main(int argc, char* argv[])
     }
 
     console.reset();
+    if (activeCoverDownload.valid())
+    {
+        activeCoverDownload.wait();
+    }
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
