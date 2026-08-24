@@ -87,7 +87,8 @@ private:
     void ProcessSpriteEvaluation();
     void SpriteEvaluationStart();
     void SpriteEvaluationEnd();
-    void LoadSpriteTileInfo();
+    void FetchSpritePatternLow();
+    void FetchSpritePatternHigh();
     void ClockBackgroundFetch();
     void PrimeBackgroundFetch();
     void FetchNametableByte();
@@ -133,6 +134,7 @@ private:
     bool m_oamCopyDone{false};
     std::uint8_t m_overflowBugCounter{0};
     std::uint8_t m_spriteFetchIndex{0};
+    std::uint16_t m_spritePatternAddress{0};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};

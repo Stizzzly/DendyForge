@@ -124,7 +124,10 @@ void PPU::Clock()
                         ((m_vramAddress >> 2) & 0x0007));
                 break;
             case 4:
-                LoadSpriteTileInfo();
+                FetchSpritePatternLow();
+                break;
+            case 6:
+                FetchSpritePatternHigh();
                 break;
             default:
                 break;
@@ -653,7 +656,7 @@ void PPU::SpriteEvaluationEnd()
         (m_secondaryOamAddress + 3) >> 2);
 }
 
-void PPU::LoadSpriteTileInfo()
+void PPU::FetchSpritePatternLow()
 {
     const std::size_t slot = m_spriteFetchIndex;
     const std::uint8_t spriteY = m_secondaryOam[slot * 4];
@@ -662,7 +665,6 @@ void PPU::LoadSpriteTileInfo()
     const std::uint8_t spriteX = m_secondaryOam[slot * 4 + 3];
 
     const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
-    bool loaded = false;
     if (slot < m_scanlineSpriteCount && spriteY < 240 && m_scanline >= 0)
     {
         // The slot was fetched during scanline N for display on scanline
@@ -673,7 +675,6 @@ void PPU::LoadSpriteTileInfo()
             patternRow = spriteHeight - 1 - patternRow;
         }
 
-        std::uint16_t tileAddress;
         if (spriteHeight == 16)
         {
             const std::uint16_t spritePatternBase =
@@ -684,41 +685,49 @@ void PPU::LoadSpriteTileInfo()
                 ++tile;
                 patternRow -= 8;
             }
-            tileAddress = spritePatternBase + tile * 16 + patternRow;
+            m_spritePatternAddress =
+                spritePatternBase + tile * 16 + patternRow;
         }
         else
         {
             const std::uint16_t patternBase =
                 (m_control & 0x08) ? 0x1000 : 0x0000;
-            tileAddress = patternBase + tileIndex * 16 + patternRow;
+            m_spritePatternAddress = patternBase + tileIndex * 16 + patternRow;
         }
 
         ScanlineSprite& scanlineSprite = m_scanlineSprites[slot];
         scanlineSprite.index = 0;
         scanlineSprite.x = spriteX;
         scanlineSprite.attributes = attributes;
-        scanlineSprite.lowPlane = PpuRead(tileAddress);
-        scanlineSprite.highPlane = PpuRead(tileAddress + 8);
-        loaded = true;
+        scanlineSprite.lowPlane = PpuRead(m_spritePatternAddress);
+        return;
     }
 
-    if (!loaded)
+    // Unused slots fetch the transparent tile $FF. Its two planes still
+    // occupy distinct PPU fetch phases and remain mapper-bus visible.
+    if (spriteHeight == 16)
     {
-        // Unused slots fetch the transparent tile $FF; the fetches are
-        // PPU-bus visible and matter for MMC3-style IRQ counters.
-        std::uint16_t garbageAddress;
-        if (spriteHeight == 16)
-        {
-            garbageAddress = 0x1000 + 0xFE * 16;
-        }
-        else
-        {
-            const std::uint16_t patternBase =
-                (m_control & 0x08) ? 0x1000 : 0x0000;
-            garbageAddress = patternBase + 0xFF * 16;
-        }
-        PpuRead(garbageAddress);
-        PpuRead(garbageAddress + 8);
+        m_spritePatternAddress = 0x1000 + 0xFE * 16;
+    }
+    else
+    {
+        const std::uint16_t patternBase =
+            (m_control & 0x08) ? 0x1000 : 0x0000;
+        m_spritePatternAddress = patternBase + 0xFF * 16;
+    }
+    PpuRead(m_spritePatternAddress);
+}
+
+void PPU::FetchSpritePatternHigh()
+{
+    if (m_spriteFetchIndex < m_scanlineSpriteCount)
+    {
+        m_scanlineSprites[m_spriteFetchIndex].highPlane =
+            PpuRead(m_spritePatternAddress + 8);
+    }
+    else
+    {
+        PpuRead(m_spritePatternAddress + 8);
     }
 
     ++m_spriteFetchIndex;
