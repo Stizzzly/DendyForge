@@ -496,23 +496,46 @@ const CPU6502::Instruction& CPU6502::GetInstructionConfig(std::uint8_t opcode)
         table[0x97] = {"SAX", &CPU6502::SAX, &CPU6502::ZPY, 4};
 
         const auto addReadModifyWrite = [&table](
+            const char* name,
             const std::array<std::uint8_t, 7>& opcodes,
             std::uint8_t (CPU6502::*operation)())
         {
-            table[opcodes[0]] = {"RMW", operation, &CPU6502::IZX, 8};
-            table[opcodes[1]] = {"RMW", operation, &CPU6502::ZP0, 5};
-            table[opcodes[2]] = {"RMW", operation, &CPU6502::ABS, 6};
-            table[opcodes[3]] = {"RMW", operation, &CPU6502::IZY, 8};
-            table[opcodes[4]] = {"RMW", operation, &CPU6502::ZPX, 6};
-            table[opcodes[5]] = {"RMW", operation, &CPU6502::ABY, 7};
-            table[opcodes[6]] = {"RMW", operation, &CPU6502::ABX, 7};
+            table[opcodes[0]] = {name, operation, &CPU6502::IZX, 8};
+            table[opcodes[1]] = {name, operation, &CPU6502::ZP0, 5};
+            table[opcodes[2]] = {name, operation, &CPU6502::ABS, 6};
+            table[opcodes[3]] = {name, operation, &CPU6502::IZY, 8};
+            table[opcodes[4]] = {name, operation, &CPU6502::ZPX, 6};
+            table[opcodes[5]] = {name, operation, &CPU6502::ABY, 7};
+            table[opcodes[6]] = {name, operation, &CPU6502::ABX, 7};
         };
-        addReadModifyWrite({0x03, 0x07, 0x0F, 0x13, 0x17, 0x1B, 0x1F}, &CPU6502::SLO);
-        addReadModifyWrite({0x23, 0x27, 0x2F, 0x33, 0x37, 0x3B, 0x3F}, &CPU6502::RLA);
-        addReadModifyWrite({0x43, 0x47, 0x4F, 0x53, 0x57, 0x5B, 0x5F}, &CPU6502::SRE);
-        addReadModifyWrite({0x63, 0x67, 0x6F, 0x73, 0x77, 0x7B, 0x7F}, &CPU6502::RRA);
-        addReadModifyWrite({0xC3, 0xC7, 0xCF, 0xD3, 0xD7, 0xDB, 0xDF}, &CPU6502::DCP);
-        addReadModifyWrite({0xE3, 0xE7, 0xEF, 0xF3, 0xF7, 0xFB, 0xFF}, &CPU6502::ISB);
+        addReadModifyWrite("SLO", {0x03, 0x07, 0x0F, 0x13, 0x17, 0x1B, 0x1F}, &CPU6502::SLO);
+        addReadModifyWrite("RLA", {0x23, 0x27, 0x2F, 0x33, 0x37, 0x3B, 0x3F}, &CPU6502::RLA);
+        addReadModifyWrite("SRE", {0x43, 0x47, 0x4F, 0x53, 0x57, 0x5B, 0x5F}, &CPU6502::SRE);
+        addReadModifyWrite("RRA", {0x63, 0x67, 0x6F, 0x73, 0x77, 0x7B, 0x7F}, &CPU6502::RRA);
+        addReadModifyWrite("DCP", {0xC3, 0xC7, 0xCF, 0xD3, 0xD7, 0xDB, 0xDF}, &CPU6502::DCP);
+        addReadModifyWrite("ISC", {0xE3, 0xE7, 0xEF, 0xF3, 0xF7, 0xFB, 0xFF}, &CPU6502::ISB);
+
+        table[0x0B] = {"ANC", &CPU6502::ANC, &CPU6502::IMM, 2};
+        table[0x2B] = {"ANC", &CPU6502::ANC, &CPU6502::IMM, 2};
+        table[0x4B] = {"ALR", &CPU6502::ALR, &CPU6502::IMM, 2};
+        table[0x6B] = {"ARR", &CPU6502::ARR, &CPU6502::IMM, 2};
+        table[0x8B] = {"XAA", &CPU6502::XAA, &CPU6502::IMM, 2};
+        table[0xAB] = {"LAX", &CPU6502::LAX, &CPU6502::IMM, 2};
+        table[0xBB] = {"LAS", &CPU6502::LAS, &CPU6502::ABY, 4};
+        table[0xCB] = {"AXS", &CPU6502::AXS, &CPU6502::IMM, 2};
+
+        table[0x93] = {"AHX", &CPU6502::AHX, &CPU6502::IZY, 6};
+        table[0x9B] = {"TAS", &CPU6502::TAS, &CPU6502::ABY, 5};
+        table[0x9C] = {"SHY", &CPU6502::SHY, &CPU6502::ABX, 5};
+        table[0x9E] = {"SHX", &CPU6502::SHX, &CPU6502::ABY, 5};
+        table[0x9F] = {"AHX", &CPU6502::AHX, &CPU6502::ABY, 5};
+
+        for (const std::uint8_t opcode :
+             {0x02, 0x12, 0x22, 0x32, 0x42, 0x52,
+              0x62, 0x72, 0x92, 0xB2, 0xD2, 0xF2})
+        {
+            table[opcode] = {"KIL", &CPU6502::KIL, &CPU6502::IMP, 2};
+        }
         table[0xEB] = {"SBC", &CPU6502::SBC, &CPU6502::IMM, 2};
         return table;
     }();
@@ -577,6 +600,7 @@ void CPU6502::Reset()
     m_stepCycle = 0;
     m_operandReady = false;
     m_branchTaken = false;
+    m_jammed = false;
     m_pendingInterrupt = PendingInterrupt::None;
     m_recognizedInterrupt = PendingInterrupt::None;
     m_specialSequence = SpecialSequence::Reset;
@@ -585,6 +609,15 @@ void CPU6502::Reset()
 
 void CPU6502::Clock()
 {
+    if (m_jammed)
+    {
+        // KIL stops the instruction sequencer with the PC pointing at the
+        // byte after the opcode. The NMOS core remains there until reset;
+        // IRQ and NMI cannot restart it.
+        Read(m_pc);
+        return;
+    }
+
     // The interrupt lines are polled at phi2 of an instruction's
     // penultimate cycle. Sampling as the final cycle begins sees every
     // line update latched through the penultimate console cycle, matching
@@ -630,6 +663,11 @@ CPU6502::ExecutionKind CPU6502::ClassifyExecution(
 {
     const auto operate = instruction.operate;
 
+    if (operate == &CPU6502::KIL)
+    {
+        return ExecutionKind::Jam;
+    }
+
     const bool branchOperate =
         operate == &CPU6502::BPL || operate == &CPU6502::BMI ||
         operate == &CPU6502::BVC || operate == &CPU6502::BVS ||
@@ -673,7 +711,9 @@ CPU6502::ExecutionKind CPU6502::ClassifyExecution(
     }
 
     if (operate == &CPU6502::STA || operate == &CPU6502::STX ||
-        operate == &CPU6502::STY || operate == &CPU6502::SAX)
+        operate == &CPU6502::STY || operate == &CPU6502::SAX ||
+        operate == &CPU6502::AHX || operate == &CPU6502::TAS ||
+        operate == &CPU6502::SHY || operate == &CPU6502::SHX)
     {
         return ExecutionKind::Write;
     }
@@ -935,6 +975,16 @@ void CPU6502::StepInstruction()
             m_pc = static_cast<std::uint16_t>(m_pc + m_addrRel);
         }
         // The page-cross fix-up cycle is internal: no bus transaction.
+        break;
+
+    case ExecutionKind::Jam:
+        // KIL has the normal second-cycle dummy read, then leaves the
+        // sequencer permanently stopped until Reset().
+        if (cycle == 2)
+        {
+            Read(m_pc);
+            RunOperate(instruction);
+        }
         break;
 
     case ExecutionKind::JumpAbsolute:
@@ -1669,6 +1719,120 @@ std::uint8_t CPU6502::ISB()
     return 0;
 }
 
+std::uint8_t CPU6502::ANC()
+{
+    FetchData();
+    m_a &= m_fetched;
+    UpdateZN(m_a);
+    SetFlag(Flags::C, (m_a & 0x80) != 0);
+    return 0;
+}
+
+std::uint8_t CPU6502::ALR()
+{
+    FetchData();
+    m_a &= m_fetched;
+    SetFlag(Flags::C, (m_a & 0x01) != 0);
+    m_a >>= 1;
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::ARR()
+{
+    FetchData();
+    const std::uint8_t value = m_a & m_fetched;
+    m_a = static_cast<std::uint8_t>(
+        (value >> 1) | (GetFlag(Flags::C) ? 0x80 : 0x00));
+    UpdateZN(m_a);
+    SetFlag(Flags::C, (m_a & 0x40) != 0);
+    SetFlag(Flags::V, ((m_a >> 6) ^ (m_a >> 5)) & 0x01);
+    return 0;
+}
+
+std::uint8_t CPU6502::AXS()
+{
+    FetchData();
+    const std::uint8_t value = m_a & m_x;
+    SetFlag(Flags::C, value >= m_fetched);
+    m_x = static_cast<std::uint8_t>(value - m_fetched);
+    UpdateZN(m_x);
+    return 0;
+}
+
+std::uint8_t CPU6502::XAA()
+{
+    FetchData();
+    // XAA is sensitive to internal bus charge on real NMOS chips. The
+    // 2A03-compatible model used by Mesen is (A | $EE) & X & immediate;
+    // making it deterministic preserves the behavior expected by NES
+    // software while keeping the standalone core reproducible.
+    m_a = static_cast<std::uint8_t>((m_a | 0xEE) & m_x & m_fetched);
+    UpdateZN(m_a);
+    return 0;
+}
+
+std::uint8_t CPU6502::LAS()
+{
+    FetchData();
+    m_a = static_cast<std::uint8_t>(m_fetched & m_sp);
+    m_x = m_a;
+    m_sp = m_a;
+    UpdateZN(m_a);
+    return 0;
+}
+
+void CPU6502::StoreHighIndexed(std::uint8_t value)
+{
+    const bool pageCrossed =
+        (m_addrAbs & 0xFF00) != (m_addrBase & 0xFF00);
+    std::uint8_t addressHigh = static_cast<std::uint8_t>(m_addrAbs >> 8);
+    if (pageCrossed)
+    {
+        // The write's high address byte is gated by the value on a page
+        // cross, a characteristic NMOS bus effect of these opcodes.
+        addressHigh &= value;
+    }
+
+    const std::uint8_t stored = static_cast<std::uint8_t>(
+        value & (static_cast<std::uint8_t>(m_addrBase >> 8) + 1));
+    const std::uint16_t address = static_cast<std::uint16_t>(
+        (static_cast<std::uint16_t>(addressHigh) << 8) |
+        (m_addrAbs & 0x00FF));
+    Write(address, stored);
+}
+
+std::uint8_t CPU6502::AHX()
+{
+    StoreHighIndexed(static_cast<std::uint8_t>(m_a & m_x));
+    return 0;
+}
+
+std::uint8_t CPU6502::TAS()
+{
+    m_sp = m_a & m_x;
+    StoreHighIndexed(m_sp);
+    return 0;
+}
+
+std::uint8_t CPU6502::SHY()
+{
+    StoreHighIndexed(m_y);
+    return 0;
+}
+
+std::uint8_t CPU6502::SHX()
+{
+    StoreHighIndexed(m_x);
+    return 0;
+}
+
+std::uint8_t CPU6502::KIL()
+{
+    m_jammed = true;
+    return 0;
+}
+
 std::uint8_t CPU6502::IMP()
 {
     m_fetched = m_a;
@@ -2331,5 +2495,10 @@ std::uint8_t CPU6502::X() const
 std::uint8_t CPU6502::Y() const
 {
     return m_y;
+}
+
+bool CPU6502::IsJammed() const
+{
+    return m_jammed;
 }
 } // namespace dendyforge

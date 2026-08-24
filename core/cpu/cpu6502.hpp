@@ -67,6 +67,7 @@ public:
     const char* CurrentInstruction() const;
     std::uint8_t X() const;
     std::uint8_t Y() const;
+    bool IsJammed() const;
 private:
 
     struct Instruction
@@ -129,6 +130,17 @@ private:
     std::uint8_t RRA();
     std::uint8_t DCP();
     std::uint8_t ISB();
+    std::uint8_t ANC();
+    std::uint8_t ALR();
+    std::uint8_t ARR();
+    std::uint8_t AXS();
+    std::uint8_t XAA();
+    std::uint8_t LAS();
+    std::uint8_t AHX();
+    std::uint8_t TAS();
+    std::uint8_t SHY();
+    std::uint8_t SHX();
+    std::uint8_t KIL();
 
     // Инкремент / Декремент
     std::uint8_t INX(); // Increment X
@@ -208,7 +220,8 @@ private:
         Rts,             // RTS with the stack pulls on their cycles
         Rti,             // RTI with the status and address pulls on their cycles
         Brk,             // BRK software interrupt entry across seven cycles
-        Branch           // conditional branch: dummy fetch when taken, internal fix-up on page cross
+        Branch,          // conditional branch: dummy fetch when taken, internal fix-up on page cross
+        Jam              // KIL: CPU remains halted until Reset()
     };
 
     ExecutionKind ClassifyExecution(const Instruction& instruction) const;
@@ -217,6 +230,7 @@ private:
     void StepMemoryInstruction(const Instruction& instruction, int cycle);
     void StepDataPhase(const Instruction& instruction, int cycle, int dataCycle);
     void RunOperate(const Instruction& instruction);
+    void StoreHighIndexed(std::uint8_t value);
 
     // Cached addressing-mode classification so the per-cycle sequencer
     // dispatches on a dense enum instead of comparing member-function
@@ -284,6 +298,7 @@ private:
     // cycle; the sequencer performs the taken branch's dummy fetch and PC
     // update on the next cycle.
     bool m_branchTaken{false};
+    bool m_jammed{false};
 
     // Hardware polls interrupt lines at an instruction boundary, so a
     // signalled interrupt must not cut into the cycle burn of the current

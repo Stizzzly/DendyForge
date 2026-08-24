@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cpu/cpu6502.hpp"
@@ -349,6 +350,233 @@ TEST_CASE("Unofficial SLO follows the same read, write-old, write-new pattern")
     CHECK(machine.bus.memory[0x0030] == 0x82);
     CHECK(machine.cpu.Accumulator() == 0xC2); // A |= shifted value
     CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+}
+
+TEST_CASE("Unofficial immediate ALU opcodes match their NMOS combinations")
+{
+    SUBCASE("ANC")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA9; // LDA #$80
+        machine.bus.memory[0x0201] = 0x80;
+        machine.bus.memory[0x0202] = 0x0B; // ANC #$FF
+        machine.bus.memory[0x0203] = 0xFF;
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        CHECK(machine.cpu.Accumulator() == 0x80);
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+    }
+
+    SUBCASE("ALR")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA9; // LDA #$03
+        machine.bus.memory[0x0201] = 0x03;
+        machine.bus.memory[0x0202] = 0x4B; // ALR #$FF
+        machine.bus.memory[0x0203] = 0xFF;
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        CHECK(machine.cpu.Accumulator() == 0x01);
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    }
+
+    SUBCASE("ARR")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0x38; // SEC
+        machine.bus.memory[0x0201] = 0xA9; // LDA #$FF
+        machine.bus.memory[0x0202] = 0xFF;
+        machine.bus.memory[0x0203] = 0x6B; // ARR #$66
+        machine.bus.memory[0x0204] = 0x66;
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        CHECK(machine.cpu.Accumulator() == 0xB3);
+        CHECK_FALSE(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::V));
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+    }
+
+    SUBCASE("AXS")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA9; // LDA #$CC
+        machine.bus.memory[0x0201] = 0xCC;
+        machine.bus.memory[0x0202] = 0xA2; // LDX #$0F
+        machine.bus.memory[0x0203] = 0x0F;
+        machine.bus.memory[0x0204] = 0xCB; // AXS #$08
+        machine.bus.memory[0x0205] = 0x08;
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        CHECK(machine.cpu.X() == 0x04);
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::C));
+    }
+
+    SUBCASE("XAA")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA2; // LDX #$F3
+        machine.bus.memory[0x0201] = 0xF3;
+        machine.bus.memory[0x0202] = 0x8B; // XAA #$8F
+        machine.bus.memory[0x0203] = 0x8F;
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        CHECK(machine.cpu.Accumulator() == 0x82);
+        CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::N));
+    }
+
+    SUBCASE("LAX immediate")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xAB; // LAX #$3C
+        machine.bus.memory[0x0201] = 0x3C;
+
+        CHECK(machine.RunInstruction() == 2);
+        CHECK(machine.cpu.Accumulator() == 0x3C);
+        CHECK(machine.cpu.X() == 0x3C);
+    }
+}
+
+TEST_CASE("Unofficial LAS and high-byte stores use the indexed bus behavior")
+{
+    SUBCASE("LAS")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA2; // LDX #$F0
+        machine.bus.memory[0x0201] = 0xF0;
+        machine.bus.memory[0x0202] = 0x9A; // TXS
+        machine.bus.memory[0x0203] = 0xA0; // LDY #$01
+        machine.bus.memory[0x0204] = 0x01;
+        machine.bus.memory[0x0205] = 0xBB; // LAS $02FF,Y
+        machine.bus.memory[0x0206] = 0xFF;
+        machine.bus.memory[0x0207] = 0x02;
+        machine.bus.memory[0x0300] = 0xC3;
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.bus.log.clear();
+
+        CHECK(machine.RunInstruction() == 5);
+        CHECK(FormatLog(machine.bus.log) == "R0205 R0206 R0207 R0200 R0300");
+        CHECK(machine.cpu.Accumulator() == 0xC0);
+        CHECK(machine.cpu.X() == 0xC0);
+        CHECK(machine.cpu.StackPointer() == 0xC0);
+    }
+
+    SUBCASE("AHX changes the write address on a page cross")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA9; // LDA #$03
+        machine.bus.memory[0x0201] = 0x03;
+        machine.bus.memory[0x0202] = 0xAA; // TAX
+        machine.bus.memory[0x0203] = 0xA0; // LDY #$01
+        machine.bus.memory[0x0204] = 0x01;
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.bus.log.clear();
+        machine.cpu.SetProgramCounter(0x0300);
+        machine.bus.memory[0x0300] = 0x9F; // AHX $12FF,Y
+        machine.bus.memory[0x0301] = 0xFF;
+        machine.bus.memory[0x0302] = 0x12;
+
+        CHECK(machine.RunInstruction() == 5);
+        CHECK(FormatLog(machine.bus.log) == "R0300 R0301 R0302 R1200 W0300=03");
+        CHECK(machine.bus.memory[0x0300] == 0x03);
+    }
+
+    SUBCASE("AHX indirect Y, TAS, SHY, and SHX store the high-byte mask")
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = 0xA9; // LDA #$F7
+        machine.bus.memory[0x0201] = 0xF7;
+        machine.bus.memory[0x0202] = 0xAA; // TAX
+        machine.bus.memory[0x0203] = 0xA0; // LDY #$01
+        machine.bus.memory[0x0204] = 0x01;
+        machine.RunInstruction();
+        machine.RunInstruction();
+        machine.RunInstruction();
+
+        machine.bus.memory[0x0205] = 0x93; // AHX ($10),Y
+        machine.bus.memory[0x0206] = 0x10;
+        machine.bus.memory[0x0010] = 0x10;
+        machine.bus.memory[0x0011] = 0x02;
+        machine.cpu.SetProgramCounter(0x0205);
+        CHECK(machine.RunInstruction() == 6);
+        CHECK(machine.bus.memory[0x0211] == 0x03);
+
+        machine.bus.memory[0x0205] = 0x9B; // TAS $0310,Y
+        machine.bus.memory[0x0206] = 0x10;
+        machine.bus.memory[0x0207] = 0x03;
+        machine.cpu.SetProgramCounter(0x0205);
+        CHECK(machine.RunInstruction() == 5);
+        CHECK(machine.bus.memory[0x0311] == 0x04);
+        CHECK(machine.cpu.StackPointer() == 0xF7);
+
+        machine.bus.memory[0x0205] = 0x9C; // SHY $0210,X
+        machine.bus.memory[0x0206] = 0x10;
+        machine.bus.memory[0x0207] = 0x02;
+        machine.cpu.SetProgramCounter(0x0205);
+        CHECK(machine.RunInstruction() == 5);
+        CHECK(machine.bus.memory[0x0211] == 0x03);
+
+        machine.bus.memory[0x0205] = 0x9E; // SHX $0210,Y
+        machine.bus.memory[0x0206] = 0x10;
+        machine.bus.memory[0x0207] = 0x02;
+        machine.cpu.SetProgramCounter(0x0205);
+        CHECK(machine.RunInstruction() == 5);
+        CHECK(machine.bus.memory[0x0211] == 0x03);
+    }
+}
+
+TEST_CASE("Every KIL opcode jams the CPU until reset")
+{
+    for (const std::uint8_t opcode :
+         {0x02, 0x12, 0x22, 0x32, 0x42, 0x52,
+          0x62, 0x72, 0x92, 0xB2, 0xD2, 0xF2})
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = opcode;
+        machine.bus.memory[0x0201] = 0xEA;
+
+        CHECK(machine.RunInstruction() == 2);
+        CHECK(machine.cpu.IsJammed());
+        CHECK(machine.cpu.ProgramCounter() == 0x0201);
+
+        machine.cpu.IRQ();
+        machine.cpu.NMI();
+        machine.cpu.Clock();
+        CHECK(machine.cpu.ProgramCounter() == 0x0201);
+        CHECK(machine.cpu.IsJammed());
+
+        machine.cpu.Reset();
+        while (machine.cpu.Cycles() > 0)
+        {
+            machine.cpu.Clock();
+        }
+        CHECK_FALSE(machine.cpu.IsJammed());
+    }
+}
+
+TEST_CASE("Every 2A03 opcode has an explicit decoder entry")
+{
+    for (int opcode = 0; opcode <= 0xFF; ++opcode)
+    {
+        CycleMachine machine;
+        machine.bus.memory[0x0200] = static_cast<std::uint8_t>(opcode);
+
+        machine.cpu.Clock(); // opcode-fetch cycle
+        CHECK_MESSAGE(
+            std::string_view(machine.cpu.CurrentInstruction()) != "???",
+            "missing decoder entry for opcode " << opcode);
+    }
 }
 
 TEST_CASE("PHA dummy-reads the next opcode and writes the stack last")

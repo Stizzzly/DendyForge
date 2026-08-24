@@ -113,11 +113,16 @@ cartridge from `Bus::InsertCartridge()`.
 
 ## CPU6502 status
 
-The CPU has all 56 official mnemonics and all 151 official opcodes. Its normal
-instruction-level cycle accounting, page-cross penalties, branch timing,
-interrupt handling, decimal-mode configuration, and the JMP indirect wrapping
-behavior are covered by tests. The `nestest` golden-trace regression is
-committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
+The CPU has all 56 official mnemonics and an explicit decode for all 256
+opcode bytes. The stable NMOS unofficial families (LAX/SAX, SLO/RLA/SRE/RRA,
+DCP/ISC, ANC/ALR/ARR/AXS/LAS, alternate NOPs and `$EB` SBC), high-byte store
+opcodes (AHX/TAS/SHY/SHX), XAA, and KIL are sequenced through the same per-cycle
+CPU machinery as official instructions. XAA is inherently analogue-dependent;
+the deterministic NES-compatible model is `(A | $EE) & X & immediate`.
+Its normal instruction-level cycle accounting, page-cross penalties, branch
+timing, interrupt handling, decimal-mode configuration, and the JMP indirect
+wrapping behavior are covered by tests. The `nestest` golden-trace regression
+is committed as `tests/cpu/nestest_trace_tests.cpp` and passes for PC, operand
 bytes, registers, and cycle count against `tests/cpu/roms/nestest.log`.
 
 The cycle-accurate conversion (see `CPU_CYCLE_ACCURACY_PLAN.md`) completed

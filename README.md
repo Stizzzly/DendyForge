@@ -92,9 +92,9 @@ cmake --build --preset mingw-clang-debug
 
 ### Undocumented Instructions
 
-- ⬜ Implement unofficial (illegal) opcodes
+- ✅ Implement unofficial (illegal) opcodes
 - ⬜ Match original CPU6502 hardware behavior
-- ⬜ Validate unofficial opcode behavior
+- ✅ Validate unofficial opcode behavior
 
 ### Result
 
