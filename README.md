@@ -192,8 +192,8 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Mega Man
 * ✅ Tetris
 * ✅ Ninja Gaiden
-* ⬜ Duck Hunt (without Zapper)
-* ⬜ Kirby's Adventure
+* ✅ Duck Hunt (with Zapper)
+* ✅ Kirby's Adventure
 
 ### Test ROMs
 
