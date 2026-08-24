@@ -87,7 +87,7 @@ cmake --build --preset mingw-clang-debug
 
 - ✅ Pass Klaus Dormann 6502 Functional Test
 - ✅ Pass nestest.nes (reference trace: PC, registers, and cycles)
-- ⬜ Pass Blargg CPU Tests
+- ✅ Pass Blargg CPU Tests
 - ⬜ Verify cycle accuracy against reference documentation
 
 ### Undocumented Instructions
