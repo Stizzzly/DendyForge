@@ -244,12 +244,19 @@ std::optional<std::string> DownloadHttps(std::string_view url, std::string& erro
     const auto response = client.Get(path);
     if (!response)
     {
-        error = "Could not reach the cover service.";
+        error = "Could not reach the cover service: " + httplib::to_string(response.error()) + ".";
         return std::nullopt;
     }
     if (response->status != 200)
     {
-        error = "The cover service returned HTTP " + std::to_string(response->status) + ".";
+        const Json responseJson = Json::parse(response->body, nullptr, false);
+        const std::string providerMessage = !responseJson.is_discarded()
+            ? responseJson.value("status", "")
+            : "";
+        error = providerMessage.empty()
+            ? "The cover service returned HTTP " + std::to_string(response->status) + "."
+            : "TheGamesDB: " + providerMessage + " (HTTP " +
+                std::to_string(response->status) + ").";
         return std::nullopt;
     }
     if (response->body.size() > 15 * 1024 * 1024)
@@ -275,7 +282,7 @@ CoverDownloadResult DownloadCoverFromTheGamesDb(const GameLibrary& library,
     }
 
     std::string error;
-    const std::string searchUrl = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" +
+    const std::string searchUrl = "https://api.thegamesdb.net/v1.1/Games/ByGameName?apikey=" +
         UrlEncode(config.theGamesDbApiKey) + "&name=" + UrlEncode(title) +
         "&include=boxart,platform";
     const std::optional<std::string> responseBody = DownloadHttps(searchUrl, error);
