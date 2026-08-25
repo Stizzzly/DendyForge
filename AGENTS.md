@@ -39,6 +39,7 @@ core/
   cartridge/    cartridge data plus mapper dispatch
   mapper/       mapper abstraction and Mappers 0, 1, 2
 src/main.cpp    SDL3 + Dear ImGui game library/settings, event loop, texture upload and configurable keyboard mapping
+assets/fonts/   bundled Jura UI typeface and its SIL Open Font License
 tests/          doctest tests and versioned CPU test ROM fixtures
 roms/           user-local game ROMs; ignored by Git
 ```
@@ -211,6 +212,12 @@ and then return ones. SDL defaults to `W/A/S/D` for the D-pad, Backspace for
 Select, Enter for Start, K for A, and L for B. The player can change each
 binding through the drawn controller in **Settings → Controls**; the same
 local cover-service configuration file persists those bindings.
+
+The library must render cover art with its native aspect ratio; fit it inside
+the tile's cover area rather than stretching or cropping it. `assets/fonts/`
+contains the bundled Jura UI font and its license. CMake copies both the font
+and license next to `DendyForgeApp.exe` under `assets/fonts/`; load assets
+relative to `SDL_GetBasePath()` so Release builds remain portable.
 
 The Zapper light gun is `core/zapper/` on controller port 2: reading `$4017`
 returns the light sensor in bit 3 (0 = light) and the trigger in bit 4

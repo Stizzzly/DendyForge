@@ -107,6 +107,16 @@ target_compile_definitions(DendyForgeApp PRIVATE
     DENDYFORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
+add_custom_command(TARGET DendyForgeApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DendyForgeApp>/assets/fonts
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Jura[wght].ttf
+        $<TARGET_FILE_DIR:DendyForgeApp>/assets/fonts/Jura[wght].ttf
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Jura-OFL.txt
+        $<TARGET_FILE_DIR:DendyForgeApp>/assets/fonts/Jura-OFL.txt
+)
+
 if(WIN32)
     target_compile_definitions(DendyForgeApp PRIVATE
         _WIN32_WINNT=0x0A00

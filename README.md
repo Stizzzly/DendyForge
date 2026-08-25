@@ -154,6 +154,10 @@ Start, `K` — A, `L` — B. Change any mapping in **Settings → Controls**: cl
 the corresponding part of the drawn Dendy controller, press a keyboard key,
 then click **Save settings**.
 
+The library keeps each cover's original proportions, including horizontal box
+art. Its interface uses the bundled Jura font (SIL Open Font License 1.1;
+license in `assets/fonts/Jura-OFL.txt`).
+
 ### APU
 
 * ✅ Pulse Channels (duty/envelope/sweep/length; blargg APU suite)

@@ -47,6 +47,8 @@ struct GameEntry
     std::filesystem::path romPath;
     std::string title;
     SDL_Texture* coverTexture = nullptr;
+    int coverWidth = 0;
+    int coverHeight = 0;
 };
 
 struct GameLibrary
@@ -65,6 +67,8 @@ struct GameLibrary
         {
             SDL_DestroyTexture(game.coverTexture);
             game.coverTexture = nullptr;
+            game.coverWidth = 0;
+            game.coverHeight = 0;
         }
     }
 };
@@ -149,7 +153,8 @@ bool HasNesExtension(const std::filesystem::path& path)
 }
 
 SDL_Texture* LoadCoverTexture(SDL_Renderer* renderer,
-                              const std::filesystem::path& imagePath)
+                              const std::filesystem::path& imagePath,
+                              int* imageWidth = nullptr, int* imageHeight = nullptr)
 {
     int width = 0;
     int height = 0;
@@ -168,7 +173,58 @@ SDL_Texture* LoadCoverTexture(SDL_Renderer* renderer,
         : nullptr;
     SDL_DestroySurface(surface);
     stbi_image_free(pixels);
+    if (texture)
+    {
+        if (imageWidth)
+        {
+            *imageWidth = width;
+        }
+        if (imageHeight)
+        {
+            *imageHeight = height;
+        }
+    }
     return texture;
+}
+
+std::filesystem::path ApplicationAssetPath(std::string_view relativePath)
+{
+    const char* basePath = SDL_GetBasePath();
+    if (basePath)
+    {
+        const std::filesystem::path path = std::filesystem::path(basePath) / relativePath;
+        if (std::filesystem::is_regular_file(path))
+        {
+            return path;
+        }
+    }
+    return std::filesystem::path(DENDYFORGE_SOURCE_DIR) / relativePath;
+}
+
+struct InterfaceFonts
+{
+    ImFont* body = nullptr;
+    ImFont* display = nullptr;
+};
+
+InterfaceFonts LoadInterfaceFonts()
+{
+    const std::filesystem::path fontPath = ApplicationAssetPath("assets/fonts/Jura[wght].ttf");
+    const std::string fontPathString = fontPath.string();
+    ImGuiIO& io = ImGui::GetIO();
+    InterfaceFonts fonts;
+    fonts.body = io.Fonts->AddFontFromFileTTF(fontPathString.c_str(), 18.0f);
+    fonts.display = io.Fonts->AddFontFromFileTTF(fontPathString.c_str(), 31.0f);
+    if (fonts.body)
+    {
+        io.FontDefault = fonts.body;
+    }
+    if (!fonts.body || !fonts.display)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Could not load bundled Jura interface font; using Dear ImGui default.");
+    }
+    return fonts;
 }
 
 std::filesystem::path CoverConfigPath(const GameLibrary& library)
@@ -567,7 +623,8 @@ void RefreshLibrary(GameLibrary& library, SDL_Renderer* renderer)
         const std::filesystem::path coverPath = FindCover(library, game.romPath);
         if (!coverPath.empty())
         {
-            game.coverTexture = LoadCoverTexture(renderer, coverPath);
+            game.coverTexture = LoadCoverTexture(renderer, coverPath,
+                                                 &game.coverWidth, &game.coverHeight);
         }
         library.games.push_back(std::move(game));
     }
@@ -671,7 +728,8 @@ void SetupLibraryStyle()
 }
 
 LibraryUiAction DrawGameLibrary(GameLibrary& library,
-                                std::array<char, 128>& searchBuffer)
+                                std::array<char, 128>& searchBuffer,
+                                const InterfaceFonts& fonts)
 {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -691,7 +749,7 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
 
     const float contentWidth = windowSize.x - 72.0f;
     ImGui::SetCursorPos(ImVec2(36.0f, 30.0f));
-    ImGui::PushFont(nullptr, 1.65f);
+    ImGui::PushFont(fonts.display, 31.0f);
     ImGui::TextUnformatted("DENDYFORGE");
     ImGui::PopFont();
     ImGui::TextDisabled("Your cartridge library");
@@ -702,7 +760,7 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
     ImGui::InputTextWithHint("##search", "Search games...", searchBuffer.data(), searchBuffer.size());
 
     ImGui::SetCursorPos(ImVec2(36.0f, 111.0f));
-    ImGui::PushFont(nullptr, 1.35f);
+    ImGui::PushFont(fonts.display, 24.0f);
     ImGui::TextUnformatted("Ready to play");
     ImGui::PopFont();
     ImGui::SameLine();
@@ -735,7 +793,7 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
     {
         const ImVec2 available = ImGui::GetContentRegionAvail();
         ImGui::SetCursorPos(ImVec2((available.x - 350.0f) * 0.5f, available.y * 0.35f));
-        ImGui::PushFont(nullptr, 1.20f);
+        ImGui::PushFont(fonts.display, 21.0f);
         ImGui::TextUnformatted(search.empty() ? "Your library is waiting" : "No matching games");
         ImGui::PopFont();
         ImGui::SetCursorPosX((available.x - 490.0f) * 0.5f);
@@ -771,10 +829,24 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
                                         IM_COL32(18, 24, 38, 245), 13.0f);
             const ImVec2 coverTopLeft(tileTopLeft.x + 8.0f, tileTopLeft.y + 8.0f);
             const ImVec2 coverBottomRight(tileBottomRight.x - 8.0f, tileTopLeft.y + 194.0f);
+            gridDrawList->AddRectFilled(coverTopLeft, coverBottomRight,
+                                        IM_COL32(8, 12, 21, 255), 9.0f);
             if (library.games[index].coverTexture)
             {
+                const float availableWidth = coverBottomRight.x - coverTopLeft.x;
+                const float availableHeight = coverBottomRight.y - coverTopLeft.y;
+                const float scale = std::min(
+                    availableWidth / static_cast<float>(library.games[index].coverWidth),
+                    availableHeight / static_cast<float>(library.games[index].coverHeight));
+                const ImVec2 imageSize(library.games[index].coverWidth * scale,
+                                      library.games[index].coverHeight * scale);
+                const ImVec2 imageTopLeft(
+                    coverTopLeft.x + (availableWidth - imageSize.x) * 0.5f,
+                    coverTopLeft.y + (availableHeight - imageSize.y) * 0.5f);
                 gridDrawList->AddImage(ImTextureRef(library.games[index].coverTexture),
-                                       coverTopLeft, coverBottomRight);
+                                       imageTopLeft,
+                                       ImVec2(imageTopLeft.x + imageSize.x,
+                                              imageTopLeft.y + imageSize.y));
             }
             else
             {
@@ -917,7 +989,8 @@ SettingsUiAction DrawSettings(GameLibrary& library, const CoverServiceConfig& co
                               std::array<char, 128>& apiKeyBuffer,
                               std::string_view coverStatus, bool downloadInProgress,
                               bool& showCoverSettings,
-                              std::optional<ControlAction> capturing)
+                              std::optional<ControlAction> capturing,
+                              const InterfaceFonts& fonts)
 {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -936,7 +1009,7 @@ SettingsUiAction DrawSettings(GameLibrary& library, const CoverServiceConfig& co
     ImGui::SetCursorPos(ImVec2(36.0f, 28.0f));
     action.close = ImGui::Button("< Back to library");
     ImGui::SameLine();
-    ImGui::PushFont(nullptr, 1.40f);
+    ImGui::PushFont(fonts.display, 27.0f);
     ImGui::TextUnformatted("Settings");
     ImGui::PopFont();
 
@@ -957,7 +1030,7 @@ SettingsUiAction DrawSettings(GameLibrary& library, const CoverServiceConfig& co
     if (!showCoverSettings)
     {
         ImGui::SetCursorPos(ImVec2(28.0f, 24.0f));
-        ImGui::PushFont(nullptr, 1.25f);
+        ImGui::PushFont(fonts.display, 22.0f);
         ImGui::TextUnformatted("Keyboard mapping");
         ImGui::PopFont();
         ImGui::SetCursorPos(ImVec2(28.0f, 55.0f));
@@ -982,7 +1055,7 @@ SettingsUiAction DrawSettings(GameLibrary& library, const CoverServiceConfig& co
             missingCoverCount += game.coverTexture == nullptr;
         }
         ImGui::SetCursorPos(ImVec2(28.0f, 24.0f));
-        ImGui::PushFont(nullptr, 1.25f);
+        ImGui::PushFont(fonts.display, 22.0f);
         ImGui::TextUnformatted("Automatic covers");
         ImGui::PopFont();
         ImGui::SetCursorPos(ImVec2(28.0f, 57.0f));
@@ -1040,6 +1113,7 @@ int main(int argc, char* argv[])
     SDL_SetRenderVSync(renderer, 1);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    const InterfaceFonts interfaceFonts = LoadInterfaceFonts();
     SetupLibraryStyle();
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -1209,7 +1283,9 @@ int main(int argc, char* argv[])
                             if (game.romPath == result.romPath)
                             {
                                 SDL_DestroyTexture(game.coverTexture);
-                                game.coverTexture = LoadCoverTexture(renderer, result.cachePath);
+                                game.coverTexture = LoadCoverTexture(renderer, result.cachePath,
+                                                                     &game.coverWidth,
+                                                                     &game.coverHeight);
                                 break;
                             }
                         }
@@ -1232,11 +1308,11 @@ int main(int argc, char* argv[])
                 settingsAction = DrawSettings(
                     library, coverServiceConfig, apiKeyBuffer, coverStatus,
                     activeCoverDownload.valid() || !pendingCoverDownloads.empty(),
-                    showCoverSettings, capturingControl);
+                    showCoverSettings, capturingControl, interfaceFonts);
             }
             else
             {
-                libraryAction = DrawGameLibrary(library, searchBuffer);
+                libraryAction = DrawGameLibrary(library, searchBuffer, interfaceFonts);
             }
             ImGui::Render();
             SDL_SetRenderDrawColor(renderer, 10, 15, 27, 255);
