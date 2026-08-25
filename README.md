@@ -35,6 +35,12 @@ JPG, or JPEG with the same base filename next to the ROM, or put it under
 path on the command line still starts it directly; press `Esc` in a game to
 return to the library.
 
+For ROMs declaring battery-backed RAM in their iNES header, DendyForge loads
+and saves a `.sav` file next to the ROM. Saves are written when leaving a game
+or closing the app; the write replaces the old file atomically. This enables
+normal progress saving in games such as Kirby's Adventure and The Legend of
+Zelda.
+
 To fetch missing covers automatically, create a personal API key at
 [TheGamesDB](https://api.thegamesdb.net/key.php), open **Settings → Cover
 service**, paste it into the `TheGamesDB API key` field, click **Save

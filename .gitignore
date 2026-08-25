@@ -1,6 +1,8 @@
 # NES ROMs
 roms/
 *.nes
+*.sav
+*.sav.tmp
 *.o
 
 # Versioned CPU test fixtures.

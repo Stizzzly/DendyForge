@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 
 #include "bus/bus.hpp"
@@ -27,6 +28,9 @@ public:
     void StepInstruction();
     bool IsInstructionBoundary() const;
     std::optional<std::uint8_t> DebugPeekCpu(std::uint16_t address);
+    bool HasBatteryBackedPrgRam() const;
+    std::span<const std::uint8_t> BatteryBackedPrgRam() const;
+    bool RestoreBatteryBackedPrgRam(std::span<const std::uint8_t> data);
     std::uint8_t ReadCpuRamForDiagnostics(std::uint16_t address);
     std::uint8_t ReadCartridgeRamForDiagnostics(std::uint16_t address);
 

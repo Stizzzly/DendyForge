@@ -76,3 +76,28 @@ TEST_CASE("Cartridge provides 8 KiB PRG RAM when iNES declares none")
     REQUIRE(cartridge.CpuRead(0x7FFF, data));
     CHECK(data == 0x5A);
 }
+
+TEST_CASE("Battery-backed cartridge RAM can be restored only from a matching save")
+{
+    dendyforge::INesHeader header{};
+    header.prgRomBanks = 1;
+    header.prgRamSize = 1;
+    header.flags6 = dendyforge::FLAG_BATTERY;
+    dendyforge::Cartridge cartridge(header, std::vector<std::uint8_t>(16 * 1024), {});
+
+    REQUIRE(cartridge.HasBatteryBackedPrgRam());
+    CHECK(cartridge.BatteryBackedPrgRam().size() == 8 * 1024);
+    std::vector<std::uint8_t> save(cartridge.BatteryBackedPrgRam().size(), 0x5A);
+    REQUIRE(cartridge.RestoreBatteryBackedPrgRam(save));
+
+    std::uint8_t data = 0;
+    REQUIRE(cartridge.CpuRead(0x6000, data));
+    CHECK(data == 0x5A);
+    const std::vector<std::uint8_t> wrongSizeSave{0x00, 0x01};
+    CHECK_FALSE(cartridge.RestoreBatteryBackedPrgRam(wrongSizeSave));
+
+    header.flags6 = 0;
+    dendyforge::Cartridge volatileCartridge(header, std::vector<std::uint8_t>(16 * 1024), {});
+    CHECK_FALSE(volatileCartridge.HasBatteryBackedPrgRam());
+    CHECK_FALSE(volatileCartridge.RestoreBatteryBackedPrgRam(save));
+}

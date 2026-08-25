@@ -90,6 +90,13 @@ under `roms/library/covers/`. The ROM folder is ignored by Git. Press `Esc`
 while playing to return to the library. A blank/checkered window while testing
 a game commonly means the executable was launched without the ROM path.
 
+For a cartridge whose iNES header has the battery bit, the frontend uses the
+same base path with a `.sav` extension. It restores an exactly matching
+PRG-RAM image before gameplay and writes it atomically on `Esc`/shutdown.
+Keep filesystem persistence in the frontend; `Cartridge` only exposes a
+validated byte snapshot/restore contract. A mismatched existing save is left
+untouched and not overwritten during that session.
+
 The game library can also download missing NES box art from TheGamesDB. The
 user enters a personal API key in **Settings → Cover service** and the app
 saves it only in `roms/library/.dendyforge-covers.json`; this file also keeps

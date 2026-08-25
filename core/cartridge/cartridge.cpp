@@ -5,6 +5,7 @@
 #include "../mapper/mapper3.hpp"
 #include "../mapper/mapper4.hpp"
 
+#include <algorithm>
 #include <utility>
 #include <stdexcept>
 
@@ -96,6 +97,27 @@ const std::vector<std::uint8_t>& Cartridge::PRGRom() const
 const std::vector<std::uint8_t>& Cartridge::CHRRom() const
 {
     return m_chrRom;
+}
+
+bool Cartridge::HasBatteryBackedPrgRam() const
+{
+    return m_info.HasBattery();
+}
+
+std::span<const std::uint8_t> Cartridge::BatteryBackedPrgRam() const
+{
+    return HasBatteryBackedPrgRam() ? std::span<const std::uint8_t>(m_prgRam)
+                                    : std::span<const std::uint8_t>{};
+}
+
+bool Cartridge::RestoreBatteryBackedPrgRam(std::span<const std::uint8_t> data)
+{
+    if (!HasBatteryBackedPrgRam() || data.size() != m_prgRam.size())
+    {
+        return false;
+    }
+    std::copy(data.begin(), data.end(), m_prgRam.begin());
+    return true;
 }
 
 bool Cartridge::CpuRead(

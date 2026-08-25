@@ -1,5 +1,9 @@
 #include <SDL3/SDL.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_sdlrenderer3.h>
@@ -27,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "console/console.hpp"
@@ -214,6 +219,115 @@ std::filesystem::path ApplicationAssetPath(std::string_view relativePath)
         }
     }
     return std::filesystem::path(DENDYFORGE_SOURCE_DIR) / relativePath;
+}
+
+std::filesystem::path SavePathForRom(const std::filesystem::path& romPath)
+{
+    std::filesystem::path savePath = romPath;
+    savePath.replace_extension(".sav");
+    return savePath;
+}
+
+bool LoadBatterySave(dendyforge::Console& console, const std::filesystem::path& savePath)
+{
+    if (!console.HasBatteryBackedPrgRam())
+    {
+        return true;
+    }
+
+    std::error_code error;
+    if (!std::filesystem::exists(savePath, error))
+    {
+        if (error)
+        {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Cannot inspect save %s: %s",
+                        savePath.string().c_str(), error.message().c_str());
+        }
+        return !error;
+    }
+    const std::uintmax_t expectedSize = console.BatteryBackedPrgRam().size();
+    const std::uintmax_t actualSize = std::filesystem::file_size(savePath, error);
+    if (error || actualSize != expectedSize)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Ignoring save %s: expected %llu bytes, found %llu.",
+                    savePath.string().c_str(), static_cast<unsigned long long>(expectedSize),
+                    static_cast<unsigned long long>(actualSize));
+        return false;
+    }
+
+    std::vector<std::uint8_t> data(static_cast<std::size_t>(actualSize));
+    std::ifstream input(savePath, std::ios::binary);
+    input.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!input || !console.RestoreBatteryBackedPrgRam(data))
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Could not load save %s.",
+                    savePath.string().c_str());
+        return false;
+    }
+    SDL_Log("Loaded battery save: %s", savePath.string().c_str());
+    return true;
+}
+
+bool ReplaceFileAtomically(const std::filesystem::path& temporaryPath,
+                           const std::filesystem::path& destinationPath,
+                           std::error_code& error)
+{
+#ifdef _WIN32
+    if (MoveFileExW(temporaryPath.c_str(), destinationPath.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        return true;
+    }
+    error = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+    return false;
+#else
+    std::filesystem::rename(temporaryPath, destinationPath, error);
+    return !error;
+#endif
+}
+
+bool SaveBatterySave(const dendyforge::Console& console,
+                     const std::filesystem::path& savePath)
+{
+    if (!console.HasBatteryBackedPrgRam())
+    {
+        return true;
+    }
+    const std::span<const std::uint8_t> data = console.BatteryBackedPrgRam();
+    const std::filesystem::path temporaryPath = savePath.string() + ".tmp";
+    std::error_code error;
+    if (!savePath.parent_path().empty())
+    {
+        std::filesystem::create_directories(savePath.parent_path(), error);
+    }
+    if (error)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Cannot create save directory %s: %s",
+                    savePath.parent_path().string().c_str(), error.message().c_str());
+        return false;
+    }
+    {
+        std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
+        output.write(reinterpret_cast<const char*>(data.data()),
+                     static_cast<std::streamsize>(data.size()));
+        if (!output)
+        {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Could not write temporary save %s.",
+                        temporaryPath.string().c_str());
+            std::filesystem::remove(temporaryPath, error);
+            return false;
+        }
+    }
+    if (!ReplaceFileAtomically(temporaryPath, savePath, error))
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Could not replace save %s: %s",
+                    savePath.string().c_str(), error.message().c_str());
+        std::filesystem::remove(temporaryPath, error);
+        return false;
+    }
+    SDL_Log("Saved battery RAM: %s", savePath.string().c_str());
+    return true;
 }
 
 struct InterfaceFonts
@@ -1394,6 +1508,8 @@ int main(int argc, char* argv[])
     bool showCoverSettings = false;
     std::optional<ControlAction> capturingControl;
     std::unique_ptr<dendyforge::Console> console;
+    std::filesystem::path activeBatterySavePath;
+    bool batterySaveWritable = true;
     std::vector<float> pendingAudio;
     bool gameRunning = false;
     bool hasGameFrame = false;
@@ -1423,12 +1539,23 @@ int main(int argc, char* argv[])
             });
     };
 
+    const auto saveActiveBatteryRam = [&]()
+    {
+        if (console && batterySaveWritable && !activeBatterySavePath.empty())
+        {
+            SaveBatterySave(*console, activeBatterySavePath);
+        }
+    };
+
     auto returnToLibrary = [&]()
     {
+        saveActiveBatteryRam();
         gameRunning = false;
         hasGameFrame = false;
         debugger = {};
         console.reset();
+        activeBatterySavePath.clear();
+        batterySaveWritable = true;
         pendingAudio.clear();
         audioPlaybackStarted = false;
         if (audioStream)
@@ -1448,7 +1575,12 @@ int main(int argc, char* argv[])
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Could not load ROM: %s", romPath.string().c_str());
             return;
         }
+        const std::filesystem::path savePath = SavePathForRom(romPath);
+        const bool saveLoadedOrAbsent = LoadBatterySave(*newConsole, savePath);
         console = std::move(newConsole);
+        activeBatterySavePath = console->HasBatteryBackedPrgRam() ? savePath
+                                                                    : std::filesystem::path{};
+        batterySaveWritable = saveLoadedOrAbsent;
         pendingAudio.clear();
         audioPlaybackStarted = false;
         if (audioStream)
@@ -1836,6 +1968,7 @@ int main(int argc, char* argv[])
         SDL_Delay(1);
     }
 
+    saveActiveBatteryRam();
     console.reset();
     if (activeCoverDownload.valid())
     {

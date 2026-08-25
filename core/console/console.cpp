@@ -93,6 +93,22 @@ std::optional<std::uint8_t> Console::DebugPeekCpu(std::uint16_t address)
     return m_bus.DebugPeekCpu(address);
 }
 
+bool Console::HasBatteryBackedPrgRam() const
+{
+    return m_cartridge && m_cartridge->HasBatteryBackedPrgRam();
+}
+
+std::span<const std::uint8_t> Console::BatteryBackedPrgRam() const
+{
+    return m_cartridge ? m_cartridge->BatteryBackedPrgRam()
+                       : std::span<const std::uint8_t>{};
+}
+
+bool Console::RestoreBatteryBackedPrgRam(std::span<const std::uint8_t> data)
+{
+    return m_cartridge && m_cartridge->RestoreBatteryBackedPrgRam(data);
+}
+
 std::uint8_t Console::ReadCpuRamForDiagnostics(std::uint16_t address)
 {
     if (address > 0x1FFF)

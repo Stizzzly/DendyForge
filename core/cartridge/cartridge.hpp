@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #include "cartridge_info.hpp"
@@ -43,6 +44,12 @@ public:
     const std::vector<std::uint8_t>& PRGRom() const;
 
     const std::vector<std::uint8_t>& CHRRom() const;
+
+    bool HasBatteryBackedPrgRam() const;
+    std::span<const std::uint8_t> BatteryBackedPrgRam() const;
+    // Loads a complete, validated sidecar save. A mismatched save is rejected
+    // rather than silently shifting its bytes into a different board layout.
+    bool RestoreBatteryBackedPrgRam(std::span<const std::uint8_t> data);
 
 private:
     CartridgeInfo m_info;
