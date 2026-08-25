@@ -32,3 +32,17 @@ TEST_CASE("Console diagnostics exposes mirrored CPU RAM only")
     CHECK(console.ReadCpuRamForDiagnostics(0x0800) == 0);
     CHECK(console.ReadCpuRamForDiagnostics(0x2000) == 0);
 }
+
+TEST_CASE("Console debugger step completes reset and one CPU instruction")
+{
+    dendyforge::Console console;
+    REQUIRE(console.LoadRom(dendyforge::test::RomPath("cpu_test.nes").string()));
+
+    console.StepInstruction(); // reset sequence
+    CHECK(console.IsInstructionBoundary());
+    CHECK(console.Cpu().ProgramCounter() == 0x8000);
+
+    console.StepInstruction(); // SEI
+    CHECK(console.IsInstructionBoundary());
+    CHECK(console.Cpu().ProgramCounter() == 0x8001);
+}

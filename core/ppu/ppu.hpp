@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "ines/ines.hpp"
 
@@ -45,6 +46,9 @@ public:
 
     std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
+    // Side-effect-free PPU-register observation for the debugger. This is
+    // deliberately separate from CpuRead(), whose reads model real hardware.
+    std::optional<std::uint8_t> DebugPeekCpuRegister(std::uint16_t address) const;
 
     std::uint8_t PpuRead(std::uint16_t address);
     void PpuWrite(std::uint16_t address, std::uint8_t data);

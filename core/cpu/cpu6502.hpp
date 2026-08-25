@@ -31,6 +31,29 @@ public:
         N = 1 << 7  // Negative
     };
 
+    enum class AddressMode
+    {
+        Implied,
+        Immediate,
+        ZeroPage,
+        ZeroPageX,
+        ZeroPageY,
+        Relative,
+        Absolute,
+        AbsoluteX,
+        AbsoluteY,
+        Indirect,
+        IndexedIndirect,
+        IndirectIndexed,
+    };
+
+    struct OpcodeInfo
+    {
+        const char* mnemonic;
+        AddressMode addressMode;
+        std::uint8_t bytes;
+    };
+
     CPU6502();
     explicit CPU6502(Configuration configuration);
 
@@ -68,6 +91,7 @@ public:
     std::uint8_t X() const;
     std::uint8_t Y() const;
     bool IsJammed() const;
+    static OpcodeInfo DescribeOpcode(std::uint8_t opcode);
 private:
 
     struct Instruction

@@ -794,6 +794,20 @@ bool PPU::ConsumeFrameComplete()
     return frameComplete;
 }
 
+std::optional<std::uint8_t> PPU::DebugPeekCpuRegister(std::uint16_t address) const
+{
+    switch (address & 0x0007)
+    {
+    case 0x0000: return m_control;
+    case 0x0001: return m_mask;
+    case 0x0002: return m_status;
+    case 0x0003: return m_oamAddress;
+    case 0x0004: return m_oam[m_oamAddress];
+    case 0x0007: return m_dataBuffer;
+    default: return std::nullopt;
+    }
+}
+
 std::uint8_t PPU::CpuRead(std::uint16_t address)
 {
     std::uint8_t data = m_openBusLatch;

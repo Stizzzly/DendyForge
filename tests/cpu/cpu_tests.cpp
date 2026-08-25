@@ -54,6 +54,19 @@ TEST_CASE("CPU status flags can be set and cleared")
     CHECK(cpu.GetFlag(CPU6502::Flags::Z));
 }
 
+TEST_CASE("CPU exposes opcode metadata for a debugger disassembler")
+{
+    const auto immediate = CPU6502::DescribeOpcode(0xA9); // LDA #$nn
+    CHECK(std::string_view(immediate.mnemonic) == "LDA");
+    CHECK(immediate.addressMode == CPU6502::AddressMode::Immediate);
+    CHECK(immediate.bytes == 2);
+
+    const auto indirect = CPU6502::DescribeOpcode(0x6C); // JMP ($nnnn)
+    CHECK(std::string_view(indirect.mnemonic) == "JMP");
+    CHECK(indirect.addressMode == CPU6502::AddressMode::Indirect);
+    CHECK(indirect.bytes == 3);
+}
+
 TEST_CASE("CPU reset uses the reset vector from the iNES ROM")
 {
     const auto path = RomPath("cpu_test.nes");

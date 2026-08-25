@@ -142,6 +142,31 @@ void Bus::CpuWrite(
     }
 }
 
+std::optional<std::uint8_t> Bus::DebugPeekCpu(std::uint16_t address)
+{
+    if (address <= 0x1FFF)
+    {
+        return m_cpuRam[address & 0x07FF];
+    }
+    if (address <= 0x3FFF)
+    {
+        return m_ppu.DebugPeekCpuRegister(address);
+    }
+    // Reading APU/controller ports changes their observable state. The
+    // debugger intentionally reports these locations as unavailable instead.
+    if (address <= 0x401F)
+    {
+        return std::nullopt;
+    }
+
+    std::uint8_t data = 0;
+    if (m_cartridge && m_cartridge->CpuRead(address, data))
+    {
+        return data;
+    }
+    return std::nullopt;
+}
+
 void Bus::ClockPpu()
 {
     m_ppu.Clock();

@@ -182,14 +182,19 @@ license in `assets/fonts/Jura-OFL.txt`).
 
 ### Debugger
 
-* ⬜ CPU Registers
-* ⬜ Memory Viewer
-* ⬜ Disassembler
-* ⬜ Breakpoints
-* ⬜ Step Execution
+* ✅ CPU Registers (A/X/Y/SP/PC, opcode, cycles, flags)
+* ✅ Memory Viewer (side-effect-free CPU-bus observation)
+* ✅ Disassembler (all 256 opcode descriptions)
+* ✅ Breakpoints (CPU instruction addresses)
+* ✅ Step Execution (whole Console instruction step, including DMA/interrupt timing)
 * ⬜ PPU Viewer
 * ⬜ Pattern Table Viewer
 * ⬜ Nametable Viewer
+
+While a game is running, press `F1` to open the debugger. It pauses on the
+next instruction boundary; `F5` resumes and `F10` executes one instruction.
+The memory panel deliberately shows controller/APU I/O reads as `--` instead
+of invoking their side effects.
 
 ---
 

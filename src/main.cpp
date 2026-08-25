@@ -16,7 +16,9 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <charconv>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -125,6 +127,19 @@ struct SettingsUiAction
     bool resetControls = false;
     bool downloadMissingCovers = false;
     std::optional<ControlAction> selectControl;
+};
+
+struct DebuggerState
+{
+    bool visible = false;
+    bool paused = false;
+    bool pauseRequested = false;
+    bool stepRequested = false;
+    std::uint16_t memoryAddress = 0;
+    std::array<char, 8> memoryAddressText{{'0', '0', '0', '0', '\0'}};
+    std::array<char, 8> breakpointText{};
+    std::vector<std::uint16_t> breakpoints;
+    std::optional<std::uint16_t> ignoredBreakpoint;
 };
 
 using Json = nlohmann::json;
@@ -727,6 +742,246 @@ void SetupLibraryStyle()
     colours[ImGuiCol_Border] = ImVec4(0.22f, 0.29f, 0.42f, 0.7f);
 }
 
+bool ParseHexAddress(std::string_view text, std::uint16_t& address)
+{
+    unsigned int value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, 16);
+    if (error != std::errc{} || end != text.data() + text.size() || value > 0xFFFF)
+    {
+        return false;
+    }
+    address = static_cast<std::uint16_t>(value);
+    return true;
+}
+
+std::string FormatOperand(const dendyforge::CPU6502::OpcodeInfo& opcode,
+                          std::uint16_t address, std::uint8_t low, std::uint8_t high)
+{
+    char text[16]{};
+    const std::uint16_t word = static_cast<std::uint16_t>(low) |
+                               (static_cast<std::uint16_t>(high) << 8);
+    using AddressMode = dendyforge::CPU6502::AddressMode;
+    switch (opcode.addressMode)
+    {
+    case AddressMode::Immediate: std::snprintf(text, sizeof(text), "#$%02X", low); break;
+    case AddressMode::ZeroPage: std::snprintf(text, sizeof(text), "$%02X", low); break;
+    case AddressMode::ZeroPageX: std::snprintf(text, sizeof(text), "$%02X,X", low); break;
+    case AddressMode::ZeroPageY: std::snprintf(text, sizeof(text), "$%02X,Y", low); break;
+    case AddressMode::Relative:
+        std::snprintf(text, sizeof(text), "$%04X", static_cast<std::uint16_t>(
+            address + 2 + static_cast<std::int8_t>(low)));
+        break;
+    case AddressMode::Absolute: std::snprintf(text, sizeof(text), "$%04X", word); break;
+    case AddressMode::AbsoluteX: std::snprintf(text, sizeof(text), "$%04X,X", word); break;
+    case AddressMode::AbsoluteY: std::snprintf(text, sizeof(text), "$%04X,Y", word); break;
+    case AddressMode::Indirect: std::snprintf(text, sizeof(text), "($%04X)", word); break;
+    case AddressMode::IndexedIndirect: std::snprintf(text, sizeof(text), "($%02X,X)", low); break;
+    case AddressMode::IndirectIndexed: std::snprintf(text, sizeof(text), "($%02X),Y", low); break;
+    case AddressMode::Implied: break;
+    }
+    return text;
+}
+
+void DrawCpuRegisters(const dendyforge::CPU6502& cpu)
+{
+    ImGui::Text("A  %02X", cpu.Accumulator());
+    ImGui::SameLine(104.0f);
+    ImGui::Text("X  %02X", cpu.X());
+    ImGui::SameLine(196.0f);
+    ImGui::Text("Y  %02X", cpu.Y());
+    ImGui::SameLine(288.0f);
+    ImGui::Text("SP  %02X", cpu.StackPointer());
+    ImGui::Text("PC  %04X", cpu.ProgramCounter());
+    ImGui::SameLine(150.0f);
+    ImGui::Text("OP  %02X  %s", cpu.Opcode(), cpu.CurrentInstruction());
+    ImGui::SameLine(355.0f);
+    ImGui::Text("Cycles  %u", cpu.Cycles());
+
+    ImGui::TextUnformatted("Flags");
+    constexpr std::array flagNames{"N", "V", "U", "B", "D", "I", "Z", "C"};
+    const std::uint8_t status = cpu.Status();
+    for (std::size_t index = 0; index < flagNames.size(); ++index)
+    {
+        ImGui::SameLine();
+        const bool active = (status & (0x80 >> index)) != 0;
+        ImGui::TextColored(active ? ImVec4(0.36f, 0.90f, 0.58f, 1.0f)
+                                  : ImVec4(0.42f, 0.47f, 0.57f, 1.0f),
+                           "%s", flagNames[index]);
+    }
+}
+
+void DrawDisassembly(dendyforge::Console& console)
+{
+    const std::uint16_t programCounter = console.Cpu().ProgramCounter();
+    std::uint16_t address = static_cast<std::uint16_t>(programCounter - 16);
+    for (int line = 0; line < 15; ++line)
+    {
+        const auto byteAt = [&console](std::uint16_t value) {
+            return console.DebugPeekCpu(value).value_or(0);
+        };
+        const std::uint8_t instructionByte = byteAt(address);
+        const auto opcode = dendyforge::CPU6502::DescribeOpcode(instructionByte);
+        const std::uint8_t low = byteAt(static_cast<std::uint16_t>(address + 1));
+        const std::uint8_t high = byteAt(static_cast<std::uint16_t>(address + 2));
+        const std::string operand = FormatOperand(opcode, address, low, high);
+        const bool current = address == programCounter;
+        if (current)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.77f, 0.31f, 1.0f));
+        }
+        ImGui::Text("%04X  %02X %02X %02X  %-3s %s", address, instructionByte, low, high,
+                    opcode.mnemonic, operand.c_str());
+        if (current)
+        {
+            ImGui::PopStyleColor();
+        }
+        address = static_cast<std::uint16_t>(address + opcode.bytes);
+    }
+}
+
+void DrawMemoryView(dendyforge::Console& console, DebuggerState& debugger)
+{
+    if (ImGui::InputText("Go to address", debugger.memoryAddressText.data(),
+                         debugger.memoryAddressText.size(), ImGuiInputTextFlags_CharsHexadecimal |
+                         ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        ParseHexAddress(debugger.memoryAddressText.data(), debugger.memoryAddress);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("Unavailable I/O reads are --");
+    ImGui::BeginChild("Memory bytes", ImVec2(0.0f, 235.0f), ImGuiChildFlags_Borders);
+    for (int row = 0; row < 16; ++row)
+    {
+        const std::uint16_t rowAddress = static_cast<std::uint16_t>(
+            debugger.memoryAddress + row * 16);
+        ImGui::Text("%04X", rowAddress);
+        std::string ascii;
+        for (int column = 0; column < 16; ++column)
+        {
+            const auto value = console.DebugPeekCpu(static_cast<std::uint16_t>(rowAddress + column));
+            ImGui::SameLine(62.0f + column * 25.0f);
+            if (value)
+            {
+                ImGui::Text("%02X", *value);
+                ascii.push_back(*value >= 32 && *value <= 126 ? static_cast<char>(*value) : '.');
+            }
+            else
+            {
+                ImGui::TextDisabled("--");
+                ascii.push_back('.');
+            }
+        }
+        ImGui::SameLine(478.0f);
+        ImGui::TextDisabled("%s", ascii.c_str());
+    }
+    ImGui::EndChild();
+}
+
+void DrawBreakpoints(DebuggerState& debugger)
+{
+    if (ImGui::InputText("Address", debugger.breakpointText.data(), debugger.breakpointText.size(),
+                         ImGuiInputTextFlags_CharsHexadecimal |
+                         ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        std::uint16_t address = 0;
+        if (ParseHexAddress(debugger.breakpointText.data(), address) &&
+            std::find(debugger.breakpoints.begin(), debugger.breakpoints.end(), address) ==
+                debugger.breakpoints.end())
+        {
+            debugger.breakpoints.push_back(address);
+        }
+        debugger.breakpointText.fill('\0');
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Add breakpoint"))
+    {
+        std::uint16_t address = 0;
+        if (ParseHexAddress(debugger.breakpointText.data(), address) &&
+            std::find(debugger.breakpoints.begin(), debugger.breakpoints.end(), address) ==
+                debugger.breakpoints.end())
+        {
+            debugger.breakpoints.push_back(address);
+            debugger.breakpointText.fill('\0');
+        }
+    }
+    for (std::size_t index = 0; index < debugger.breakpoints.size(); ++index)
+    {
+        ImGui::PushID(static_cast<int>(index));
+        ImGui::Text("$%04X", debugger.breakpoints[index]);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove"))
+        {
+            debugger.breakpoints.erase(debugger.breakpoints.begin() + index);
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopID();
+    }
+}
+
+void DrawDebugger(dendyforge::Console& console, DebuggerState& debugger,
+                  const InterfaceFonts& fonts)
+{
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 18.0f, viewport->WorkPos.y + 18.0f),
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(std::min(620.0f, viewport->WorkSize.x - 36.0f),
+                                    viewport->WorkSize.y - 36.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.96f);
+    bool visible = debugger.visible;
+    ImGui::Begin("DendyForge Debugger", &visible,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+    if (!visible)
+    {
+        debugger.visible = false;
+        debugger.paused = false;
+        debugger.pauseRequested = false;
+        ImGui::End();
+        return;
+    }
+
+    ImGui::PushFont(fonts.display, 22.0f);
+    ImGui::TextUnformatted("CPU debugger");
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextColored(debugger.paused ? ImVec4(1.0f, 0.71f, 0.25f, 1.0f)
+                                       : ImVec4(0.32f, 0.88f, 0.56f, 1.0f),
+                       "%s", debugger.paused ? "PAUSED" : "RUNNING");
+    if (ImGui::Button(debugger.paused ? "Resume (F5)" : "Pause (F5)"))
+    {
+        if (debugger.paused)
+        {
+            debugger.ignoredBreakpoint = console.Cpu().ProgramCounter();
+            debugger.paused = false;
+        }
+        else
+        {
+            debugger.pauseRequested = true;
+        }
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!debugger.paused);
+    if (ImGui::Button("Step instruction (F10)"))
+    {
+        debugger.stepRequested = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextDisabled("F1 closes");
+
+    ImGui::SeparatorText("Registers");
+    DrawCpuRegisters(console.Cpu());
+    ImGui::SeparatorText("Disassembly");
+    ImGui::BeginChild("Disassembly", ImVec2(0.0f, 272.0f), ImGuiChildFlags_Borders);
+    DrawDisassembly(console);
+    ImGui::EndChild();
+    ImGui::SeparatorText("Memory");
+    DrawMemoryView(console, debugger);
+    ImGui::SeparatorText("Breakpoints");
+    DrawBreakpoints(debugger);
+    ImGui::End();
+}
+
 LibraryUiAction DrawGameLibrary(GameLibrary& library,
                                 std::array<char, 128>& searchBuffer,
                                 const InterfaceFonts& fonts)
@@ -1141,7 +1396,9 @@ int main(int argc, char* argv[])
     std::unique_ptr<dendyforge::Console> console;
     std::vector<float> pendingAudio;
     bool gameRunning = false;
+    bool hasGameFrame = false;
     bool zapperCrosshair = false;
+    DebuggerState debugger;
     std::uint64_t previousTicks = SDL_GetTicksNS();
     double pendingCpuCycles = 0.0;
 
@@ -1169,6 +1426,8 @@ int main(int argc, char* argv[])
     auto returnToLibrary = [&]()
     {
         gameRunning = false;
+        hasGameFrame = false;
+        debugger = {};
         console.reset();
         pendingAudio.clear();
         audioPlaybackStarted = false;
@@ -1203,6 +1462,8 @@ int main(int argc, char* argv[])
         SDL_SetWindowTitle(window, windowTitle.c_str());
         previousTicks = SDL_GetTicksNS();
         pendingCpuCycles = 0.0;
+        hasGameFrame = false;
+        debugger = {};
         gameRunning = true;
     };
 
@@ -1238,6 +1499,37 @@ int main(int argc, char* argv[])
             {
                 returnToLibrary();
             }
+            else if (gameRunning && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F1)
+            {
+                debugger.visible = !debugger.visible;
+                if (debugger.visible)
+                {
+                    debugger.pauseRequested = true;
+                }
+                else
+                {
+                    debugger.paused = false;
+                    debugger.pauseRequested = false;
+                }
+            }
+            else if (gameRunning && debugger.visible && event.type == SDL_EVENT_KEY_DOWN &&
+                     event.key.key == SDLK_F5)
+            {
+                if (debugger.paused)
+                {
+                    debugger.ignoredBreakpoint = console->Cpu().ProgramCounter();
+                    debugger.paused = false;
+                }
+                else
+                {
+                    debugger.pauseRequested = true;
+                }
+            }
+            else if (gameRunning && debugger.visible && event.type == SDL_EVENT_KEY_DOWN &&
+                     event.key.key == SDLK_F10 && debugger.paused)
+            {
+                debugger.stepRequested = true;
+            }
             else if (!gameRunning && settingsOpen && event.type == SDL_EVENT_KEY_DOWN &&
                      capturingControl)
             {
@@ -1260,7 +1552,8 @@ int main(int argc, char* argv[])
                 settingsOpen = false;
             }
             else if (gameRunning && console &&
-                     (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP))
+                     (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
+                     !(debugger.visible && ImGui::GetIO().WantCaptureKeyboard))
             {
                 SetControllerButton(*console, coverServiceConfig.controller, event.key.key,
                                     event.type == SDL_EVENT_KEY_DOWN);
@@ -1393,43 +1686,108 @@ int main(int argc, char* argv[])
         }
         console->SecondaryZapper().SetTrigger((mouseButtons & SDL_BUTTON_LMASK) != 0);
 
-        const std::uint64_t currentTicks = SDL_GetTicksNS();
-        const std::uint64_t elapsedNanoseconds = std::min(
-            currentTicks - previousTicks, MaximumElapsedNanoseconds);
-        previousTicks = currentTicks;
-        pendingCpuCycles += static_cast<double>(elapsedNanoseconds) * CpuClockHz / NanosecondsPerSecond;
         bool frameComplete = false;
-        while (pendingCpuCycles >= 1.0 && !frameComplete)
+        const auto consumeFrameComplete = [&]()
         {
-            console->Clock();
-            pendingCpuCycles -= 1.0;
-            frameComplete = console->VideoProcessor().ConsumeFrameComplete();
+            frameComplete = console->VideoProcessor().ConsumeFrameComplete() || frameComplete;
+        };
+        const auto breakpointReached = [&]()
+        {
+            const std::uint16_t programCounter = console->Cpu().ProgramCounter();
+            if (debugger.ignoredBreakpoint && *debugger.ignoredBreakpoint != programCounter)
+            {
+                debugger.ignoredBreakpoint.reset();
+            }
+            return console->IsInstructionBoundary() && !debugger.ignoredBreakpoint &&
+                std::find(debugger.breakpoints.begin(), debugger.breakpoints.end(), programCounter) !=
+                    debugger.breakpoints.end();
+        };
+
+        if (debugger.pauseRequested)
+        {
+            while (!console->IsInstructionBoundary())
+            {
+                console->Clock();
+                consumeFrameComplete();
+            }
+            debugger.pauseRequested = false;
+            debugger.paused = true;
+        }
+
+        if (debugger.paused && debugger.stepRequested)
+        {
+            console->StepInstruction();
+            consumeFrameComplete();
+            debugger.stepRequested = false;
+        }
+
+        const std::uint64_t currentTicks = SDL_GetTicksNS();
+        if (!debugger.paused)
+        {
+            const std::uint64_t elapsedNanoseconds = std::min(
+                currentTicks - previousTicks, MaximumElapsedNanoseconds);
+            previousTicks = currentTicks;
+            pendingCpuCycles += static_cast<double>(elapsedNanoseconds) * CpuClockHz /
+                NanosecondsPerSecond;
+            while (pendingCpuCycles >= 1.0 && !frameComplete)
+            {
+                if (breakpointReached())
+                {
+                    debugger.paused = true;
+                    debugger.visible = true;
+                    break;
+                }
+                console->Clock();
+                pendingCpuCycles -= 1.0;
+                consumeFrameComplete();
+                if (breakpointReached())
+                {
+                    debugger.paused = true;
+                    debugger.visible = true;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            previousTicks = currentTicks;
+            pendingCpuCycles = 0.0;
         }
 
         if (audioStream)
         {
-            const auto samples = console->AudioProcessor().TakeSamples();
-            pendingAudio.insert(pendingAudio.end(), samples.begin(), samples.end());
-            const int prebufferBytes = dendyforge::APU::SampleRate *
-                AudioPrebufferDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
-            const int maximumQueuedBytes = dendyforge::APU::SampleRate *
-                AudioMaximumQueueDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
-            const int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
-            if (queuedBytes >= 0)
+            if (debugger.paused)
             {
-                const int pendingBytes = static_cast<int>(pendingAudio.size() * sizeof(float));
-                const int bytesToQueue = std::min(pendingBytes,
-                    std::max(0, maximumQueuedBytes - queuedBytes));
-                if (bytesToQueue != 0 &&
-                    SDL_PutAudioStreamData(audioStream, pendingAudio.data(), bytesToQueue))
+                pendingAudio.clear();
+                audioPlaybackStarted = false;
+                SDL_PauseAudioStreamDevice(audioStream);
+                SDL_ClearAudioStream(audioStream);
+            }
+            else
+            {
+                const auto samples = console->AudioProcessor().TakeSamples();
+                pendingAudio.insert(pendingAudio.end(), samples.begin(), samples.end());
+                const int prebufferBytes = dendyforge::APU::SampleRate *
+                    AudioPrebufferDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
+                const int maximumQueuedBytes = dendyforge::APU::SampleRate *
+                    AudioMaximumQueueDurationMilliseconds / 1'000 * static_cast<int>(sizeof(float));
+                const int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
+                if (queuedBytes >= 0)
                 {
-                    pendingAudio.erase(pendingAudio.begin(), pendingAudio.begin() +
-                        bytesToQueue / static_cast<int>(sizeof(float)));
-                }
-                if (!audioPlaybackStarted && queuedBytes + bytesToQueue >= prebufferBytes &&
-                    SDL_ResumeAudioStreamDevice(audioStream))
-                {
-                    audioPlaybackStarted = true;
+                    const int pendingBytes = static_cast<int>(pendingAudio.size() * sizeof(float));
+                    const int bytesToQueue = std::min(pendingBytes,
+                        std::max(0, maximumQueuedBytes - queuedBytes));
+                    if (bytesToQueue != 0 &&
+                        SDL_PutAudioStreamData(audioStream, pendingAudio.data(), bytesToQueue))
+                    {
+                        pendingAudio.erase(pendingAudio.begin(), pendingAudio.begin() +
+                            bytesToQueue / static_cast<int>(sizeof(float)));
+                    }
+                    if (!audioPlaybackStarted && queuedBytes + bytesToQueue >= prebufferBytes &&
+                        SDL_ResumeAudioStreamDevice(audioStream))
+                    {
+                        audioPlaybackStarted = true;
+                    }
                 }
             }
         }
@@ -1439,18 +1797,41 @@ int main(int argc, char* argv[])
             const auto& frameBuffer = console->VideoProcessor().FrameBuffer();
             SDL_UpdateTexture(gameTexture, nullptr, frameBuffer.data(),
                               ScreenWidth * static_cast<int>(sizeof(std::uint32_t)));
-            SDL_RenderClear(renderer);
+            hasGameFrame = true;
+        }
+        if (debugger.visible)
+        {
+            ImGui_ImplSDLRenderer3_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+            DrawDebugger(*console, debugger, interfaceFonts);
+            ImGui::Render();
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        if (hasGameFrame)
+        {
             SDL_RenderTexture(renderer, gameTexture, nullptr, nullptr);
-            if (zapperCrosshair && logicalX >= 0.0f && logicalX < ScreenWidth &&
-                logicalY >= 0.0f && logicalY < ScreenHeight)
-            {
-                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-                SDL_RenderLine(renderer, logicalX - 6.0f, logicalY, logicalX - 2.0f, logicalY);
-                SDL_RenderLine(renderer, logicalX + 2.0f, logicalY, logicalX + 6.0f, logicalY);
-                SDL_RenderLine(renderer, logicalX, logicalY - 6.0f, logicalX, logicalY - 2.0f);
-                SDL_RenderLine(renderer, logicalX, logicalY + 2.0f, logicalX, logicalY + 6.0f);
-            }
-            SDL_RenderPresent(renderer);
+        }
+        if (zapperCrosshair && logicalX >= 0.0f && logicalX < ScreenWidth &&
+            logicalY >= 0.0f && logicalY < ScreenHeight)
+        {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+            SDL_RenderLine(renderer, logicalX - 6.0f, logicalY, logicalX - 2.0f, logicalY);
+            SDL_RenderLine(renderer, logicalX + 2.0f, logicalY, logicalX + 6.0f, logicalY);
+            SDL_RenderLine(renderer, logicalX, logicalY - 6.0f, logicalX, logicalY - 2.0f);
+            SDL_RenderLine(renderer, logicalX, logicalY + 2.0f, logicalX, logicalY + 6.0f);
+        }
+        if (debugger.visible)
+        {
+            SDL_SetRenderLogicalPresentation(renderer, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        }
+        SDL_RenderPresent(renderer);
+        if (debugger.visible)
+        {
+            SDL_SetRenderLogicalPresentation(renderer, ScreenWidth, ScreenHeight,
+                                             SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
         }
         SDL_Delay(1);
     }

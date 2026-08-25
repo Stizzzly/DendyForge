@@ -69,6 +69,30 @@ void Console::Clock()
     m_cpuCycleIsOdd = !m_cpuCycleIsOdd;
 }
 
+void Console::StepInstruction()
+{
+    bool instructionStarted = false;
+    while (!m_cpu.IsJammed())
+    {
+        Clock();
+        instructionStarted = instructionStarted || m_cpu.Cycles() != 0;
+        if (instructionStarted && m_cpu.Cycles() == 0)
+        {
+            return;
+        }
+    }
+}
+
+bool Console::IsInstructionBoundary() const
+{
+    return m_cpu.Cycles() == 0;
+}
+
+std::optional<std::uint8_t> Console::DebugPeekCpu(std::uint16_t address)
+{
+    return m_bus.DebugPeekCpu(address);
+}
+
 std::uint8_t Console::ReadCpuRamForDiagnostics(std::uint16_t address)
 {
     if (address > 0x1FFF)

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "bus/bus.hpp"
@@ -21,6 +22,11 @@ public:
     bool LoadRom(const std::string& path);
     void Reset();
     void Clock();
+    // Advances PPU/APU/DMA together until the next CPU instruction boundary.
+    // A pending DMA or interrupt sequence is included in this operation.
+    void StepInstruction();
+    bool IsInstructionBoundary() const;
+    std::optional<std::uint8_t> DebugPeekCpu(std::uint16_t address);
     std::uint8_t ReadCpuRamForDiagnostics(std::uint16_t address);
     std::uint8_t ReadCartridgeRamForDiagnostics(std::uint16_t address);
 

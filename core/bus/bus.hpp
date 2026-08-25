@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 
 #include "../cpu/cpu_bus.hpp"
 #include "../apu/apu.hpp"
@@ -23,6 +24,9 @@ public:
 
     std::uint8_t CpuRead(std::uint16_t address) override;
     void CpuWrite(std::uint16_t address, std::uint8_t data) override;
+    // Debug-only observation that must not trigger CPU-visible side effects
+    // such as clearing PPU status or shifting controller input.
+    std::optional<std::uint8_t> DebugPeekCpu(std::uint16_t address);
 
     void ClockPpu();
     bool PpuNmiLine() const;

@@ -23,6 +23,19 @@ TEST_CASE("PPU register range is mirrored through the CPU bus")
     CHECK(bus.VideoProcessor().PpuRead(0x2000) == 0x42);
 }
 
+TEST_CASE("Debugger register peek observes PPU state without a CPU read")
+{
+    dendyforge::Bus bus;
+    bus.CpuWrite(0x2000, 0x83);
+    bus.CpuWrite(0x2003, 0x12);
+    bus.CpuWrite(0x2004, 0xAB);
+    bus.CpuWrite(0x2003, 0x12);
+
+    CHECK(bus.DebugPeekCpu(0x2000) == 0x83);
+    CHECK(bus.DebugPeekCpu(0x2004) == 0xAB);
+    CHECK_FALSE(bus.DebugPeekCpu(0x4016).has_value());
+}
+
 TEST_CASE("PPU data port buffers nametable reads and increments its address")
 {
     dendyforge::Bus bus;

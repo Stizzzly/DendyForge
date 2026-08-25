@@ -2481,6 +2481,57 @@ std::uint8_t CPU6502::Cycles() const
     return m_cycles;
 }
 
+CPU6502::OpcodeInfo CPU6502::DescribeOpcode(std::uint8_t opcode)
+{
+    const Instruction& instruction = GetInstructionConfig(opcode);
+    const auto addressMode = instruction.addressMode;
+    if (addressMode == &CPU6502::IMM)
+    {
+        return {instruction.name, AddressMode::Immediate, 2};
+    }
+    if (addressMode == &CPU6502::ZP0)
+    {
+        return {instruction.name, AddressMode::ZeroPage, 2};
+    }
+    if (addressMode == &CPU6502::ZPX)
+    {
+        return {instruction.name, AddressMode::ZeroPageX, 2};
+    }
+    if (addressMode == &CPU6502::ZPY)
+    {
+        return {instruction.name, AddressMode::ZeroPageY, 2};
+    }
+    if (addressMode == &CPU6502::REL)
+    {
+        return {instruction.name, AddressMode::Relative, 2};
+    }
+    if (addressMode == &CPU6502::ABS)
+    {
+        return {instruction.name, AddressMode::Absolute, 3};
+    }
+    if (addressMode == &CPU6502::ABX)
+    {
+        return {instruction.name, AddressMode::AbsoluteX, 3};
+    }
+    if (addressMode == &CPU6502::ABY)
+    {
+        return {instruction.name, AddressMode::AbsoluteY, 3};
+    }
+    if (addressMode == &CPU6502::IND)
+    {
+        return {instruction.name, AddressMode::Indirect, 3};
+    }
+    if (addressMode == &CPU6502::IZX)
+    {
+        return {instruction.name, AddressMode::IndexedIndirect, 2};
+    }
+    if (addressMode == &CPU6502::IZY)
+    {
+        return {instruction.name, AddressMode::IndirectIndexed, 2};
+    }
+    return {instruction.name, AddressMode::Implied, 1};
+}
+
 std::uint8_t CPU6502::FetchData()
 {
     // Sequenced instructions deliver their operand through the addressing

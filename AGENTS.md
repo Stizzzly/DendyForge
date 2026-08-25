@@ -38,7 +38,7 @@ core/
   ines/         iNES header types and reader
   cartridge/    cartridge data plus mapper dispatch
   mapper/       mapper abstraction and Mappers 0, 1, 2
-src/main.cpp    SDL3 + Dear ImGui game library/settings, event loop, texture upload and configurable keyboard mapping
+src/main.cpp    SDL3 + Dear ImGui library/settings/debugger overlay, event loop, texture upload and configurable keyboard mapping
 assets/fonts/   bundled Jura UI typeface and its SIL Open Font License
 tests/          doctest tests and versioned CPU test ROM fixtures
 roms/           user-local game ROMs; ignored by Git
@@ -218,6 +218,14 @@ the tile's cover area rather than stretching or cropping it. `assets/fonts/`
 contains the bundled Jura UI font and its license. CMake copies both the font
 and license next to `DendyForgeApp.exe` under `assets/fonts/`; load assets
 relative to `SDL_GetBasePath()` so Release builds remain portable.
+
+The first debugger layer lives in `src/main.cpp`: `F1` pauses at the next CPU
+instruction boundary and opens its overlay, `F5` resumes, and `F10` advances a
+whole console instruction. `CPU6502::DescribeOpcode()` is the shared source of
+all 256 disassembler entries. `Console::DebugPeekCpu()` routes through
+`Bus::DebugPeekCpu()` and must remain side-effect free: do not replace it with
+normal CPU reads, because PPU status/data and controller/APU ports mutate on
+real reads. Controller/APU I/O therefore deliberately displays as unavailable.
 
 The Zapper light gun is `core/zapper/` on controller port 2: reading `$4017`
 returns the light sensor in bit 3 (0 = light) and the trigger in bit 4
@@ -405,9 +413,10 @@ Dendy-specific behavior to `CPU6502` to work around PPU issues.
 
 `README.md` is both the roadmap and the project-facing status. It currently
 marks SDL3 window, framebuffer renderer, keyboard input, controller port,
-input latching, and Battle City as complete. Game Loop, most PPU areas, APU,
-additional mappers, debugger, Libretro, and Android remain unfinished. Update
-checkboxes only after the corresponding capability is implemented and verified.
+ input latching, and Battle City as complete. The CPU debugger, memory viewer,
+ disassembler, breakpoints and whole-instruction stepping are complete; PPU
+ debugger views, Game Loop, Libretro and Android remain unfinished. Update
+ checkboxes only after the corresponding capability is implemented and verified.
 
 ## Operational appendix — current verified handoff (2026-08-22)
 
