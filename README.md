@@ -36,9 +36,10 @@ path on the command line still starts it directly; press `Esc` in a game to
 return to the library.
 
 To fetch missing covers automatically, create a personal API key at
-[TheGamesDB](https://api.thegamesdb.net/key.php), paste it into the library's
-`TheGamesDB API key` field, click **Save key**, then **Download covers**. The
-key and cached artwork stay only under `roms/library/`, which Git ignores.
+[TheGamesDB](https://api.thegamesdb.net/key.php), open **Settings → Cover
+service**, paste it into the `TheGamesDB API key` field, click **Save
+settings**, then **Download missing covers**. The key and cached artwork stay
+only under `roms/library/`, which Git ignores.
 
 ## Roadmap
 
@@ -148,8 +149,10 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ Input Latching
 * ✅ Zapper (mouse aim, left button trigger, port 2 `$4017`; crosshair shown with `--zapper`)
 
-Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
-`Enter` — Start, `K` — A, `L` — B.
+Controller 1 defaults to `W/A/S/D` — D-pad, `Backspace` — Select, `Enter` —
+Start, `K` — A, `L` — B. Change any mapping in **Settings → Controls**: click
+the corresponding part of the drawn Dendy controller, press a keyboard key,
+then click **Save settings**.
 
 ### APU
 
@@ -169,7 +172,8 @@ Controller 1 keyboard mapping: `W/A/S/D` — D-pad, `Backspace` — Select,
 * ✅ Frame Buffer Renderer
 * ✅ Audio Output
 * ✅ Keyboard Input
-* ✅ Dear ImGui game library (searchable ROM tiles and automatic TheGamesDB cover cache)
+* ✅ Dear ImGui game library (searchable ROM tiles, automatic TheGamesDB cover cache,
+  settings, and visual configurable controller mapping)
 * 🟡 Game Loop
 
 ### Debugger

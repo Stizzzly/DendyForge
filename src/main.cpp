@@ -69,9 +69,34 @@ struct GameLibrary
     }
 };
 
+enum class ControlAction
+{
+    Up,
+    Down,
+    Left,
+    Right,
+    Select,
+    Start,
+    A,
+    B,
+};
+
+struct ControllerBindings
+{
+    SDL_Keycode up = SDLK_W;
+    SDL_Keycode down = SDLK_S;
+    SDL_Keycode left = SDLK_A;
+    SDL_Keycode right = SDLK_D;
+    SDL_Keycode select = SDLK_BACKSPACE;
+    SDL_Keycode start = SDLK_RETURN;
+    SDL_Keycode a = SDLK_K;
+    SDL_Keycode b = SDLK_L;
+};
+
 struct CoverServiceConfig
 {
     std::string theGamesDbApiKey;
+    ControllerBindings controller;
 };
 
 struct CoverDownloadResult
@@ -86,8 +111,16 @@ struct LibraryUiAction
 {
     std::optional<std::size_t> selectedGame;
     bool refresh = false;
-    bool saveApiKey = false;
+    bool openSettings = false;
+};
+
+struct SettingsUiAction
+{
+    bool close = false;
+    bool save = false;
+    bool resetControls = false;
     bool downloadMissingCovers = false;
+    std::optional<ControlAction> selectControl;
 };
 
 using Json = nlohmann::json;
@@ -155,6 +188,94 @@ std::filesystem::path CachedCoverPath(const GameLibrary& library,
         (std::to_string(hash) + ".jpg");
 }
 
+const char* ControlName(ControlAction action)
+{
+    switch (action)
+    {
+    case ControlAction::Up: return "Up";
+    case ControlAction::Down: return "Down";
+    case ControlAction::Left: return "Left";
+    case ControlAction::Right: return "Right";
+    case ControlAction::Select: return "Select";
+    case ControlAction::Start: return "Start";
+    case ControlAction::A: return "A";
+    case ControlAction::B: return "B";
+    }
+    return "Unknown";
+}
+
+SDL_Keycode& BindingFor(ControllerBindings& bindings, ControlAction action)
+{
+    switch (action)
+    {
+    case ControlAction::Up: return bindings.up;
+    case ControlAction::Down: return bindings.down;
+    case ControlAction::Left: return bindings.left;
+    case ControlAction::Right: return bindings.right;
+    case ControlAction::Select: return bindings.select;
+    case ControlAction::Start: return bindings.start;
+    case ControlAction::A: return bindings.a;
+    case ControlAction::B: return bindings.b;
+    }
+    return bindings.a;
+}
+
+SDL_Keycode BindingFor(const ControllerBindings& bindings, ControlAction action)
+{
+    switch (action)
+    {
+    case ControlAction::Up: return bindings.up;
+    case ControlAction::Down: return bindings.down;
+    case ControlAction::Left: return bindings.left;
+    case ControlAction::Right: return bindings.right;
+    case ControlAction::Select: return bindings.select;
+    case ControlAction::Start: return bindings.start;
+    case ControlAction::A: return bindings.a;
+    case ControlAction::B: return bindings.b;
+    }
+    return bindings.a;
+}
+
+std::string BindingName(SDL_Keycode key)
+{
+    const char* name = SDL_GetKeyName(key);
+    return name && *name ? name : "Unassigned";
+}
+
+ControllerBindings ReadBindings(const Json& config)
+{
+    ControllerBindings bindings;
+    const Json keyboard = config.value("keyboard", Json::object());
+    const auto read = [&keyboard](std::string_view name, SDL_Keycode fallback)
+    {
+        return static_cast<SDL_Keycode>(keyboard.value(std::string(name),
+                                                        static_cast<int>(fallback)));
+    };
+    bindings.up = read("up", bindings.up);
+    bindings.down = read("down", bindings.down);
+    bindings.left = read("left", bindings.left);
+    bindings.right = read("right", bindings.right);
+    bindings.select = read("select", bindings.select);
+    bindings.start = read("start", bindings.start);
+    bindings.a = read("a", bindings.a);
+    bindings.b = read("b", bindings.b);
+    return bindings;
+}
+
+Json WriteBindings(const ControllerBindings& bindings)
+{
+    return {
+        {"up", static_cast<int>(bindings.up)},
+        {"down", static_cast<int>(bindings.down)},
+        {"left", static_cast<int>(bindings.left)},
+        {"right", static_cast<int>(bindings.right)},
+        {"select", static_cast<int>(bindings.select)},
+        {"start", static_cast<int>(bindings.start)},
+        {"a", static_cast<int>(bindings.a)},
+        {"b", static_cast<int>(bindings.b)},
+    };
+}
+
 CoverServiceConfig LoadCoverServiceConfig(const GameLibrary& library)
 {
     std::ifstream input(CoverConfigPath(library));
@@ -166,7 +287,7 @@ CoverServiceConfig LoadCoverServiceConfig(const GameLibrary& library)
     try
     {
         const Json config = Json::parse(input, nullptr, true, true);
-        return {config.value("thegamesdb_api_key", "")};
+        return {config.value("thegamesdb_api_key", ""), ReadBindings(config)};
     }
     catch (const Json::exception&)
     {
@@ -183,7 +304,10 @@ bool SaveCoverServiceConfig(const GameLibrary& library, const CoverServiceConfig
     {
         return false;
     }
-    output << Json{{"thegamesdb_api_key", config.theGamesDbApiKey}}.dump(2) << '\n';
+    output << Json{
+        {"thegamesdb_api_key", config.theGamesDbApiKey},
+        {"keyboard", WriteBindings(config.controller)},
+    }.dump(2) << '\n';
     return static_cast<bool>(output);
 }
 
@@ -461,22 +585,18 @@ void RefreshLibrary(GameLibrary& library, SDL_Renderer* renderer)
               });
 }
 
-void SetControllerButton(dendyforge::Console& console, SDL_Keycode key, bool pressed)
+void SetControllerButton(dendyforge::Console& console, const ControllerBindings& bindings,
+                         SDL_Keycode key, bool pressed)
 {
     using Button = dendyforge::Controller::Button;
-
-    switch (key)
-    {
-    case SDLK_W: console.PrimaryController().SetButton(Button::Up, pressed); break;
-    case SDLK_A: console.PrimaryController().SetButton(Button::Left, pressed); break;
-    case SDLK_S: console.PrimaryController().SetButton(Button::Down, pressed); break;
-    case SDLK_D: console.PrimaryController().SetButton(Button::Right, pressed); break;
-    case SDLK_BACKSPACE: console.PrimaryController().SetButton(Button::Select, pressed); break;
-    case SDLK_RETURN: console.PrimaryController().SetButton(Button::Start, pressed); break;
-    case SDLK_K: console.PrimaryController().SetButton(Button::A, pressed); break;
-    case SDLK_L: console.PrimaryController().SetButton(Button::B, pressed); break;
-    default: break;
-    }
+    if (key == bindings.up) { console.PrimaryController().SetButton(Button::Up, pressed); }
+    if (key == bindings.down) { console.PrimaryController().SetButton(Button::Down, pressed); }
+    if (key == bindings.left) { console.PrimaryController().SetButton(Button::Left, pressed); }
+    if (key == bindings.right) { console.PrimaryController().SetButton(Button::Right, pressed); }
+    if (key == bindings.select) { console.PrimaryController().SetButton(Button::Select, pressed); }
+    if (key == bindings.start) { console.PrimaryController().SetButton(Button::Start, pressed); }
+    if (key == bindings.a) { console.PrimaryController().SetButton(Button::A, pressed); }
+    if (key == bindings.b) { console.PrimaryController().SetButton(Button::B, pressed); }
 }
 
 ImU32 TileAccent(std::string_view title)
@@ -551,10 +671,7 @@ void SetupLibraryStyle()
 }
 
 LibraryUiAction DrawGameLibrary(GameLibrary& library,
-                                std::array<char, 128>& searchBuffer,
-                                std::array<char, 128>& apiKeyBuffer,
-                                std::string_view coverStatus,
-                                bool downloadInProgress)
+                                std::array<char, 128>& searchBuffer)
 {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -578,6 +695,8 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
     ImGui::TextUnformatted("DENDYFORGE");
     ImGui::PopFont();
     ImGui::TextDisabled("Your cartridge library");
+    ImGui::SameLine(contentWidth - 305.0f);
+    const bool settingsRequested = ImGui::Button("Settings");
     ImGui::SameLine(contentWidth - 210.0f);
     ImGui::SetNextItemWidth(210.0f);
     ImGui::InputTextWithHint("##search", "Search games...", searchBuffer.data(), searchBuffer.size());
@@ -592,28 +711,8 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
     ImGui::SameLine(contentWidth - 82.0f);
     const bool refreshRequested = ImGui::Button("Refresh");
 
-    int missingCoverCount = 0;
-    for (const GameEntry& game : library.games)
-    {
-        missingCoverCount += game.coverTexture == nullptr;
-    }
-    ImGui::SetCursorPos(ImVec2(36.0f, 150.0f));
-    ImGui::TextDisabled("%.*s", static_cast<int>(coverStatus.size()), coverStatus.data());
-    ImGui::SameLine(contentWidth - 485.0f);
-    ImGui::SetNextItemWidth(225.0f);
-    ImGui::InputTextWithHint("##thegamesdb-key", "TheGamesDB API key", apiKeyBuffer.data(),
-                             apiKeyBuffer.size(), ImGuiInputTextFlags_Password);
-    ImGui::SameLine();
-    const bool saveApiKeyRequested = ImGui::Button("Save key");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(downloadInProgress || missingCoverCount == 0);
-    const bool downloadRequested = ImGui::Button(downloadInProgress
-        ? "Downloading..."
-        : "Download covers");
-    ImGui::EndDisabled();
-
-    ImGui::SetCursorPos(ImVec2(36.0f, 194.0f));
-    ImGui::BeginChild("Library grid", ImVec2(contentWidth, windowSize.y - 224.0f),
+    ImGui::SetCursorPos(ImVec2(36.0f, 154.0f));
+    ImGui::BeginChild("Library grid", ImVec2(contentWidth, windowSize.y - 184.0f),
                       ImGuiChildFlags_Borders);
 
     std::string search(searchBuffer.data());
@@ -707,7 +806,206 @@ LibraryUiAction DrawGameLibrary(GameLibrary& library,
 
     ImGui::EndChild();
     ImGui::End();
-    return {selectedGame, refreshRequested, saveApiKeyRequested, downloadRequested};
+    return {selectedGame, refreshRequested, settingsRequested};
+}
+
+void DrawCenteredText(ImDrawList* drawList, const ImVec2& centre, std::string_view text,
+                      ImU32 colour)
+{
+    const ImVec2 size = ImGui::CalcTextSize(text.data(), text.data() + text.size());
+    drawList->AddText(ImVec2(centre.x - size.x * 0.5f, centre.y - size.y * 0.5f),
+                      colour, text.data(), text.data() + text.size());
+}
+
+std::optional<ControlAction> DrawDendyController(const ImVec2& topLeft,
+                                                  const ControllerBindings& bindings,
+                                                  std::optional<ControlAction> capturing)
+{
+    struct HitBox
+    {
+        ControlAction action;
+        ImVec2 minimum;
+        ImVec2 maximum;
+    };
+
+    const float x = topLeft.x;
+    const float y = topLeft.y;
+    const std::array<HitBox, 8> hitBoxes{{
+        {ControlAction::Up, {x + 116.0f, y + 54.0f}, {x + 186.0f, y + 116.0f}},
+        {ControlAction::Down, {x + 116.0f, y + 168.0f}, {x + 186.0f, y + 230.0f}},
+        {ControlAction::Left, {x + 58.0f, y + 112.0f}, {x + 120.0f, y + 174.0f}},
+        {ControlAction::Right, {x + 182.0f, y + 112.0f}, {x + 244.0f, y + 174.0f}},
+        {ControlAction::Select, {x + 314.0f, y + 136.0f}, {x + 424.0f, y + 181.0f}},
+        {ControlAction::Start, {x + 465.0f, y + 136.0f}, {x + 575.0f, y + 181.0f}},
+        {ControlAction::B, {x + 633.0f, y + 103.0f}, {x + 721.0f, y + 191.0f}},
+        {ControlAction::A, {x + 739.0f, y + 103.0f}, {x + 827.0f, y + 191.0f}},
+    }};
+
+    std::array<bool, 8> hovered{};
+    std::optional<ControlAction> selected;
+    ImGui::PushID("Dendy controller mapping");
+    for (std::size_t index = 0; index < hitBoxes.size(); ++index)
+    {
+        const HitBox& hitBox = hitBoxes[index];
+        ImGui::SetCursorScreenPos(hitBox.minimum);
+        ImGui::PushID(static_cast<int>(hitBox.action));
+        const bool pressed = ImGui::InvisibleButton(
+            "bind", ImVec2(hitBox.maximum.x - hitBox.minimum.x,
+                             hitBox.maximum.y - hitBox.minimum.y));
+        hovered[index] = ImGui::IsItemHovered();
+        ImGui::PopID();
+        if (pressed)
+        {
+            selected = hitBox.action;
+        }
+    }
+    ImGui::PopID();
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 bodyMin(x, y + 16.0f);
+    const ImVec2 bodyMax(x + 875.0f, y + 274.0f);
+    drawList->AddRectFilled(ImVec2(bodyMin.x + 5.0f, bodyMin.y + 10.0f),
+                            ImVec2(bodyMax.x + 5.0f, bodyMax.y + 10.0f),
+                            IM_COL32(0, 0, 0, 80), 28.0f);
+    drawList->AddRectFilled(bodyMin, bodyMax, IM_COL32(231, 232, 226, 255), 28.0f);
+    drawList->AddRect(bodyMin, bodyMax, IM_COL32(102, 115, 128, 255), 28.0f, 0, 4.0f);
+    drawList->AddLine(ImVec2(x + 25.0f, y + 214.0f), ImVec2(x + 850.0f, y + 214.0f),
+                      IM_COL32(25, 59, 98, 210), 3.0f);
+    drawList->AddLine(ImVec2(x + 25.0f, y + 221.0f), ImVec2(x + 850.0f, y + 221.0f),
+                      IM_COL32(25, 59, 98, 210), 3.0f);
+
+    drawList->AddText(ImVec2(x + 70.0f, y + 42.0f), IM_COL32(183, 31, 40, 255), "Dendy");
+    drawList->AddText(ImVec2(x + 83.0f, y + 61.0f), IM_COL32(183, 31, 40, 255), "JUNIOR");
+    drawList->AddRectFilled(ImVec2(x + 104.0f, y + 45.0f), ImVec2(x + 198.0f, y + 239.0f),
+                            IM_COL32(45, 49, 53, 255), 11.0f);
+    drawList->AddRectFilled(ImVec2(x + 49.0f, y + 101.0f), ImVec2(x + 253.0f, y + 184.0f),
+                            IM_COL32(45, 49, 53, 255), 11.0f);
+    drawList->AddCircleFilled(ImVec2(x + 151.0f, y + 142.0f), 19.0f, IM_COL32(30, 34, 38, 255));
+
+    drawList->AddRectFilled(ImVec2(x + 287.0f, y + 119.0f), ImVec2(x + 602.0f, y + 196.0f),
+                            IM_COL32(88, 93, 97, 255), 38.0f);
+    drawList->AddRectFilled(ImVec2(x + 305.0f, y + 130.0f), ImVec2(x + 438.0f, y + 187.0f),
+                            IM_COL32(45, 49, 53, 255), 27.0f);
+    drawList->AddRectFilled(ImVec2(x + 452.0f, y + 130.0f), ImVec2(x + 584.0f, y + 187.0f),
+                            IM_COL32(45, 49, 53, 255), 27.0f);
+    drawList->AddText(ImVec2(x + 322.0f, y + 94.0f), IM_COL32(23, 56, 94, 255), "SELECT");
+    drawList->AddText(ImVec2(x + 486.0f, y + 94.0f), IM_COL32(23, 56, 94, 255), "START");
+    drawList->AddCircleFilled(ImVec2(x + 677.0f, y + 147.0f), 53.0f, IM_COL32(48, 52, 56, 255));
+    drawList->AddCircleFilled(ImVec2(x + 783.0f, y + 147.0f), 53.0f, IM_COL32(48, 52, 56, 255));
+    drawList->AddText(ImVec2(x + 663.0f, y + 211.0f), IM_COL32(23, 56, 94, 255), "B");
+    drawList->AddText(ImVec2(x + 770.0f, y + 211.0f), IM_COL32(23, 56, 94, 255), "A");
+
+    for (std::size_t index = 0; index < hitBoxes.size(); ++index)
+    {
+        const HitBox& hitBox = hitBoxes[index];
+        const bool active = capturing && *capturing == hitBox.action;
+        const ImU32 outline = active ? IM_COL32(255, 175, 57, 255)
+            : hovered[index] ? IM_COL32(110, 201, 255, 255) : IM_COL32(255, 255, 255, 40);
+        drawList->AddRect(hitBox.minimum, hitBox.maximum, outline, 9.0f, 0, active ? 3.0f : 1.0f);
+        DrawCenteredText(drawList,
+                         ImVec2((hitBox.minimum.x + hitBox.maximum.x) * 0.5f,
+                                (hitBox.minimum.y + hitBox.maximum.y) * 0.5f),
+                         BindingName(BindingFor(bindings, hitBox.action)),
+                         active ? IM_COL32(255, 215, 141, 255) : IM_COL32(245, 247, 250, 255));
+    }
+    ImGui::SetCursorScreenPos(ImVec2(x, y + 290.0f));
+    ImGui::Dummy(ImVec2(875.0f, 1.0f));
+    return selected;
+}
+
+SettingsUiAction DrawSettings(GameLibrary& library, const CoverServiceConfig& config,
+                              std::array<char, 128>& apiKeyBuffer,
+                              std::string_view coverStatus, bool downloadInProgress,
+                              bool& showCoverSettings,
+                              std::optional<ControlAction> capturing)
+{
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::Begin("Settings", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 position = ImGui::GetWindowPos();
+    const ImVec2 size = ImGui::GetWindowSize();
+    drawList->AddRectFilledMultiColor(position, ImVec2(position.x + size.x, position.y + size.y),
+                                      IM_COL32(10, 15, 27, 255), IM_COL32(18, 32, 58, 255),
+                                      IM_COL32(8, 13, 24, 255), IM_COL32(12, 20, 37, 255));
+
+    SettingsUiAction action;
+    ImGui::SetCursorPos(ImVec2(36.0f, 28.0f));
+    action.close = ImGui::Button("< Back to library");
+    ImGui::SameLine();
+    ImGui::PushFont(nullptr, 1.40f);
+    ImGui::TextUnformatted("Settings");
+    ImGui::PopFont();
+
+    ImGui::SetCursorPos(ImVec2(36.0f, 86.0f));
+    if (ImGui::Button("Controls", ImVec2(130.0f, 36.0f)))
+    {
+        showCoverSettings = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cover service", ImVec2(150.0f, 36.0f)))
+    {
+        showCoverSettings = true;
+    }
+    ImGui::SetCursorPos(ImVec2(36.0f, 143.0f));
+    ImGui::BeginChild("Settings content", ImVec2(size.x - 72.0f, size.y - 177.0f),
+                      ImGuiChildFlags_Borders);
+
+    if (!showCoverSettings)
+    {
+        ImGui::SetCursorPos(ImVec2(28.0f, 24.0f));
+        ImGui::PushFont(nullptr, 1.25f);
+        ImGui::TextUnformatted("Keyboard mapping");
+        ImGui::PopFont();
+        ImGui::SetCursorPos(ImVec2(28.0f, 55.0f));
+        ImGui::TextDisabled(capturing
+            ? "Press a key now. Esc cancels the change."
+            : "Click a controller button, then press the keyboard key you want to use.");
+        const ImVec2 contentPosition = ImGui::GetWindowPos();
+        const ImVec2 contentSize = ImGui::GetWindowSize();
+        const ImVec2 controllerPosition(contentPosition.x + (contentSize.x - 875.0f) * 0.5f,
+                                        contentPosition.y + 92.0f);
+        action.selectControl = DrawDendyController(controllerPosition, config.controller, capturing);
+        ImGui::SetCursorPos(ImVec2(28.0f, 390.0f));
+        action.resetControls = ImGui::Button("Reset defaults");
+        ImGui::SameLine();
+        action.save = ImGui::Button("Save settings");
+    }
+    else
+    {
+        int missingCoverCount = 0;
+        for (const GameEntry& game : library.games)
+        {
+            missingCoverCount += game.coverTexture == nullptr;
+        }
+        ImGui::SetCursorPos(ImVec2(28.0f, 24.0f));
+        ImGui::PushFont(nullptr, 1.25f);
+        ImGui::TextUnformatted("Automatic covers");
+        ImGui::PopFont();
+        ImGui::SetCursorPos(ImVec2(28.0f, 57.0f));
+        ImGui::TextDisabled("TheGamesDB key is saved locally and is never added to Git.");
+        ImGui::SetCursorPos(ImVec2(28.0f, 102.0f));
+        ImGui::SetNextItemWidth(330.0f);
+        ImGui::InputTextWithHint("##thegamesdb-key", "TheGamesDB API key", apiKeyBuffer.data(),
+                                 apiKeyBuffer.size(), ImGuiInputTextFlags_Password);
+        ImGui::SameLine();
+        action.save = ImGui::Button("Save settings");
+        ImGui::SetCursorPos(ImVec2(28.0f, 151.0f));
+        ImGui::TextDisabled("%.*s", static_cast<int>(coverStatus.size()), coverStatus.data());
+        ImGui::SetCursorPos(ImVec2(28.0f, 194.0f));
+        ImGui::BeginDisabled(downloadInProgress || missingCoverCount == 0);
+        action.downloadMissingCovers = ImGui::Button(downloadInProgress
+            ? "Downloading covers..."
+            : "Download missing covers");
+        ImGui::EndDisabled();
+    }
+
+    ImGui::EndChild();
+    ImGui::End();
+    return action;
 }
 
 }
@@ -763,6 +1061,9 @@ int main(int argc, char* argv[])
     std::string coverStatus = coverServiceConfig.theGamesDbApiKey.empty()
         ? "Save a TheGamesDB API key to fetch real covers automatically."
         : "Ready to download missing covers.";
+    bool settingsOpen = false;
+    bool showCoverSettings = false;
+    std::optional<ControlAction> capturingControl;
     std::unique_ptr<dendyforge::Console> console;
     std::vector<float> pendingAudio;
     bool gameRunning = false;
@@ -863,10 +1164,32 @@ int main(int argc, char* argv[])
             {
                 returnToLibrary();
             }
+            else if (!gameRunning && settingsOpen && event.type == SDL_EVENT_KEY_DOWN &&
+                     capturingControl)
+            {
+                if (event.key.key == SDLK_ESCAPE)
+                {
+                    capturingControl.reset();
+                    coverStatus = "Control mapping cancelled.";
+                }
+                else
+                {
+                    BindingFor(coverServiceConfig.controller, *capturingControl) = event.key.key;
+                    coverStatus = std::string(ControlName(*capturingControl)) + " mapped to " +
+                        BindingName(event.key.key) + ". Click Save settings to keep it.";
+                    capturingControl.reset();
+                }
+            }
+            else if (!gameRunning && settingsOpen && event.type == SDL_EVENT_KEY_DOWN &&
+                     event.key.key == SDLK_ESCAPE)
+            {
+                settingsOpen = false;
+            }
             else if (gameRunning && console &&
                      (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP))
             {
-                SetControllerButton(*console, event.key.key, event.type == SDL_EVENT_KEY_DOWN);
+                SetControllerButton(*console, coverServiceConfig.controller, event.key.key,
+                                    event.type == SDL_EVENT_KEY_DOWN);
             }
         }
 
@@ -902,23 +1225,55 @@ int main(int argc, char* argv[])
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
-            const LibraryUiAction action = DrawGameLibrary(
-                library, searchBuffer, apiKeyBuffer, coverStatus,
-                activeCoverDownload.valid() || !pendingCoverDownloads.empty());
+            LibraryUiAction libraryAction;
+            SettingsUiAction settingsAction;
+            if (settingsOpen)
+            {
+                settingsAction = DrawSettings(
+                    library, coverServiceConfig, apiKeyBuffer, coverStatus,
+                    activeCoverDownload.valid() || !pendingCoverDownloads.empty(),
+                    showCoverSettings, capturingControl);
+            }
+            else
+            {
+                libraryAction = DrawGameLibrary(library, searchBuffer);
+            }
             ImGui::Render();
             SDL_SetRenderDrawColor(renderer, 10, 15, 27, 255);
             SDL_RenderClear(renderer);
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
             SDL_RenderPresent(renderer);
 
-            if (action.saveApiKey)
+            if (libraryAction.openSettings)
+            {
+                settingsOpen = true;
+                capturingControl.reset();
+            }
+            if (settingsAction.close)
+            {
+                settingsOpen = false;
+                capturingControl.reset();
+            }
+            if (settingsAction.selectControl)
+            {
+                capturingControl = settingsAction.selectControl;
+                coverStatus = std::string("Mapping ") + ControlName(*capturingControl) +
+                    ": press a keyboard key.";
+            }
+            if (settingsAction.resetControls)
+            {
+                coverServiceConfig.controller = {};
+                capturingControl.reset();
+                coverStatus = "Default controls restored. Click Save settings to keep them.";
+            }
+            if (settingsAction.save)
             {
                 coverServiceConfig.theGamesDbApiKey = apiKeyBuffer.data();
                 coverStatus = SaveCoverServiceConfig(library, coverServiceConfig)
-                    ? "TheGamesDB API key saved locally."
-                    : "Could not save the TheGamesDB API key.";
+                    ? "Settings saved locally."
+                    : "Could not save the settings.";
             }
-            if (action.downloadMissingCovers && !activeCoverDownload.valid())
+            if (settingsAction.downloadMissingCovers && !activeCoverDownload.valid())
             {
                 if (coverServiceConfig.theGamesDbApiKey.empty())
                 {
@@ -939,13 +1294,13 @@ int main(int argc, char* argv[])
                         : "Downloading covers in the background...";
                 }
             }
-            if (action.refresh && !activeCoverDownload.valid() && pendingCoverDownloads.empty())
+            if (libraryAction.refresh && !activeCoverDownload.valid() && pendingCoverDownloads.empty())
             {
                 RefreshLibrary(library, renderer);
             }
-            if (action.selectedGame)
+            if (libraryAction.selectedGame)
             {
-                launchGame(library.games[*action.selectedGame].romPath);
+                launchGame(library.games[*libraryAction.selectedGame].romPath);
             }
             SDL_Delay(1);
             continue;

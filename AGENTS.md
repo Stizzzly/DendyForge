@@ -38,7 +38,7 @@ core/
   ines/         iNES header types and reader
   cartridge/    cartridge data plus mapper dispatch
   mapper/       mapper abstraction and Mappers 0, 1, 2
-src/main.cpp    SDL3 + Dear ImGui game library, event loop, texture upload and keyboard mapping
+src/main.cpp    SDL3 + Dear ImGui game library/settings, event loop, texture upload and configurable keyboard mapping
 tests/          doctest tests and versioned CPU test ROM fixtures
 roms/           user-local game ROMs; ignored by Git
 ```
@@ -90,11 +90,12 @@ while playing to return to the library. A blank/checkered window while testing
 a game commonly means the executable was launched without the ROM path.
 
 The game library can also download missing NES box art from TheGamesDB. The
-user pastes a personal API key into the UI and the app saves it only in
-`roms/library/.dendyforge-covers.json`; downloaded artwork is cached under
-`roms/library/covers/.dendyforge-cache/`. Do not commit either. HTTP runs on a
-background task through the vendored header-only `cpp-httplib`; response and
-configuration JSON use vendored `nlohmann/json`. Both use OpenSSL for HTTPS.
+user enters a personal API key in **Settings → Cover service** and the app
+saves it only in `roms/library/.dendyforge-covers.json`; this file also keeps
+the configurable Controller 1 keyboard bindings. Downloaded artwork is cached
+under `roms/library/covers/.dendyforge-cache/`. Do not commit either. HTTP runs
+on a background task through the vendored header-only `cpp-httplib`; response
+and configuration JSON use vendored `nlohmann/json`. Both use OpenSSL for HTTPS.
 
 Tests use doctest. CPU ROM fixtures are intentionally versioned under
 `tests/cpu/roms/`; arbitrary `*.nes` files and `roms/` are ignored. The
@@ -206,8 +207,10 @@ The current CPU map implemented by `Bus` is:
 
 Controller order is A, B, Select, Start, Up, Down, Left, Right. A write to
 `$4016` latches it on strobe or the high-to-low transition; reads shift one bit
-and then return ones. SDL maps `W/A/S/D` to D-pad, Backspace to Select, Enter
-to Start, K to A, and L to B.
+and then return ones. SDL defaults to `W/A/S/D` for the D-pad, Backspace for
+Select, Enter for Start, K for A, and L for B. The player can change each
+binding through the drawn controller in **Settings → Controls**; the same
+local cover-service configuration file persists those bindings.
 
 The Zapper light gun is `core/zapper/` on controller port 2: reading `$4017`
 returns the light sensor in bit 3 (0 = light) and the trigger in bit 4
