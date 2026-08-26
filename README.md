@@ -74,6 +74,7 @@ only under `roms/library/`, which Git ignores.
 - ✅ Processor Status Register
 - ✅ Bus Interface
 - ✅ Standalone CPU6502 library
+- ✅ Shared public Forge6502 library consumed as a pinned submodule
 - ✅ Stack Operations
 - ✅ Reset Sequence
 - ✅ Instruction Fetch

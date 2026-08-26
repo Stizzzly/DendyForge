@@ -30,7 +30,7 @@ project unless they revoke that instruction.
 
 ```text
 core/
-  cpu/          reusable CPU6502 and CpuBus interface
+  cpu/          compatibility aliases for the Forge6502 submodule
   bus/          CPU address map, PPU register mapping, DMA, controller port
   console/      joins CPU, Bus, Cartridge; clocks CPU and PPU
   ppu/          PPU registers, memory and current software renderer
@@ -41,12 +41,14 @@ core/
 src/main.cpp    SDL3 + Dear ImGui library/settings/debugger overlay, event loop, texture upload and configurable keyboard mapping
 assets/fonts/   bundled Jura UI typeface and its SIL Open Font License
 tests/          doctest tests and versioned CPU test ROM fixtures
+third_party/forge6502/ pinned reusable CPU core submodule
 roms/           user-local game ROMs; ignored by Git
 ```
 
 `CMakeLists.txt` builds:
 
-* `DendyForgeCpu`: only `core/cpu/cpu6502.cpp`.
+* `Forge6502::Core`: reusable CPU implementation from the pinned submodule.
+* `DendyForgeCpu`: compatibility interface target forwarding to Forge6502.
 * `DendyForgeCore`: CPU plus cartridge, bus, console, controller, mapper, and
   PPU.
 * `DendyForgeTests`: doctest executable.
@@ -173,8 +175,12 @@ clocks/s (6.67x realtime), above the 2.8x pre-conversion baseline. See
 
 Important CPU rules:
 
-* Preserve modularity. `cpu6502.hpp/.cpp` may depend on `cpu_bus.hpp`, never
-  on `Bus`, `PPU`, `Console`, SDL, iNES, or a mapper.
+* The implementation lives in the public `Forge6502` repository pinned at
+  `third_party/forge6502`. The local `core/cpu` headers are compatibility
+  aliases only. Make CPU changes in Forge6502, pass its tests, update this
+  submodule pointer, then pass the complete DendyForge suite.
+* Preserve modularity. Forge6502 may depend only on its `CpuBus` contract,
+  never on `Bus`, `PPU`, `Console`, SDL, iNES, or a mapper.
 * `CPU6502::Configuration::decimalModeEnabled` exists because the standalone
   core supports decimal arithmetic. `Console` passes `false`; its D flag can
   exist but arithmetic remains binary.

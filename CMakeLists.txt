@@ -17,13 +17,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(DendyForgeCpu
-    core/cpu/cpu6502.cpp
-)
+add_subdirectory(third_party/forge6502 EXCLUDE_FROM_ALL)
 
-target_include_directories(DendyForgeCpu PUBLIC
+add_library(DendyForgeCpu INTERFACE)
+
+target_include_directories(DendyForgeCpu INTERFACE
     core
 )
+
+target_link_libraries(DendyForgeCpu INTERFACE Forge6502::Core)
 
 add_library(DendyForgeCore
     core/apu/apu.cpp
