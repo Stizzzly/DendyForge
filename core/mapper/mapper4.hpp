@@ -30,6 +30,7 @@ public:
     Mirroring MirroringMode(Mirroring headerMirroring) const override;
     void PpuClock() override;
     void ObservePpuAddress(std::uint16_t address) override;
+    [[nodiscard]] bool MonitorsPpuBus() const noexcept override;
     bool PrgRamEnabled() const override;
     bool PrgRamWriteProtected() const override;
     bool IrqPending() const override;

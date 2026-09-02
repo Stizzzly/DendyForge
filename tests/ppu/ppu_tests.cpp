@@ -481,16 +481,17 @@ TEST_CASE("PPU applies PPUMASK clipping, grayscale, and color emphasis")
     ppu.RenderBackground();
     const auto clippedPixel = ppu.FrameBuffer()[0];
     const auto visiblePixel = ppu.FrameBuffer()[8];
-    CHECK(clippedPixel != visiblePixel);
+    CHECK(clippedPixel == 0xFF000000);
+    CHECK(visiblePixel == 0xFF64B0FF);
 
     ppu.CpuWrite(0x2001, 0x0B);
     ppu.RenderBackground();
     const auto grayscalePixel = ppu.FrameBuffer()[8];
-    CHECK(grayscalePixel != visiblePixel);
+    CHECK(grayscalePixel == 0xFFFFFEFF);
 
     ppu.CpuWrite(0x2001, 0x2A);
     ppu.RenderBackground();
-    CHECK(ppu.FrameBuffer()[8] != grayscalePixel);
+    CHECK(ppu.FrameBuffer()[8] == 0xFF6484BF);
 }
 
 TEST_CASE("PPU renders visible scanlines before VBlank")

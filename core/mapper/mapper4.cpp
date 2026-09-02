@@ -220,6 +220,11 @@ void Mapper4::ObservePpuAddress(std::uint16_t address)
     m_a12High = a12High;
 }
 
+bool Mapper4::MonitorsPpuBus() const noexcept
+{
+    return true;
+}
+
 bool Mapper4::PrgRamEnabled() const
 {
     return m_prgRamEnabled;

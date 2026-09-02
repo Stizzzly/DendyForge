@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 #include "ines/ines.hpp"
 
@@ -121,6 +122,7 @@ private:
     std::uint32_t ColorFromPaletteIndex(std::uint8_t index) const;
 
     Cartridge* m_cartridge{nullptr};
+    bool m_mapperMonitorsPpuBus{false};
     Mirroring m_mirroring{Mirroring::Horizontal};
 
     std::array<std::uint8_t, 2048> m_nametableRam{};
@@ -157,6 +159,7 @@ private:
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};
+    std::span<const std::uint32_t, 64> m_outputPalette;
     std::uint8_t m_effectiveRenderingMask{0};
     std::uint8_t m_pendingRenderingMask{0};
     std::uint8_t m_renderingMaskUpdateDelay{0};

@@ -4,14 +4,21 @@ This file is the authoritative handoff for work in this repository. Read it
 before changing emulator code. It describes the code as it exists now, not an
 aspirational design.
 
-## Active handoff: AccuracyCoin complete; Mapper 7 ready (2026-09-02)
+## Active handoff: AccuracyCoin complete; first optimization pass (2026-09-02)
 
-The longer-running task is to improve hardware accuracy against 100thCoin's
-`AccuracyCoin` ROM. The user's first run passed **97/141** tests. The current
-uncommitted worktree's clean runner checkpoint passes **141/141** as of
-2026-09-02. Mapper 7 is implemented and regression-tested, but Battletoads
-itself still needs the user's gameplay check. The combined worktree is an
-intermediate checkpoint: **do not commit or push it as-is**.
+The longer-running hardware-accuracy task against 100thCoin's `AccuracyCoin`
+ROM is complete: the user's first run passed **97/141**, and commit `6e4c1df`
+passes **141/141** as of 2026-09-02. Forge6502 timing fixes are published as
+`8b885ca`. Mapper 7 is implemented and regression-tested, but Battletoads
+itself still needs the user's gameplay check.
+
+The first performance pass keeps palette rendering as a compile-time C++20
+lookup table and skips per-dot/per-fetch mapper callbacks for boards that do
+not monitor the PPU bus. With the corrected benchmark retaining generated
+audio instead of transferring a vector every CPU cycle, the five-run median
+for 20 M `nestest` console clocks improved from 6,846,751 to 7,807,696
+clocks/s (**+14.0%**, 3.83x to 4.36x realtime). AccuracyCoin remains 141/141,
+and both Debug and Release CTest pass.
 
 The local suite is ignored under `roms/nes-test-roms/AccuracyCoin`; its ROM and
 repository must remain user-local. `tools/accuracy_coin_runner.cpp` and its
@@ -20,7 +27,7 @@ waits for all 141 cases, calculates the result from `$0400-$0492`, prints each
 failed case and captures selected diagnostic RAM. Its nonzero exit code while
 any case remains failing is intentional.
 
-### Changes already present but not committed
+### AccuracyCoin changes published in `6e4c1df`
 
 Parent DendyForge worktree:
 
@@ -121,8 +128,6 @@ after the final DMC changes. Release full CTest, all PPU ROM suites and
 regression matrix has not been run.**
 
 Preserve the user-owned untracked `blargg_apu_2005.07.30/` and `nestest.txt`.
-The parent worktree and Forge6502 submodule are deliberately dirty at this
-handoff; inspect `git diff` before continuing and do not discard these edits.
 
 ## Project purpose and language
 

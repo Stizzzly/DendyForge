@@ -38,8 +38,11 @@ int main(int argc, char* argv[])
     for (std::uint64_t cycle = 0; cycle < BenchmarkCycles; ++cycle)
     {
         console.Clock();
-        console.AudioProcessor().TakeSamples();
     }
+    // The generated sample queue is only about 2 MiB for this run. Keeping it
+    // intact mirrors the core work performed by the frontend without turning
+    // the benchmark into a per-cycle vector allocation test.
+    console.AudioProcessor().TakeSamples();
     const auto elapsed = std::chrono::steady_clock::now() - start;
 
     const double seconds =

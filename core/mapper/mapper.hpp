@@ -42,6 +42,7 @@ public:
     // and nonstandard pattern-table use.
     virtual void PpuClock();
     virtual void ObservePpuAddress(std::uint16_t address);
+    [[nodiscard]] virtual bool MonitorsPpuBus() const noexcept;
 
     // PRG-RAM control. Most mappers leave RAM continuously enabled and
     // writable; MMC3 exposes the $A001 enable/write-protect bits.

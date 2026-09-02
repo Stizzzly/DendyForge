@@ -91,6 +91,11 @@ void Cartridge::ObservePpuAddress(std::uint16_t address)
     m_mapper->ObservePpuAddress(address);
 }
 
+bool Cartridge::MonitorsPpuBus() const noexcept
+{
+    return m_mapper->MonitorsPpuBus();
+}
+
 bool Cartridge::IrqPending() const
 {
     return m_mapper->IrqPending();

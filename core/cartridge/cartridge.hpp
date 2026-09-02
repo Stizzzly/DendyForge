@@ -33,6 +33,7 @@ public:
     // its IRQ counter).
     void PpuClock();
     void ObservePpuAddress(std::uint16_t address);
+    [[nodiscard]] bool MonitorsPpuBus() const noexcept;
     bool IrqPending() const;
 
     bool CpuRead(std::uint16_t address, std::uint8_t& data);

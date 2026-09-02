@@ -24,6 +24,11 @@ void Mapper::ObservePpuAddress(std::uint16_t)
 {
 }
 
+bool Mapper::MonitorsPpuBus() const noexcept
+{
+    return false;
+}
+
 bool Mapper::PrgRamEnabled() const
 {
     return true;

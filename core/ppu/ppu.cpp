@@ -19,6 +19,48 @@ constexpr std::array<std::uint32_t, 64> SystemPalette{
     0xE4E594, 0xCFEE96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000, 0x000000,
 };
 
+consteval auto MakeOutputPalette()
+{
+    std::array<std::array<std::uint32_t, 64>, 16> output{};
+    for (std::size_t effects = 0; effects < output.size(); ++effects)
+    {
+        for (std::size_t rawIndex = 0; rawIndex < SystemPalette.size(); ++rawIndex)
+        {
+            const std::size_t index = rawIndex & ((effects & 0x01) != 0
+                ? 0x30
+                : 0x3F);
+            const std::uint32_t color = SystemPalette[index];
+            std::uint8_t red = color >> 16;
+            std::uint8_t green = color >> 8;
+            std::uint8_t blue = color;
+
+            if ((effects & 0x02) != 0)
+            {
+                green = static_cast<std::uint8_t>(green * 3 / 4);
+                blue = static_cast<std::uint8_t>(blue * 3 / 4);
+            }
+            if ((effects & 0x04) != 0)
+            {
+                red = static_cast<std::uint8_t>(red * 3 / 4);
+                blue = static_cast<std::uint8_t>(blue * 3 / 4);
+            }
+            if ((effects & 0x08) != 0)
+            {
+                red = static_cast<std::uint8_t>(red * 3 / 4);
+                green = static_cast<std::uint8_t>(green * 3 / 4);
+            }
+
+            output[effects][rawIndex] = 0xFF000000 |
+                (static_cast<std::uint32_t>(red) << 16) |
+                (static_cast<std::uint32_t>(green) << 8) |
+                blue;
+        }
+    }
+    return output;
+}
+
+constexpr auto OutputPalette = MakeOutputPalette();
+
 }
 
 // The palette RAM contents an NTSC PPU powers up with (blargg's
@@ -35,7 +77,8 @@ constexpr std::array<std::uint8_t, 32> PowerUpPalette{
 constexpr std::uint32_t OpenBusDecayDots = 89342 * 30;
 
 PPU::PPU()
-    : m_paletteRam(PowerUpPalette)
+    : m_paletteRam(PowerUpPalette),
+      m_outputPalette(OutputPalette[0])
 {
     // Secondary OAM is observed as empty until the first visible-line
     // evaluation has populated it. This also keeps the pre-render fetches
@@ -46,6 +89,7 @@ PPU::PPU()
 void PPU::ConnectCartridge(Cartridge* cartridge)
 {
     m_cartridge = cartridge;
+    m_mapperMonitorsPpuBus = cartridge && cartridge->MonitorsPpuBus();
     m_mirroring = cartridge ? cartridge->Info().MirroringMode()
                             : Mirroring::Horizontal;
 }
@@ -62,7 +106,7 @@ void PPU::Clock()
         ApplyPendingOamCorruption();
     }
 
-    if (m_cartridge)
+    if (m_mapperMonitorsPpuBus)
     {
         m_cartridge->PpuClock();
     }
@@ -290,7 +334,7 @@ void PPU::RenderBackground()
 
 void PPU::BeginFrame()
 {
-    m_frameBuffer.fill(ColorFromPaletteIndex(PpuRead(0x3F00)));
+    m_frameBuffer.fill(ColorFromPaletteIndex(m_paletteRam[0]));
     m_backgroundOpaque.fill(false);
 }
 
@@ -431,8 +475,6 @@ void PPU::ShiftBackgroundShifters()
 
 void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
 {
-    const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
-
     if ((m_effectiveRenderingMask & 0x08) == 0)
     {
         return;
@@ -452,8 +494,8 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
     const std::size_t pixel = screenY * 256 + screenX;
     const bool visible = screenX >= 8 || (m_mask & 0x02) != 0;
     m_frameBuffer[pixel] = visible
-        ? ColorFromPaletteIndex(PpuRead(paletteAddress))
-        : backdrop;
+        ? ColorFromPaletteIndex(m_paletteRam[PaletteAddress(paletteAddress)])
+        : ColorFromPaletteIndex(m_paletteRam[0]);
     m_backgroundOpaque[pixel] = visible && color != 0;
 }
 
@@ -932,7 +974,8 @@ void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
 
         const std::uint16_t paletteAddress =
             0x3F10 + (sprite.attributes & 0x03) * 4 + color;
-        m_frameBuffer[pixel] = ColorFromPaletteIndex(PpuRead(paletteAddress));
+        m_frameBuffer[pixel] = ColorFromPaletteIndex(
+            m_paletteRam[PaletteAddress(paletteAddress)]);
         return;
     }
 }
@@ -1122,6 +1165,8 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         break;
     case 0x0001:
         m_mask = data;
+        m_outputPalette = OutputPalette[
+            (data & 0x01) | ((data >> 4) & 0x0E)];
         m_pendingRenderingMask = data & 0x18;
         // PPUMASK's rendering-enable signals pass through several PPU
         // latches. With the console's fixed CPU/PPU phase, four upcoming
@@ -1208,7 +1253,7 @@ std::uint8_t PPU::PpuRead(std::uint16_t address)
     // lookup performed for every rendered pixel) do not drive the
     // cartridge-visible PPU address bus, so they must not create MMC3
     // A12 edges. Pattern-table and nametable fetches do drive it.
-    if (m_cartridge && address <= 0x3EFF)
+    if (m_mapperMonitorsPpuBus && address <= 0x3EFF)
     {
         m_cartridge->ObservePpuAddress(address);
     }
@@ -1234,7 +1279,7 @@ void PPU::PpuWrite(std::uint16_t address, std::uint8_t data)
 
     // See PpuRead: palette RAM is internal to the PPU and invisible to
     // mappers monitoring PPU A12.
-    if (m_cartridge && address <= 0x3EFF)
+    if (m_mapperMonitorsPpuBus && address <= 0x3EFF)
     {
         m_cartridge->ObservePpuAddress(address);
     }
@@ -1488,32 +1533,7 @@ bool PPU::RenderingEnabled() const
 
 std::uint32_t PPU::ColorFromPaletteIndex(std::uint8_t index) const
 {
-    index &= (m_mask & 0x01) ? 0x30 : 0x3F;
-    std::uint32_t color = SystemPalette[index];
-    std::uint8_t red = color >> 16;
-    std::uint8_t green = color >> 8;
-    std::uint8_t blue = color;
-
-    if ((m_mask & 0x20) != 0)
-    {
-        green = static_cast<std::uint8_t>(green * 3 / 4);
-        blue = static_cast<std::uint8_t>(blue * 3 / 4);
-    }
-    if ((m_mask & 0x40) != 0)
-    {
-        red = static_cast<std::uint8_t>(red * 3 / 4);
-        blue = static_cast<std::uint8_t>(blue * 3 / 4);
-    }
-    if ((m_mask & 0x80) != 0)
-    {
-        red = static_cast<std::uint8_t>(red * 3 / 4);
-        green = static_cast<std::uint8_t>(green * 3 / 4);
-    }
-
-    return 0xFF000000 |
-           (static_cast<std::uint32_t>(red) << 16) |
-           (static_cast<std::uint32_t>(green) << 8) |
-           blue;
+    return m_outputPalette[index & 0x3F];
 }
 
 } // namespace dendyforge
