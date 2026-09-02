@@ -20,7 +20,8 @@ public:
     std::uint8_t CpuRead(std::uint16_t address);
     void CpuWrite(std::uint16_t address, std::uint8_t data);
     void SetDmcMemoryReader(DmcMemoryReader reader);
-    bool ConsumeDmcDmaStallCycle();
+    bool ConsumeDmcDmaRequest(std::uint16_t& address, bool& abortOnly);
+    void CompleteDmcDma(std::uint8_t value);
     bool IrqPending() const;
     std::vector<float> TakeSamples();
 
@@ -104,10 +105,11 @@ private:
         void WriteDirectLoad(std::uint8_t data);
         void WriteSampleAddress(std::uint8_t data);
         void WriteSampleLength(std::uint8_t data);
-        void SetEnabled(bool enabled);
-        void ClockTimer(const DmcMemoryReader& memoryReader);
+        void SetEnabled(bool enabled, bool cpuCycleOdd);
+        void ClockTimer(bool getCycle);
         std::uint8_t Output() const;
-        bool ConsumeDmaStallCycle();
+        bool ConsumeDmaRequest(std::uint16_t& address, bool& abortOnly);
+        void CompleteDma(std::uint8_t value);
         bool IrqPending() const;
         bool Active() const;
 
@@ -121,15 +123,20 @@ private:
         std::uint8_t m_sampleBuffer{0};
         std::uint8_t m_shiftRegister{0};
         std::uint8_t m_bitsRemaining{8};
-        std::uint8_t m_dmaStallCycles{0};
+        std::uint8_t m_transferStartDelay{0};
+        std::uint8_t m_dmaReloadInhibit{0};
         bool m_sampleBufferEmpty{true};
+        bool m_dmaRequested{false};
+        bool m_dmaAbortOnly{false};
+        bool m_dmaInFlight{false};
+        bool m_implicitAbortArmed{false};
         bool m_silence{true};
         bool m_irqEnabled{false};
         bool m_loop{false};
         bool m_irqFlag{false};
 
         void RestartSample();
-        void RefillSampleBuffer(const DmcMemoryReader& memoryReader);
+        void RequestDma(bool loadRequest);
     };
 
     void ClockFrameCounter();
@@ -149,6 +156,7 @@ private:
     bool m_fiveStepFrameCounter{false};
     bool m_frameIrqInhibit{false};
     bool m_frameIrqFlag{false};
+    bool m_frameIrqClearPending{false};
     std::uint8_t m_frameIrqLineCountdown{0};
     bool m_pendingFiveStepFrameCounter{false};
     bool m_pendingFrameIrqInhibit{false};

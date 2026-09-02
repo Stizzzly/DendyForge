@@ -4,6 +4,7 @@
 #include "../mapper/mapper2.hpp"
 #include "../mapper/mapper3.hpp"
 #include "../mapper/mapper4.hpp"
+#include "../mapper/mapper7.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -50,6 +51,12 @@ Cartridge::Cartridge(
 
     case 4:
         m_mapper = std::make_unique<Mapper4>(
+            PRGRomBanks(),
+            CHRRomBanks());
+        break;
+
+    case 7:
+        m_mapper = std::make_unique<Mapper7>(
             PRGRomBanks(),
             CHRRomBanks());
         break;

@@ -37,6 +37,10 @@ constexpr std::uint32_t OpenBusDecayDots = 89342 * 30;
 PPU::PPU()
     : m_paletteRam(PowerUpPalette)
 {
+    // Secondary OAM is observed as empty until the first visible-line
+    // evaluation has populated it. This also keeps the pre-render fetches
+    // from treating zero-initialized host memory as eight live sprites.
+    m_secondaryOam.fill(0xFF);
 }
 
 void PPU::ConnectCartridge(Cartridge* cartridge)
@@ -48,6 +52,16 @@ void PPU::ConnectCartridge(Cartridge* cartridge)
 
 void PPU::Clock()
 {
+    ClockPendingRenderingMaskUpdate();
+    const bool ppuDataBusCollisionActive =
+        m_ppuDataBusCollisionPending && m_ppuDataBusCollisionDelay == 0;
+
+    const bool renderingScanline = m_scanline >= -1 && m_scanline < 240;
+    if (m_oamCorruptionPending && renderingScanline && RenderingEnabled())
+    {
+        ApplyPendingOamCorruption();
+    }
+
     if (m_cartridge)
     {
         m_cartridge->PpuClock();
@@ -64,7 +78,6 @@ void PPU::Clock()
         BeginFrame();
     }
 
-    const bool renderingScanline = m_scanline >= -1 && m_scanline < 240;
     const bool backgroundFetchCycle =
         (m_cycle >= 1 && m_cycle <= 256) ||
         (m_cycle >= 321 && m_cycle <= 336);
@@ -74,6 +87,7 @@ void PPU::Clock()
     {
         RenderBackgroundPixel(m_scanline, m_cycle - 1);
         RenderSpritePixel(m_scanline, m_cycle - 1);
+        ClockSpriteUnits();
     }
 
     if (renderingScanline && RenderingEnabled())
@@ -86,10 +100,6 @@ void PPU::Clock()
         {
             IncrementY(m_vramAddress);
         }
-        if (m_cycle == 257)
-        {
-            CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
-        }
         if (m_scanline == -1 && m_cycle >= 280 && m_cycle <= 304)
         {
             CopyVerticalBits(m_vramAddress, m_temporaryAddress);
@@ -98,30 +108,36 @@ void PPU::Clock()
         if (m_cycle >= 257 && m_cycle <= 320)
         {
             // Sprite tile loading interval: OAMADDR is held at zero, and
-            // each of the eight slots consumes eight dots (garbage
-            // nametable fetch, garbage attribute fetch, then the two
-            // pattern bytes at (cycle - 257) & 7 == 4).
+            // each of the eight slots consumes eight dots (two garbage
+            // nametable fetches, then the two pattern bytes at
+            // (cycle - 257) & 7 == 4).
             m_oamAddress = 0;
+            const std::uint8_t fetchDot =
+                static_cast<std::uint8_t>(m_cycle - 257);
+            const std::uint8_t slot = fetchDot >> 3;
+            const std::uint8_t phase = fetchDot & 0x07;
+            const std::uint8_t byte = phase < 3 ? phase : 3;
+            m_oamCopyBuffer = m_secondaryOam[slot * 4 + byte];
+            m_oamCopyBufferIsAttribute = byte == 2;
             if (m_cycle == 257)
             {
-                m_spriteFetchIndex = 0;
                 if (m_scanline == -1)
                 {
-                    // No evaluation ran on the pre-render line, so sprites
-                    // are never displayed on scanline 0.
-                    m_scanlineSpriteCount = 0;
+                    // The pre-render line does not run normal evaluation,
+                    // but its fetch interval reuses secondary OAM and tests
+                    // sprite range as scanline 261 & $FF == 5. This can put
+                    // preserved sprite data into the shifters for scanline 0.
+                    m_scanlineSpriteCount = 8;
+                    m_sprite0Visible = false;
                 }
             }
             switch ((m_cycle - 257) & 0x07)
             {
             case 0:
-                PpuRead(0x2000 | (m_vramAddress & 0x0FFF));
+                ReadRenderingBus(0x2000 | (m_vramAddress & 0x0FFF));
                 break;
             case 2:
-                PpuRead(0x23C0 |
-                        (m_vramAddress & 0x0C00) |
-                        ((m_vramAddress >> 4) & 0x0038) |
-                        ((m_vramAddress >> 2) & 0x0007));
+                ReadRenderingBus(0x2000 | (m_vramAddress & 0x0FFF));
                 break;
             case 4:
                 FetchSpritePatternLow();
@@ -134,10 +150,37 @@ void PPU::Clock()
             }
         }
 
+        if (m_cycle == 257)
+        {
+            // The first garbage nametable fetch above observes the old v;
+            // the horizontal scroll bits are reloaded from t afterwards.
+            CopyHorizontalBits(m_vramAddress, m_temporaryAddress);
+        }
+
+        if (m_cycle >= 321 && m_cycle <= 340)
+        {
+            // The secondary-OAM address wraps after the eighth fetch slot;
+            // byte zero remains on the internal OAM bus through HBlank.
+            m_oamCopyBuffer = m_secondaryOam[0];
+            m_oamCopyBufferIsAttribute = false;
+        }
+
         if (m_cycle == 337 || m_cycle == 339)
         {
             // The two dummy nametable fetches that end the scanline.
-            PpuRead(0x2000 | (m_vramAddress & 0x0FFF));
+            ReadRenderingBus(0x2000 | (m_vramAddress & 0x0FFF));
+        }
+        if (m_cycle == 339)
+        {
+            // Fetching loads each X counter in a halted state. Dot 339 is
+            // the separate enable pulse that starts nonzero counters; if
+            // forced blank covers this dot they remain halted and output
+            // their stale shifters as soon as rendering resumes.
+            for (std::size_t slot = 0; slot < m_scanlineSpriteCount; ++slot)
+            {
+                auto& sprite = m_scanlineSprites[slot];
+                sprite.counterCounting = sprite.xCounter != 0;
+            }
         }
     }
 
@@ -165,6 +208,14 @@ void PPU::Clock()
     }
 
     ClockPendingVramAddressUpdate();
+    if (ppuDataBusCollisionActive)
+    {
+        // A collision belongs to one physical dot. ReadRenderingBus may
+        // already have consumed it; otherwise the dot had no collapsed
+        // external read and the feedback pulse simply expires.
+        m_ppuDataBusCollisionPending = false;
+    }
+    ClockPendingPpuDataRead();
 
     const bool skipOddFrameDot =
         m_scanline == -1 && m_cycle == 339 && m_oddFrame &&
@@ -203,6 +254,12 @@ PPU::ScrollAddressState PPU::AddressState() const
 
 void PPU::RenderBackground()
 {
+    const std::uint8_t savedEffectiveRenderingMask = m_effectiveRenderingMask;
+    const std::uint8_t savedPendingRenderingMask = m_pendingRenderingMask;
+    const std::uint8_t savedRenderingMaskUpdateDelay = m_renderingMaskUpdateDelay;
+    m_effectiveRenderingMask = m_mask & 0x18;
+    m_renderingMaskUpdateDelay = 0;
+
     BeginFrame();
 
     const std::uint16_t savedVramAddress = m_vramAddress;
@@ -226,6 +283,9 @@ void PPU::RenderBackground()
     m_cycle = savedCycle;
     m_vramAddress = savedVramAddress;
     m_backgroundFetch = savedBackgroundFetch;
+    m_effectiveRenderingMask = savedEffectiveRenderingMask;
+    m_pendingRenderingMask = savedPendingRenderingMask;
+    m_renderingMaskUpdateDelay = savedRenderingMaskUpdateDelay;
 }
 
 void PPU::BeginFrame()
@@ -294,7 +354,7 @@ void PPU::PrimeBackgroundFetch()
 
 void PPU::FetchNametableByte()
 {
-    m_backgroundFetch.nametableByte = PpuRead(
+    m_backgroundFetch.nametableByte = ReadRenderingBus(
         0x2000 | (m_vramAddress & 0x0FFF));
 }
 
@@ -306,14 +366,14 @@ void PPU::FetchAttribute()
         ((m_vramAddress >> 2) & 0x0007);
     const std::uint8_t shift =
         ((m_vramAddress >> 4) & 0x04) | (m_vramAddress & 0x02);
-    m_backgroundFetch.attribute = (PpuRead(address) >> shift) & 0x03;
+    m_backgroundFetch.attribute = (ReadRenderingBus(address) >> shift) & 0x03;
 }
 
 void PPU::FetchPatternLow()
 {
     const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
     const std::uint16_t row = (m_vramAddress >> 12) & 0x0007;
-    m_backgroundFetch.lowPlane = PpuRead(
+    m_backgroundFetch.lowPlane = ReadRenderingBus(
         patternBase + m_backgroundFetch.nametableByte * 16 + row);
 }
 
@@ -321,8 +381,25 @@ void PPU::FetchPatternHigh()
 {
     const std::uint16_t patternBase = (m_control & 0x10) ? 0x1000 : 0x0000;
     const std::uint16_t row = (m_vramAddress >> 12) & 0x0007;
-    m_backgroundFetch.highPlane = PpuRead(
+    m_backgroundFetch.highPlane = ReadRenderingBus(
         patternBase + m_backgroundFetch.nametableByte * 16 + row + 8);
+}
+
+std::uint8_t PPU::ReadRenderingBus(std::uint16_t address)
+{
+    if (m_ppuDataBusCollisionPending &&
+        m_ppuDataBusCollisionDelay == 0)
+    {
+        // ALE and /RD can overlap because the lower eight external pins are
+        // multiplexed between address and data. In the stable collision
+        // case, the previous data byte feeds back into the octal address
+        // latch while the upper address bits still come from the PAR.
+        address = static_cast<std::uint16_t>(
+            (address & 0x3F00) | m_renderingReadBus);
+        m_ppuDataBusCollisionPending = false;
+    }
+    m_renderingReadBus = PpuRead(address);
+    return m_renderingReadBus;
 }
 
 void PPU::LoadBackgroundShifters()
@@ -342,7 +419,12 @@ void PPU::LoadBackgroundShifters()
 void PPU::ShiftBackgroundShifters()
 {
     m_backgroundFetch.patternShiftLow <<= 1;
-    m_backgroundFetch.patternShiftHigh <<= 1;
+    // The RP2C02's two pattern shifters have opposite serial inputs:
+    // plane 0 shifts in zero, while plane 1 shifts in one. Normally the
+    // freshly fetched tile replaces these bits every eight dots, but the
+    // distinction is observable when rendering is toggled around the load.
+    m_backgroundFetch.patternShiftHigh =
+        static_cast<std::uint16_t>((m_backgroundFetch.patternShiftHigh << 1) | 1);
     m_backgroundFetch.attributeShiftLow <<= 1;
     m_backgroundFetch.attributeShiftHigh <<= 1;
 }
@@ -351,7 +433,7 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
 {
     const std::uint32_t backdrop = ColorFromPaletteIndex(PpuRead(0x3F00));
 
-    if ((m_mask & 0x08) == 0)
+    if ((m_effectiveRenderingMask & 0x08) == 0)
     {
         return;
     }
@@ -377,12 +459,17 @@ void PPU::RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX)
 
 void PPU::RenderSprites()
 {
+    const std::uint8_t savedEffectiveRenderingMask = m_effectiveRenderingMask;
+    m_effectiveRenderingMask = m_mask & 0x18;
+    m_bulkSpriteRendering = true;
     for (std::uint16_t screenY = 0; screenY < 240; ++screenY)
     {
         EvaluateSpritesForScanline(screenY);
         FetchScanlineSprites(screenY);
         RenderSpritesScanline(screenY);
     }
+    m_bulkSpriteRendering = false;
+    m_effectiveRenderingMask = savedEffectiveRenderingMask;
 }
 
 void PPU::RenderSpritesScanline(std::uint16_t screenY)
@@ -475,6 +562,7 @@ void PPU::ProcessSpriteEvaluation()
         // Dots 1-64: the secondary OAM is cleared to $FF, one byte every
         // two dots.
         m_oamCopyBuffer = 0xFF;
+        m_oamCopyBufferIsAttribute = false;
         m_secondaryOam[(m_cycle - 1) >> 1] = 0xFF;
         return;
     }
@@ -491,6 +579,7 @@ void PPU::ProcessSpriteEvaluation()
             SpriteEvaluationStart();
         }
         m_oamCopyBuffer = m_oam[m_oamAddress];
+        m_oamCopyBufferIsAttribute = (m_oamAddress & 0x03) == 0x02;
         return;
     }
 
@@ -508,10 +597,22 @@ void PPU::ProcessSpriteEvaluation()
     if (m_oamCopyDone)
     {
         m_spriteAddrH = (m_spriteAddrH + 1) & 0x3F;
+        // With a full secondary OAM, the even phase reads its wrapped byte
+        // zero. If primary OAM wrapped first, the internal bus instead keeps
+        // the terminal primary byte that ended evaluation.
         if (m_secondaryOamAddress >= 0x20)
         {
-            // With writes disabled, secondary OAM writes become reads.
-            m_oamCopyBuffer = m_secondaryOam[m_secondaryOamAddress & 0x1F];
+            const std::uint8_t secondaryAddress =
+                m_secondaryOamAddress & 0x1F;
+            m_oamCopyBuffer = m_secondaryOam[secondaryAddress];
+            m_oamCopyBufferIsAttribute =
+                (secondaryAddress & 0x03) == 0x02;
+        }
+        else
+        {
+            m_oamCopyBuffer = m_oamCopyDoneBuffer;
+            m_oamCopyBufferIsAttribute =
+                m_oamCopyDoneBufferIsAttribute;
         }
     }
     else
@@ -548,6 +649,9 @@ void PPU::ProcessSpriteEvaluation()
                     if (m_spriteAddrH == 0)
                     {
                         m_oamCopyDone = true;
+                        m_oamCopyDoneBuffer = m_oamCopyBuffer;
+                        m_oamCopyDoneBufferIsAttribute =
+                            m_oamCopyBufferIsAttribute;
                     }
                 }
 
@@ -578,6 +682,9 @@ void PPU::ProcessSpriteEvaluation()
                 if (m_spriteAddrH == 0)
                 {
                     m_oamCopyDone = true;
+                    m_oamCopyDoneBuffer = m_oamCopyBuffer;
+                    m_oamCopyDoneBufferIsAttribute =
+                        m_oamCopyBufferIsAttribute;
                 }
             }
         }
@@ -585,7 +692,11 @@ void PPU::ProcessSpriteEvaluation()
         {
             // Eight sprites have been found: check for overflow and
             // reproduce the hardware bug.
-            m_oamCopyBuffer = m_secondaryOam[m_secondaryOamAddress & 0x1F];
+            const std::uint8_t secondaryAddress =
+                m_secondaryOamAddress & 0x1F;
+            m_oamCopyBuffer = m_secondaryOam[secondaryAddress];
+            m_oamCopyBufferIsAttribute =
+                (secondaryAddress & 0x03) == 0x02;
 
             if (m_oamCopyDone)
             {
@@ -606,16 +717,16 @@ void PPU::ProcessSpriteEvaluation()
                 {
                     m_overflowBugCounter = 3;
                 }
-                else if (m_overflowBugCounter > 0)
+                else if (--m_overflowBugCounter == 0)
                 {
-                    --m_overflowBugCounter;
-                    if (m_overflowBugCounter == 0)
-                    {
-                        // After "fetching" the overflowed sprite the
-                        // evaluator realigns and only dummy reads remain.
-                        m_oamCopyDone = true;
-                        m_spriteAddrL = 0;
-                    }
+                    // Once the extra sprite's remaining bytes have been
+                    // consumed, the low counter realigns and evaluation
+                    // continues as failed copies from successive sprites.
+                    m_oamCopyDone = true;
+                    m_oamCopyDoneBuffer = m_oamCopyBuffer;
+                    m_oamCopyDoneBufferIsAttribute =
+                        m_oamCopyBufferIsAttribute;
+                    m_spriteAddrL = 0;
                 }
             }
             else
@@ -627,6 +738,9 @@ void PPU::ProcessSpriteEvaluation()
                 if (m_spriteAddrH == 0)
                 {
                     m_oamCopyDone = true;
+                    m_oamCopyDoneBuffer = m_oamCopyBuffer;
+                    m_oamCopyDoneBufferIsAttribute =
+                        m_oamCopyBufferIsAttribute;
                 }
             }
         }
@@ -660,18 +774,33 @@ void PPU::SpriteEvaluationEnd()
 
 void PPU::FetchSpritePatternLow()
 {
-    const std::size_t slot = m_spriteFetchIndex;
+    // Derive the slot from the physical fetch phase. Rendering can be
+    // disabled at dot 257 and re-enabled part-way through dots 257-320;
+    // retaining the previous scanline's software counter in that case can
+    // address a ninth secondary-OAM entry even though hardware always has
+    // exactly eight fetch slots.
+    const std::size_t slot = static_cast<std::size_t>(
+        (m_cycle - 257) >> 3);
     const std::uint8_t spriteY = m_secondaryOam[slot * 4];
     const std::uint8_t tileIndex = m_secondaryOam[slot * 4 + 1];
     const std::uint8_t attributes = m_secondaryOam[slot * 4 + 2];
     const std::uint8_t spriteX = m_secondaryOam[slot * 4 + 3];
+    ScanlineSprite& scanlineSprite = m_scanlineSprites[slot];
+    scanlineSprite.x = spriteX;
+    scanlineSprite.xCounter = spriteX;
+    scanlineSprite.counterCounting = false;
 
     const std::uint16_t spriteHeight = (m_control & 0x20) ? 16 : 8;
-    if (slot < m_scanlineSpriteCount && spriteY < 240 && m_scanline >= 0)
+    const std::int16_t evaluationScanline =
+        m_scanline == -1 ? 5 : m_scanline;
+    if (slot < m_scanlineSpriteCount && spriteY < 240 &&
+        evaluationScanline >= spriteY &&
+        evaluationScanline < spriteY + spriteHeight)
     {
         // The slot was fetched during scanline N for display on scanline
         // N+1; the row inside the sprite is N - y.
-        std::uint16_t patternRow = m_scanline - spriteY;
+        std::uint16_t patternRow =
+            static_cast<std::uint16_t>(evaluationScanline - spriteY);
         if ((attributes & 0x80) != 0)
         {
             patternRow = spriteHeight - 1 - patternRow;
@@ -697,13 +826,26 @@ void PPU::FetchSpritePatternLow()
             m_spritePatternAddress = patternBase + tileIndex * 16 + patternRow;
         }
 
-        ScanlineSprite& scanlineSprite = m_scanlineSprites[slot];
+        m_scanlineSpritePatternValid[slot] = true;
         scanlineSprite.index = 0;
         scanlineSprite.x = spriteX;
         scanlineSprite.attributes = attributes;
-        scanlineSprite.lowPlane = PpuRead(m_spritePatternAddress);
+        scanlineSprite.lowPlane = ReadRenderingBus(m_spritePatternAddress);
+        if (m_scanline == -1 && slot == 0)
+        {
+            m_sprite0Visible = true;
+        }
         return;
     }
+
+    // Sprite evaluation may have selected this secondary-OAM entry while
+    // PPUCTRL still described a 16-pixel sprite. If software changes to
+    // 8-pixel sprites before the pattern fetch, the slot remains allocated
+    // but its output shifters are loaded transparent. Do not leave either
+    // plane from the preceding scanline in the software representation.
+    m_scanlineSpritePatternValid[slot] = false;
+    m_scanlineSprites[slot].lowPlane = 0;
+    m_scanlineSprites[slot].highPlane = 0;
 
     // Unused slots fetch the transparent tile $FF. Its two planes still
     // occupy distinct PPU fetch phases and remain mapper-bus visible.
@@ -717,27 +859,29 @@ void PPU::FetchSpritePatternLow()
             (m_control & 0x08) ? 0x1000 : 0x0000;
         m_spritePatternAddress = patternBase + 0xFF * 16;
     }
-    PpuRead(m_spritePatternAddress);
+    ReadRenderingBus(m_spritePatternAddress);
 }
 
 void PPU::FetchSpritePatternHigh()
 {
-    if (m_spriteFetchIndex < m_scanlineSpriteCount)
+    const std::size_t slot = static_cast<std::size_t>(
+        (m_cycle - 257) >> 3);
+    if (slot < m_scanlineSpriteCount &&
+        m_scanlineSpritePatternValid[slot])
     {
-        m_scanlineSprites[m_spriteFetchIndex].highPlane =
-            PpuRead(m_spritePatternAddress + 8);
+        m_scanlineSprites[slot].highPlane =
+            ReadRenderingBus(m_spritePatternAddress + 8);
     }
     else
     {
-        PpuRead(m_spritePatternAddress + 8);
+        ReadRenderingBus(m_spritePatternAddress + 8);
     }
 
-    ++m_spriteFetchIndex;
 }
 
 void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
 {
-    if ((m_mask & 0x10) == 0 ||
+    if ((m_effectiveRenderingMask & 0x10) == 0 ||
         (screenX < 8 && (m_mask & 0x04) == 0))
     {
         return;
@@ -748,14 +892,25 @@ void PPU::RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX)
     for (std::size_t slot = 0; slot < m_scanlineSpriteCount; ++slot)
     {
         const ScanlineSprite& sprite = m_scanlineSprites[slot];
-        if (screenX < sprite.x || screenX >= sprite.x + 8)
+        std::uint8_t bit = 0;
+        if (m_bulkSpriteRendering)
         {
-            continue;
+            if (screenX < sprite.x || screenX >= sprite.x + 8)
+            {
+                continue;
+            }
+            const std::uint8_t column = screenX - sprite.x;
+            bit = (sprite.attributes & 0x40) != 0 ? column : 7 - column;
+        }
+        else
+        {
+            if (sprite.counterCounting)
+            {
+                continue;
+            }
+            bit = (sprite.attributes & 0x40) != 0 ? 0 : 7;
         }
 
-        const std::uint8_t column = screenX - sprite.x;
-        const std::uint8_t bit =
-            (sprite.attributes & 0x40) != 0 ? column : 7 - column;
         const std::uint8_t color =
             ((sprite.highPlane >> bit) & 0x01) << 1 |
             ((sprite.lowPlane >> bit) & 0x01);
@@ -808,6 +963,38 @@ std::optional<std::uint8_t> PPU::DebugPeekCpuRegister(std::uint16_t address) con
     }
 }
 
+void PPU::ClockSpriteUnits()
+{
+    for (std::size_t slot = 0; slot < m_scanlineSpriteCount; ++slot)
+    {
+        ScanlineSprite& sprite = m_scanlineSprites[slot];
+        if (sprite.counterCounting)
+        {
+            if (sprite.xCounter > 0 && --sprite.xCounter == 0)
+            {
+                sprite.counterCounting = false;
+            }
+            continue;
+        }
+
+        // X counters keep running through forced blank, but the pattern
+        // shifters themselves are gated by either rendering enable.
+        if (RenderingEnabled())
+        {
+            if ((sprite.attributes & 0x40) != 0)
+            {
+                sprite.lowPlane >>= 1;
+                sprite.highPlane >>= 1;
+            }
+            else
+            {
+                sprite.lowPlane <<= 1;
+                sprite.highPlane <<= 1;
+            }
+        }
+    }
+}
+
 std::uint8_t PPU::CpuRead(std::uint16_t address)
 {
     std::uint8_t data = m_openBusLatch;
@@ -822,42 +1009,90 @@ std::uint8_t PPU::CpuRead(std::uint16_t address)
         {
             m_suppressVblank = true;
         }
-        // Only the top three status bits are driven; the low five bits
-        // keep their decayed open-bus value, and the decay timer keeps
-        // running (blargg ppu_open_bus).
-        data = (m_status & 0xE0) | (m_openBusLatch & 0x1F);
+        // The VBlank flag is latched when the CPU read begins, but the two
+        // sprite flags remain connected until M2 falls. In this scheduler a
+        // read beginning with pre-render dot 1 pending spans the physical
+        // dot-1 clear, so it returns old VBlank with cleared sprite flags.
+        // Keep the physical flags intact until Clock() executes that dot.
+        data = (m_status & 0x80) |
+               ((m_scanline == -1 && m_cycle == 1) ? 0 : (m_status & 0x60)) |
+               (m_openBusLatch & 0x1F);
         m_status &= ~0x80;
         m_writeLatch = false;
         m_openBusLatch =
             (m_openBusLatch & 0x1F) | (data & 0xE0);
         return data;
     case 0x0004:
-        data = m_oam[m_oamAddress];
-        // Bits 2-4 of an attribute byte do not exist on the chip.
-        if ((m_oamAddress & 0x03) == 0x02)
+        if (m_scanline >= 0 && m_scanline < 240 && RenderingEnabled())
         {
-            data &= 0xE3;
+            // During rendering $2004 exposes the internal evaluation/fetch
+            // bus. Attribute bits were already absent when primary OAM was
+            // written; do not mask a secondary-OAM byte merely because the
+            // current fetch phase happens to address an attribute slot.
+            // Empty secondary OAM must therefore remain $FF, not $E3.
+            data = m_oamCopyBuffer;
+        }
+        else
+        {
+            data = m_oam[m_oamAddress];
+            // Bits 2-4 of an attribute byte do not exist on the chip.
+            if ((m_oamAddress & 0x03) == 0x02)
+            {
+                data &= 0xE3;
+            }
         }
         break;
     case 0x0007:
     {
         const std::uint16_t vramAddress = m_vramAddress;
-        const std::uint8_t value = PpuRead(vramAddress);
-        IncrementVramAddress();
+        const bool renderingAccess =
+            RenderingEnabled() && m_scanline >= -1 && m_scanline < 240;
+        const std::uint8_t value = renderingAccess && vramAddress < 0x3F00
+            ? 0
+            : PpuRead(vramAddress);
+        if (renderingAccess)
+        {
+            m_ppuDataIncrementPending = true;
+            m_ppuDataIncrementDelay = 4;
+        }
+        else
+        {
+            IncrementVramAddress();
+        }
 
         if (vramAddress >= 0x3F00)
         {
             m_dataBuffer = PpuRead(vramAddress - 0x1000);
             // Palette RAM is six bits wide: the top two bits keep their
             // decayed open-bus value (blargg ppu_open_bus).
-            data = (value & 0x3F) | (m_openBusLatch & 0xC0);
+            const std::uint8_t paletteMask =
+                (m_mask & 0x01) != 0 ? 0x30 : 0x3F;
+            data = (value & paletteMask) | (m_openBusLatch & 0xC0);
             m_openBusLatch = data;
             return data;
         }
         else
         {
             data = m_dataBuffer;
-            m_dataBuffer = value;
+            if (renderingAccess)
+            {
+                // $2007 starts its own external-read state machine. The
+                // rendering cadence already owns the multiplexed address /
+                // data pins. CpuRead() is invoked at the beginning of the
+                // CPU bus cycle; M2 falls after the console has clocked its
+                // three PPU dots. The read-state machine then reaches its
+                // first stable cadence sample on the following PPU dot in
+                // this whole-dot model, rather than reading v's logical
+                // address immediately.
+                m_ppuDataReadPending = true;
+                m_ppuDataReadDelay = 4;
+                m_ppuDataBusCollisionPending = true;
+                m_ppuDataBusCollisionDelay = 5;
+            }
+            else
+            {
+                m_dataBuffer = value;
+            }
         }
         break;
     }
@@ -887,12 +1122,34 @@ void PPU::CpuWrite(std::uint16_t address, std::uint8_t data)
         break;
     case 0x0001:
         m_mask = data;
+        m_pendingRenderingMask = data & 0x18;
+        // PPUMASK's rendering-enable signals pass through several PPU
+        // latches. With the console's fixed CPU/PPU phase, four upcoming
+        // dot clocks reproduce the observed roughly 3-4 dot latency.
+        m_renderingMaskUpdateDelay = 4;
         break;
     case 0x0003:
         m_oamAddress = data;
         break;
     case 0x0004:
-        m_oam[m_oamAddress++] = data;
+        if (m_scanline >= -1 && m_scanline < 240 && RenderingEnabled())
+        {
+            // During rendering OAM writes are blocked. The internal address
+            // still advances to the next row and loses its low two bits.
+            m_oamAddress = static_cast<std::uint8_t>(
+                (m_oamAddress + 4) & 0xFC);
+        }
+        else
+        {
+            if ((m_oamAddress & 0x03) == 0x02)
+            {
+                // Attribute bits 2-4 have no storage cells. Mask on the
+                // physical write so sprite evaluation sees the same value
+                // that a later CPU read exposes.
+                data &= 0xE3;
+            }
+            m_oam[m_oamAddress++] = data;
+        }
         break;
     case 0x0005:
         if (!m_writeLatch)
@@ -1051,6 +1308,17 @@ std::uint8_t PPU::PaletteAddress(std::uint16_t address) const
 
 void PPU::IncrementVramAddress()
 {
+    if (RenderingEnabled() && m_scanline >= -1 && m_scanline < 240)
+    {
+        // During an active rendering scanline the ordinary +1/+32 input is
+        // disconnected. A CPU access to $2007 clocks both scroll counters,
+        // exactly like the dot-256 vertical increment and a tile-boundary
+        // horizontal increment occurring together (usually v += $1001).
+        IncrementCoarseX(m_vramAddress);
+        IncrementY(m_vramAddress);
+        return;
+    }
+
     m_vramAddress += (m_control & 0x04) ? 32 : 1;
     m_vramAddress &= 0x3FFF;
 }
@@ -1067,6 +1335,99 @@ void PPU::ClockPendingVramAddressUpdate()
     {
         m_vramAddress = m_pendingVramAddress;
     }
+}
+
+void PPU::ClockPendingPpuDataRead()
+{
+    if (m_ppuDataReadPending && m_ppuDataReadDelay != 0 &&
+        --m_ppuDataReadDelay == 0)
+    {
+        m_dataBuffer = m_renderingReadBus;
+        m_ppuDataReadPending = false;
+    }
+
+    if (m_ppuDataIncrementPending && m_ppuDataIncrementDelay != 0 &&
+        --m_ppuDataIncrementDelay == 0)
+    {
+        IncrementVramAddress();
+        m_ppuDataIncrementPending = false;
+    }
+
+    if (m_ppuDataBusCollisionPending &&
+        m_ppuDataBusCollisionDelay != 0)
+    {
+        --m_ppuDataBusCollisionDelay;
+    }
+}
+
+void PPU::ClockPendingRenderingMaskUpdate()
+{
+    if (m_renderingMaskUpdateDelay == 0)
+    {
+        return;
+    }
+
+    if (--m_renderingMaskUpdateDelay == 0)
+    {
+        const bool wasRendering = RenderingEnabled();
+        m_effectiveRenderingMask = m_pendingRenderingMask;
+        if (wasRendering && !RenderingEnabled() &&
+            m_scanline >= -1 && m_scanline < 240)
+        {
+            // Turning both rendering pipelines off during sprite activity
+            // preserves the current secondary-OAM address as a corruption
+            // seed. Primary OAM is not changed until rendering is enabled
+            // again on a pre-render or visible scanline.
+            m_oamCorruptionPending = true;
+            m_oamCorruptionRow = OamCorruptionRow();
+        }
+    }
+}
+
+std::uint8_t PPU::OamCorruptionRow() const
+{
+    if (m_cycle >= 1 && m_cycle <= 64)
+    {
+        // Secondary OAM advances once per clear write. Which side of the
+        // write a CPU-visible transition lands on depends on the CPU/PPU
+        // phase; the console's fixed phase observes the post-write value.
+        return static_cast<std::uint8_t>((m_cycle >> 1) & 0x1F);
+    }
+
+    if (m_cycle >= 65 && m_cycle <= 256)
+    {
+        // During evaluation a partial sprite is completed to the next
+        // four-byte secondary-OAM boundary before its row is selected.
+        return static_cast<std::uint8_t>(
+            (m_secondaryOamAddress + 3) & 0x1C);
+    }
+
+    if (m_cycle >= 257 && m_cycle <= 320)
+    {
+        const std::uint8_t fetchDot =
+            static_cast<std::uint8_t>(m_cycle - 257);
+        const std::uint8_t slotBase =
+            static_cast<std::uint8_t>((fetchDot >> 3) * 4);
+        const std::uint8_t phase = fetchDot & 0x07;
+        const std::uint8_t withinSlot = phase <= 2 ? phase + 1
+                                           : phase == 7 ? 4
+                                                        : 3;
+        return static_cast<std::uint8_t>((slotBase + withinSlot) & 0x1F);
+    }
+
+    return 0;
+}
+
+void PPU::ApplyPendingOamCorruption()
+{
+    const std::size_t primaryOffset =
+        static_cast<std::size_t>(m_oamCorruptionRow) * 8;
+    for (std::size_t byte = 0; byte < 8; ++byte)
+    {
+        m_oam[primaryOffset + byte] = m_oam[byte];
+    }
+    m_secondaryOam[m_oamCorruptionRow & 0x1F] = m_secondaryOam[0];
+    m_oamCorruptionPending = false;
 }
 
 void PPU::IncrementCoarseX(std::uint16_t& address) const
@@ -1121,7 +1482,7 @@ void PPU::CopyVerticalBits(std::uint16_t& destination,
 
 bool PPU::RenderingEnabled() const
 {
-    return (m_mask & 0x18) != 0;
+    return m_effectiveRenderingMask != 0;
 }
 
 

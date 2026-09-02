@@ -1575,6 +1575,7 @@ int main(int argc, char* argv[])
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Could not load ROM: %s", romPath.string().c_str());
             return;
         }
+        newConsole->SecondaryZapper().SetConnected(zapperCrosshair);
         const std::filesystem::path savePath = SavePathForRom(romPath);
         const bool saveLoadedOrAbsent = LoadBatterySave(*newConsole, savePath);
         console = std::move(newConsole);

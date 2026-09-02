@@ -4,6 +4,126 @@ This file is the authoritative handoff for work in this repository. Read it
 before changing emulator code. It describes the code as it exists now, not an
 aspirational design.
 
+## Active handoff: AccuracyCoin complete; Mapper 7 ready (2026-09-02)
+
+The longer-running task is to improve hardware accuracy against 100thCoin's
+`AccuracyCoin` ROM. The user's first run passed **97/141** tests. The current
+uncommitted worktree's clean runner checkpoint passes **141/141** as of
+2026-09-02. Mapper 7 is implemented and regression-tested, but Battletoads
+itself still needs the user's gameplay check. The combined worktree is an
+intermediate checkpoint: **do not commit or push it as-is**.
+
+The local suite is ignored under `roms/nes-test-roms/AccuracyCoin`; its ROM and
+repository must remain user-local. `tools/accuracy_coin_runner.cpp` and its
+CMake target are new tracked-source candidates. The runner presses Start,
+waits for all 141 cases, calculates the result from `$0400-$0492`, prints each
+failed case and captures selected diagnostic RAM. Its nonzero exit code while
+any case remains failing is intentional.
+
+### Changes already present but not committed
+
+Parent DendyForge worktree:
+
+* split the CPU-visible external data-bus latch from the internal 2A03 I/O
+  latch, including controller/open-bus behavior and side-effect-free debugger
+  peeks;
+* replace the old immediate DMC callback/stall shortcut with a bus-owned,
+  cycle-stealing DMC/OAM DMA scheduler that can interleave both transfers;
+* make the controller strobe latch on the appropriate put phase and make an
+  unused Zapper port truly disconnected unless the frontend enables it;
+* tighten `$2004` rendering reads/writes and grayscale palette reads;
+* delay the `$4015` frame-IRQ clear to the relevant APU phase;
+* fix the DMC controller/external-bus merge used by DMA bus conflicts;
+* model normal and abort-only DMC fetches separately; both Explicit and
+  Implicit DMA Abort now pass;
+* schedule load DMC DMA on the phase-correct third/fourth CPU cycle after the
+  `$4015` write; `DMA + $2002 Read` now passes without regressing either abort
+  case;
+* make the background high pattern shifter's serial input one while preserving
+  all eight fetched pattern bits during a normal parallel reload. A discarded
+  bit-7 mask had erased the final pixel of every tile and caused visible
+  eight-pixel vertical bands in Battletoads; the focused regression now covers
+  that boundary while `BG Serial In` still passes;
+* separate the written PPUMASK value from its rendering-effective value and
+  delay rendering enable by four PPU clocks;
+* reuse pre-render secondary OAM for scanline zero sprite evaluation;
+* implement delayed primary-OAM row corruption after rendering is disabled
+  during sprite activity and later re-enabled; `OAM Corruption` now passes;
+* invalidate unfinished sprite pattern fetch slots when PPUCTRL changes sprite
+  height during fetch; `Suddenly Resize Sprite` now passes;
+* expose the internal OAM evaluation/fetch bus through `$2004`, including the
+  physical attribute-bit mask and terminal evaluation phases; `$2004 Stress`
+  now passes;
+* sample `$2002` sprite flags at CPU-read end while retaining VBlank from
+  read start; `$2002 Flag Timing` now passes;
+* make rendering-time `$2007` accesses clock both scroll counters at the
+  trailing phase, fill the read buffer from the shared rendering bus, model
+  ALE/read feedback and preserve the old-v fetch ordering at dot 257;
+  `$2007 Read w/ Rendering`, `$2007 Stress` and `ALE + Read` now pass;
+* replace absolute-X sprite output during per-dot rendering with the PPU's
+  X-counter/shift-register behavior: counters continue through forced blank,
+  pattern shifters pause, and dot 339 activates fetched counters; both stale
+  background/sprite shift-register tests now pass;
+* add/update Bus, APU, controller, PPU and Zapper unit coverage;
+* add the AccuracyCoin runner target and diagnostics;
+* add Mapper 7 (AxROM): 32 KiB PRG banking, bit-4 one-screen mirroring and
+  fixed 8 KiB CHR RAM, with focused mapper coverage and a Release app build.
+
+Forge6502 submodule worktree:
+
+* preserve high-byte unstable-store behavior after an RDY-stretched cycle;
+* perform the page-cross branch dummy read on the real uncorrected address;
+* make RTS cycle 6 read the pulled PC before incrementing it;
+* preserve interrupt polling across RDY stalls and implement the second poll
+  point of a page-crossing branch;
+* exclude BRK from the ordinary interrupt-poll cycle, choose the BRK vector
+  before the status push, and preserve late NMI hijack timing after the vector
+  has already been selected;
+* preserve an NMI edge arriving between IRQ recognition and interrupt entry so
+  it can hijack the IRQ vector; `NMI Overlap IRQ` now passes;
+* update the corresponding cycle-bus and RDY tests.
+
+All Forge6502 edits belong in `third_party/forge6502`. Once they are stable,
+run its standalone tests, commit and push that repository first, then update
+and commit the DendyForge submodule pointer.
+
+### Current AccuracyCoin checkpoint
+
+All **141/141** AccuracyCoin cases pass. The last six resolved cases were
+`$2002 Flag Timing`, `$2004 Stress`, `$2007 Read w/ Rendering`, `$2007 Stress`,
+`ALE + Read`, and the stale background/sprite shift-register cases. Keep the
+runner as a mandatory regression because these behaviors share dot-level PPU
+state and can regress together.
+
+### Where to resume
+
+1. Run game-facing checks, especially Battletoads (Mapper 7), scrolling games,
+   sprite-heavy scenes and save-backed titles, against the 141/141 build.
+2. Run the full Debug/Release ROM matrix below before splitting and committing
+   the deliberately combined worktree.
+3. Preserve the shared rendering-bus, trailing-edge `$2007`, dot-257 old-v,
+   and sprite-counter unit coverage when refactoring the PPU hot loop.
+
+### Required validation before committing
+
+Build both Debug and Release and run full CTest, the standalone Forge6502
+CTest, AccuracyCoin, all local blargg APU timing ROMs, `apu_mixer`, all PPU
+suites (especially `sprdma_and_dmc_dma`), and `git diff --check` in both
+repositories. The clean runner reproduced **141/141** on 2026-09-02.
+Standalone Forge6502 Debug tests pass (51/51). The parent Debug binary passed
+**189/189** test cases and 1572/1572 assertions on 2026-09-02 after the final
+AccuracyCoin PPU fixes. Mapper 7 focused
+coverage passes 4/4 test cases and 38/38 assertions; the Debug and Release apps
+both build. Focused DMC tests pass (4/4), the focused OAM-corruption unit passes,
+all local blargg APU timing ROMs pass (11/11), and `apu_mixer` passes (4/4)
+after the final DMC changes. Release full CTest, all PPU ROM suites and
+`git diff --check` in both repositories still need to run. **The final full
+regression matrix has not been run.**
+
+Preserve the user-owned untracked `blargg_apu_2005.07.30/` and `nestest.txt`.
+The parent worktree and Forge6502 submodule are deliberately dirty at this
+handoff; inspect `git diff` before continuing and do not discard these edits.
+
 ## Project purpose and language
 
 DendyForge is a C++20 emulator for the Dendy/NES platform. The project is
@@ -37,7 +157,7 @@ core/
   controller/   serial controller-port implementation
   ines/         iNES header types and reader
   cartridge/    cartridge data plus mapper dispatch
-  mapper/       mapper abstraction and Mappers 0, 1, 2
+  mapper/       mapper abstraction and Mappers 0, 1, 2, 3, 4, 7
 src/main.cpp    SDL3 + Dear ImGui library/settings/debugger overlay, event loop, texture upload and configurable keyboard mapping
 assets/fonts/   bundled Jura UI typeface and its SIL Open Font License
 tests/          doctest tests and versioned CPU test ROM fixtures
@@ -189,8 +309,8 @@ Important CPU rules:
 
 ## Cartridge, mapper, and bus status
 
-Mapper 0, Mapper 1 (MMC1), Mapper 2 (UxROM/UNROM), Mapper 3 (CNROM) and
-Mapper 4 (MMC3) are implemented. Mapper 0
+Mapper 0, Mapper 1 (MMC1), Mapper 2 (UxROM/UNROM), Mapper 3 (CNROM),
+Mapper 4 (MMC3), and Mapper 7 (AxROM) are implemented. Mapper 0
 maps 16 KiB or 32 KiB PRG. Mapper 1 implements the five-write serial port
 (first written bit becomes register bit 0), PRG modes 0-3, 4/8 KiB CHR bank
 modes, the bit-7 reset write (PRG mode forced to 3), bank wrap by masking to
@@ -530,11 +650,11 @@ When fixing frame timing, avoid changing DMA behavior unless a failing test
 demonstrates an interaction. A broad scheduler rewrite risks corrupting both
 working PPU and already passing APU mixer tests.
 
-### Cartridge and Mapper 1/2 handoff
+### Cartridge and mapper handoff
 
 Cartridge PRG-RAM is now used by diagnostic ROMs at `$6000-$7FFF`; the default
 for an iNES header declaring zero PRG-RAM remains one 8 KiB bank. The core
-currently supports only Mappers 0, 1 and 2. Mapper 2 contract:
+currently supports Mappers 0, 1, 2, 3, 4 and 7. Mapper 2 contract:
 
 ```text
 $8000-$BFFF  selected 16 KiB PRG bank
@@ -586,11 +706,24 @@ races are not implemented. Unit coverage is `tests/mapper/mapper4_tests.cpp`
 reload/disable/re-enable, and PRG-RAM protection); no MMC3 game regression
 has been run yet.
 
+Mapper 7 (AxROM) contract, implemented in `core/mapper/mapper7.cpp`:
+
+```text
+$8000-$FFFF       one switchable 32 KiB PRG-ROM window
+write bits 0-2    select the 32 KiB PRG bank (wrapped to available banks)
+write bit 4       clear = one-screen lower, set = one-screen upper
+PPU $0000-$1FFF   fixed writable 8 KiB CHR RAM
+```
+
+Focused coverage is `tests/mapper/mapper7_tests.cpp` (full-window banking,
+bank wrapping/ignored bits, live one-screen selection, and persistent CHR
+RAM). Battletoads gameplay is not confirmed yet.
+
 Do not special-case Jackal by filename. First inspect its iNES header and
 confirm the mapper/board, then implement the missing general hardware with
 small mapping tests. Possible future cartridge work includes trainer handling,
-NES 2.0 metadata, battery-backed PRG-RAM persistence and further mappers; none
-should be implied by the current Mapper 0/2 support.
+NES 2.0 metadata and further mappers; none should be implied by the current
+mapper set.
 
 #### Jackal root-cause diagnosis (2026-08-22)
 

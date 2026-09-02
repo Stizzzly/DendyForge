@@ -685,7 +685,7 @@ TEST_CASE("JSR pushes the return address before reading the target high byte")
     CHECK(machine.bus.memory[0x01FC] == 0x02);
 }
 
-TEST_CASE("RTS pulls the return address and increments internally")
+TEST_CASE("RTS dummy-reads the pulled return address before incrementing")
 {
     CycleMachine machine;
     machine.bus.memory[0x0200] = 0x20; // JSR $0500
@@ -698,8 +698,9 @@ TEST_CASE("RTS pulls the return address and increments internally")
 
     const int clocks = machine.RunInstruction();
 
-    // The sixth cycle only increments the pulled PC; no bus transaction.
-    CHECK(FormatLog(machine.bus.log) == "R0500 R0501 R01FB R01FC R01FD");
+    // The sixth cycle reads the pulled address before incrementing it.
+    CHECK(FormatLog(machine.bus.log) ==
+          "R0500 R0501 R01FB R01FC R01FD R0202");
     CHECK(clocks == 6);
     CHECK(machine.cpu.ProgramCounter() == 0x0203);
     CHECK(machine.cpu.StackPointer() == 0xFD);
@@ -841,7 +842,7 @@ TEST_CASE("A taken branch dummy-fetches the next opcode before redirecting")
     CHECK(machine.cpu.ProgramCounter() == 0x0207);
 }
 
-TEST_CASE("A taken branch crossing a page spends its fourth cycle internally")
+TEST_CASE("A taken branch crossing a page reads the uncorrected target")
 {
     CycleMachine machine;
     machine.bus.memory[0x0200] = 0xA9; // LDA #$01 clears Z
@@ -855,9 +856,9 @@ TEST_CASE("A taken branch crossing a page spends its fourth cycle internally")
 
     const int clocks = machine.RunInstruction();
 
-    CHECK(FormatLog(machine.bus.log) == "R02F0 R02F1 R02F2");
+    CHECK(FormatLog(machine.bus.log) == "R02F0 R02F1 R02F2 R0201");
     CHECK(clocks == 4);
-    CHECK(machine.bus.log.size() == 3);
+    CHECK(machine.bus.log.size() == 4);
     CHECK(machine.cpu.ProgramCounter() == 0x0301);
 }
 
@@ -875,9 +876,9 @@ TEST_CASE("A backward taken branch crossing a page also takes four cycles")
 
     const int clocks = machine.RunInstruction();
 
-    CHECK(FormatLog(machine.bus.log) == "R0300 R0301 R0302");
+    CHECK(FormatLog(machine.bus.log) == "R0300 R0301 R0302 R03FF");
     CHECK(clocks == 4);
-    CHECK(machine.bus.log.size() == 3);
+    CHECK(machine.bus.log.size() == 4);
     CHECK(machine.cpu.ProgramCounter() == 0x02FF);
 }
 
@@ -906,6 +907,32 @@ TEST_CASE("Hardware IRQ entry runs the seven-cycle sequence")
     CHECK(machine.cpu.ProgramCounter() == 0x0310);
     CHECK(machine.cpu.StackPointer() == 0xFA);
     CHECK(machine.cpu.GetFlag(dendyforge::CPU6502::Flags::I));
+}
+
+TEST_CASE("NMI arriving between IRQ recognition and entry hijacks the IRQ vector")
+{
+    CycleMachine machine;
+    machine.bus.memory[0x0200] = 0xEA; // NOP whose poll recognizes IRQ
+    machine.bus.memory[0xFFFA] = 0x50; // NMI vector $0450
+    machine.bus.memory[0xFFFB] = 0x04;
+    machine.bus.memory[0xFFFE] = 0x10; // IRQ vector $0310
+    machine.bus.memory[0xFFFF] = 0x03;
+    machine.cpu.SetProgramCounter(0x0200);
+    machine.cpu.SetFlag(dendyforge::CPU6502::Flags::I, false);
+
+    machine.cpu.IRQ();
+    CHECK(machine.RunInstruction() == 2);
+
+    // The IRQ is recognized, but entry has not started yet. An NMI edge
+    // in this boundary window remains pending and takes over its vector.
+    machine.cpu.NMI();
+    machine.bus.log.clear();
+    CHECK(machine.RunInstruction() == 7);
+
+    CHECK(FormatLog(machine.bus.log) ==
+          "R0201 R0201 W01FD=02 W01FC=01 W01FB=20 RFFFA RFFFB");
+    CHECK(machine.cpu.ProgramCounter() == 0x0450);
+    CHECK(machine.cpu.StackPointer() == 0xFA);
 }
 
 TEST_CASE("NMI entry uses the NMI vector and bypasses the I flag")

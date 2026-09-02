@@ -32,6 +32,7 @@ constexpr std::array<std::uint16_t, 16> DmcRateTable{
     428, 380, 340, 320, 286, 254, 226, 214,
     190, 160, 142, 128, 106, 85, 72, 54,
 };
+constexpr std::uint8_t DmcReloadDmaInhibitCycles = 4;
 
 }
 
@@ -44,6 +45,15 @@ void APU::Reset()
 
 void APU::Clock()
 {
+    // A $4015 read schedules the frame IRQ flag to clear on the next APU
+    // get phase. Two adjacent CPU reads can therefore both observe the flag
+    // when the first read happened on the opposite phase.
+    if (m_frameIrqClearPending && m_cpuCycleOdd)
+    {
+        m_frameIrqFlag = false;
+        m_frameIrqClearPending = false;
+    }
+
     // Decrement before the sequencer update so the cycle that (re)sets the
     // countdown does not also consume one tick of it.
     if (m_frameIrqLineCountdown != 0)
@@ -54,7 +64,18 @@ void APU::Clock()
     m_pulse2.ClockTimer();
     m_triangle.ClockTimer();
     m_noise.ClockTimer();
-    m_dmc.ClockTimer(m_dmcMemoryReader);
+    m_dmc.ClockTimer(!m_cpuCycleOdd);
+    if (m_dmcMemoryReader)
+    {
+        // Standalone APU users may service requests through a callback. The
+        // NES Bus leaves this unset and performs the observable DMA cycles.
+        std::uint16_t address = 0;
+        bool abortOnly = false;
+        if (m_dmc.ConsumeDmaRequest(address, abortOnly) && !abortOnly)
+        {
+            m_dmc.CompleteDma(m_dmcMemoryReader(address));
+        }
+    }
     ClockFrameCounter();
 
     m_samplePhase += SampleRate;
@@ -82,7 +103,7 @@ std::uint8_t APU::CpuRead(std::uint16_t address)
         (m_dmc.Active() ? 0x10 : 0x00) |
         (m_frameIrqFlag ? 0x40 : 0x00) |
         (m_dmc.IrqPending() ? 0x80 : 0x00);
-    m_frameIrqFlag = false;
+    m_frameIrqClearPending = true;
     return status;
 }
 
@@ -146,7 +167,7 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
         m_pulse2.SetEnabled((data & 0x02) != 0);
         m_triangle.SetEnabled((data & 0x04) != 0);
         m_noise.SetEnabled((data & 0x08) != 0);
-        m_dmc.SetEnabled((data & 0x10) != 0);
+        m_dmc.SetEnabled((data & 0x10) != 0, m_cpuCycleOdd);
         break;
     case 0x4017:
         m_pendingFiveStepFrameCounter = (data & 0x80) != 0;
@@ -154,13 +175,13 @@ void APU::CpuWrite(std::uint16_t address, std::uint8_t data)
         if (m_pendingFrameIrqInhibit)
         {
             m_frameIrqFlag = false;
+            m_frameIrqClearPending = false;
         }
         m_frameResetDelay = m_cpuCycleOdd ? 3 : 4;
         // A $4017 write on an odd CPU cycle applies the reset one cycle
-        // earlier but leaves the divider on the opposite half-cycle, so all
-        // sequencer events for this frame land two CPU cycles later
-        // (blargg 04.clock_jitter, 07.irq_flag_timing).
-        m_frameJitterOffset = m_cpuCycleOdd ? 2 : 0;
+        // The 3/4-cycle reset delay supplies the phase difference. The event
+        // table itself begins one CPU cycle after the raw divider position.
+        m_frameJitterOffset = 1;
         break;
     default:
         break;
@@ -177,14 +198,20 @@ void APU::SetDmcMemoryReader(DmcMemoryReader reader)
     m_dmcMemoryReader = std::move(reader);
 }
 
-bool APU::ConsumeDmcDmaStallCycle()
+bool APU::ConsumeDmcDmaRequest(std::uint16_t& address, bool& abortOnly)
 {
-    return m_dmc.ConsumeDmaStallCycle();
+    return m_dmc.ConsumeDmaRequest(address, abortOnly);
+}
+
+void APU::CompleteDmcDma(std::uint8_t value)
+{
+    m_dmc.CompleteDma(value);
 }
 
 bool APU::IrqPending() const
 {
-    return (m_frameIrqFlag && m_frameIrqLineCountdown == 0) ||
+    return (m_frameIrqFlag && !m_frameIrqInhibit &&
+            m_frameIrqLineCountdown == 0) ||
            m_dmc.IrqPending();
 }
 
@@ -529,31 +556,101 @@ void APU::DmcChannel::RestartSample()
     m_bytesRemaining = m_sampleLength;
 }
 
-void APU::DmcChannel::SetEnabled(bool enabled)
+void APU::DmcChannel::SetEnabled(bool enabled, bool cpuCycleOdd)
 {
     m_irqFlag = false;
     if (!enabled)
     {
+        if (!m_dmaInFlight && !m_dmaRequested && !m_sampleBufferEmpty &&
+            m_bitsRemaining == 1)
+        {
+            const bool normalReload = !cpuCycleOdd && m_timerCounter == 2;
+            const bool abortedReload =
+                (cpuCycleOdd && m_timerCounter == 2) ||
+                (!cpuCycleOdd && m_timerCounter == 4);
+            if (normalReload || abortedReload)
+            {
+                // The output divider advances on one APU phase only. A stop
+                // on the reload boundary preserves the normal DMA, while
+                // either adjacent phase produces the one-cycle abort pulse.
+                m_dmaRequested = true;
+                m_dmaAbortOnly = abortedReload;
+            }
+        }
         m_bytesRemaining = 0;
+        m_transferStartDelay = 0;
         return;
     }
 
     if (m_bytesRemaining == 0)
     {
         RestartSample();
+        // A load DMA attempts its first halt on the get half of the second
+        // APU cycle following the $4015 write. Depending on whether that
+        // write landed on put or get, this is the third or fourth CPU cycle.
+        // ClockTimer runs later in the write's own console cycle, so the
+        // countdown includes that first decrement.
+        m_transferStartDelay = cpuCycleOdd ? 3 : 4;
     }
 }
 
-void APU::DmcChannel::RefillSampleBuffer(const DmcMemoryReader& memoryReader)
+void APU::DmcChannel::RequestDma(bool loadRequest)
 {
-    if (!m_sampleBufferEmpty || m_bytesRemaining == 0 || !memoryReader)
+    if (!m_sampleBufferEmpty || m_bytesRemaining == 0 || m_dmaRequested ||
+        m_dmaInFlight)
     {
         return;
     }
 
-    m_sampleBuffer = memoryReader(m_currentAddress);
+    const bool reloadAllowedAtBoundary =
+        !loadRequest && m_dmaReloadInhibit == 2;
+    if (!loadRequest && m_dmaReloadInhibit != 0 &&
+        !reloadAllowedAtBoundary)
+    {
+        return;
+    }
+
+    m_dmaRequested = true;
+    m_dmaAbortOnly = false;
+}
+
+bool APU::DmcChannel::ConsumeDmaRequest(
+    std::uint16_t& address,
+    bool& abortOnly)
+{
+    if (!m_dmaRequested)
+    {
+        return false;
+    }
+    address = m_currentAddress;
+    abortOnly = m_dmaAbortOnly;
+    m_dmaRequested = false;
+    m_dmaAbortOnly = false;
+    m_dmaInFlight = !abortOnly;
+    return true;
+}
+
+void APU::DmcChannel::CompleteDma(std::uint8_t value)
+{
+    m_dmaInFlight = false;
+    // A reload request cannot be accepted in this cycle or either of the
+    // next two CPU cycles after a DMC get. ClockTimer consumes the first
+    // count later in this same console cycle.
+    m_dmaReloadInhibit = DmcReloadDmaInhibitCycles;
+    if (m_bytesRemaining == 0)
+    {
+        return;
+    }
+
+    // On older 2A03 revisions, a one-byte non-looping load that ends in the
+    // APU cycle immediately preceding an output reload arms an aborted reload
+    // DMA. The load DMA itself now lands on the phase-correct third/fourth
+    // CPU cycle, so both write alignments reach the same divider value here.
+    m_implicitAbortArmed = !m_loop && m_bytesRemaining == 1 &&
+        m_bitsRemaining == 1 && m_timerCounter == 4;
+
+    m_sampleBuffer = value;
     m_sampleBufferEmpty = false;
-    m_dmaStallCycles = 4;
     m_currentAddress = m_currentAddress == 0xFFFF ? 0x8000 : m_currentAddress + 1;
     --m_bytesRemaining;
     if (m_bytesRemaining == 0)
@@ -569,10 +666,32 @@ void APU::DmcChannel::RefillSampleBuffer(const DmcMemoryReader& memoryReader)
     }
 }
 
-void APU::DmcChannel::ClockTimer(const DmcMemoryReader& memoryReader)
+void APU::DmcChannel::ClockTimer(bool getCycle)
 {
-    if (m_timerCounter == 0)
+    if (m_transferStartDelay != 0 && --m_transferStartDelay == 0)
     {
+        RequestDma(true);
+    }
+
+    bool outputClock = false;
+    if (getCycle)
+    {
+        if (m_timerCounter <= 2)
+        {
+            m_timerCounter = 0;
+            outputClock = true;
+        }
+        else
+        {
+            m_timerCounter = static_cast<std::uint16_t>(m_timerCounter - 2);
+        }
+    }
+
+    if (outputClock)
+    {
+        // The DMC output divider is clocked on the APU get phase. Its period
+        // table is expressed in CPU cycles, so the divider advances by two
+        // on each of its half-rate clocks.
         m_timerCounter = DmcRateTable[m_rateIndex];
         if (!m_silence)
         {
@@ -596,37 +715,39 @@ void APU::DmcChannel::ClockTimer(const DmcMemoryReader& memoryReader)
             if (m_sampleBufferEmpty)
             {
                 m_silence = true;
+                if (m_transferStartDelay == 0)
+                {
+                    RequestDma(false);
+                }
             }
             else
             {
                 m_silence = false;
                 m_shiftRegister = m_sampleBuffer;
                 m_sampleBufferEmpty = true;
+                if (m_implicitAbortArmed)
+                {
+                    m_implicitAbortArmed = false;
+                    m_dmaRequested = true;
+                    m_dmaAbortOnly = true;
+                }
+                else if (m_transferStartDelay == 0)
+                {
+                    RequestDma(false);
+                }
             }
         }
     }
-    else
+    if (getCycle && m_dmaReloadInhibit != 0)
     {
-        --m_timerCounter;
+        m_dmaReloadInhibit = static_cast<std::uint8_t>(
+            m_dmaReloadInhibit > 2 ? m_dmaReloadInhibit - 2 : 0);
     }
-
-    RefillSampleBuffer(memoryReader);
 }
 
 std::uint8_t APU::DmcChannel::Output() const
 {
     return m_outputLevel;
-}
-
-bool APU::DmcChannel::ConsumeDmaStallCycle()
-{
-    if (m_dmaStallCycles == 0)
-    {
-        return false;
-    }
-
-    --m_dmaStallCycles;
-    return true;
 }
 
 bool APU::DmcChannel::IrqPending() const
@@ -702,7 +823,7 @@ void APU::ClockFrameCounter()
             ClockQuarterFrame();
         }
 
-        if (m_frameCounter == 37282 + offset)
+        if (m_frameCounter == 37281 + offset)
         {
             m_frameCounter = 0;
         }
@@ -726,23 +847,32 @@ void APU::ClockFrameCounter()
         ClockQuarterFrame();
     }
 
-    if (m_frameCounter >= 29827 + offset && m_frameCounter <= 29829 + offset &&
-        !m_frameIrqInhibit)
+    if (m_frameCounter >= 29827 + offset && m_frameCounter <= 29829 + offset)
     {
-        // The IRQ line reaches the CPU FrameIrqLineLatencyCycles after the
-        // flag's first set cycle; the later window cycles must not re-arm
-        // the countdown (blargg 07.irq_flag_timing pins the $4015 flag,
-        // 08.irq_timing pins the line against the CPU's penultimate-cycle
-        // poll).
-        const bool firstSetCycle = !m_frameIrqFlag;
-        m_frameIrqFlag = true;
-        if (firstSetCycle)
+        const bool inhibitedPulse = m_frameIrqInhibit &&
+            m_frameCounter == 29829 + offset;
+        if (inhibitedPulse)
         {
-            m_frameIrqLineCountdown = FrameIrqLineLatencyCycles;
+            m_frameIrqFlag = false;
+            m_frameIrqClearPending = false;
+        }
+        else
+        {
+            // The IRQ line reaches the CPU FrameIrqLineLatencyCycles after
+            // the flag's first set cycle; the later window cycles must not
+            // re-arm the countdown (blargg 07.irq_flag_timing pins the
+            // $4015 flag, 08.irq_timing pins the line against the CPU's
+            // penultimate-cycle poll).
+            const bool firstSetCycle = !m_frameIrqFlag;
+            m_frameIrqFlag = true;
+            if (firstSetCycle && !m_frameIrqInhibit)
+            {
+                m_frameIrqLineCountdown = FrameIrqLineLatencyCycles;
+            }
         }
     }
 
-    if (m_frameCounter == 29830 + offset)
+    if (m_frameCounter == 29829 + offset)
     {
         m_frameCounter = 0;
     }

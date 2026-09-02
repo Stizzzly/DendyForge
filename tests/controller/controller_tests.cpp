@@ -11,6 +11,7 @@ TEST_CASE("Controller serializes buttons through the CPU controller port")
     controller.SetButton(dendyforge::Controller::Button::Left, true);
 
     bus.CpuWrite(0x4016, 0x01);
+    controller.ClockPutCycle();
     bus.CpuWrite(0x4016, 0x00);
 
     CHECK(bus.CpuRead(0x4016) == 1);

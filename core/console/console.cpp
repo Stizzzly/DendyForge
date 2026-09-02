@@ -40,11 +40,8 @@ void Console::Reset()
 
 void Console::Clock()
 {
-    if (!m_bus.ConsumeDmaStallCycle())
-    {
-        m_cpu.Clock();
-        m_bus.BeginPendingDma(m_cpuCycleIsOdd);
-    }
+    m_bus.BeginPendingDma();
+    m_bus.ClockCpuCycle(m_cpu, !m_cpuCycleIsOdd);
 
     m_bus.AudioProcessor().Clock();
 
@@ -116,7 +113,7 @@ std::uint8_t Console::ReadCpuRamForDiagnostics(std::uint16_t address)
         return 0;
     }
 
-    return m_bus.CpuRead(address);
+    return m_bus.DebugPeekCpu(address).value_or(0);
 }
 
 std::uint8_t Console::ReadCartridgeRamForDiagnostics(std::uint16_t address)
@@ -126,7 +123,7 @@ std::uint8_t Console::ReadCartridgeRamForDiagnostics(std::uint16_t address)
         return 0;
     }
 
-    return m_bus.CpuRead(address);
+    return m_bus.DebugPeekCpu(address).value_or(0);
 }
 
 CPU6502& Console::Cpu()

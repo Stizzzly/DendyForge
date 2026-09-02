@@ -23,6 +23,7 @@ public:
 
     void SetButton(Button button, bool pressed);
     void Write(std::uint8_t data);
+    void ClockPutCycle();
     std::uint8_t Read();
 
 private:

@@ -1,9 +1,44 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "apu/apu.hpp"
+
+namespace
+{
+
+void PrepareDmcAtLastBit(dendyforge::APU& apu)
+{
+    apu.CpuWrite(0x4010, 0x4E); // loop, second-fastest rate (72 CPU cycles)
+    apu.CpuWrite(0x4013, 0x00); // one-byte sample
+    apu.CpuWrite(0x4015, 0x10);
+
+    // This standalone APU begins on the alignment whose load DMA is
+    // published four clocks after the $4015 write.
+    apu.Clock();
+    apu.Clock();
+    apu.Clock();
+    apu.Clock();
+    std::uint16_t address = 0;
+    bool abortOnly = false;
+    REQUIRE(apu.ConsumeDmcDmaRequest(address, abortOnly));
+    REQUIRE_FALSE(abortOnly);
+
+    // Model the halt and dummy cycles, then the get. By cycle 432 the output
+    // divider has reached the final bit with a freshly loaded sample buffered.
+    apu.Clock();
+    apu.Clock();
+    apu.CompleteDmcDma(0xAA);
+    apu.Clock();
+    for (int cycle = 0; cycle < 426; ++cycle)
+    {
+        apu.Clock();
+    }
+}
+
+}
 
 TEST_CASE("APU pulse channel produces samples after its registers are enabled")
 {
@@ -117,6 +152,53 @@ TEST_CASE("APU DMC fetches sample bytes and contributes to the output")
                       [](float sample) { return sample > 0.0F; }));
 }
 
+TEST_CASE("Disabling DMC does not downgrade an already scheduled fetch")
+{
+    dendyforge::APU apu;
+    apu.CpuWrite(0x4015, 0x10);
+    apu.Clock();
+    apu.Clock();
+    apu.Clock();
+    apu.Clock();
+    apu.CpuWrite(0x4015, 0x00);
+
+    std::uint16_t address = 0;
+    bool abortOnly = false;
+    REQUIRE(apu.ConsumeDmcDmaRequest(address, abortOnly));
+    CHECK(address == 0xC000);
+    CHECK_FALSE(abortOnly);
+}
+
+TEST_CASE("DMC explicit stop distinguishes the reload and abort phases")
+{
+    struct StopCase
+    {
+        int clocksAfterLastBit;
+        bool abortOnly;
+    };
+    constexpr std::array cases{
+        StopCase{69, true},  // get phase, timer 4: one-cycle abort
+        StopCase{70, true},  // put phase, timer 2: one-cycle abort
+        StopCase{71, false}, // get phase, timer 2: normal reload DMA
+    };
+
+    for (const auto& stopCase : cases)
+    {
+        dendyforge::APU apu;
+        PrepareDmcAtLastBit(apu);
+        for (int cycle = 0; cycle < stopCase.clocksAfterLastBit; ++cycle)
+        {
+            apu.Clock();
+        }
+
+        apu.CpuWrite(0x4015, 0x00);
+        std::uint16_t address = 0;
+        bool abortOnly = false;
+        REQUIRE(apu.ConsumeDmcDmaRequest(address, abortOnly));
+        CHECK(abortOnly == stopCase.abortOnly);
+    }
+}
+
 TEST_CASE("APU four-step frame counter raises and clears its status IRQ")
 {
     dendyforge::APU apu;
@@ -126,13 +208,15 @@ TEST_CASE("APU four-step frame counter raises and clears its status IRQ")
     }
 
     CHECK((apu.CpuRead(0x4015) & 0x40) != 0);
+    CHECK((apu.CpuRead(0x4015) & 0x40) != 0);
+    apu.Clock();
     CHECK((apu.CpuRead(0x4015) & 0x40) == 0);
 }
 
 TEST_CASE("APU frame sequencer clocks length counters at blargg-validated cycles")
 {
     // A $4017 write on an even CPU cycle applies its reset after four
-    // cycles and the first half frame clock lands 14915 CPU cycles after
+    // cycles and the first half frame clock lands 14917 CPU cycles after
     // the write; the frame IRQ flag is set three cycles in a row starting
     // 29831 cycles after the write (blargg 05/07.irq_flag_timing).
     dendyforge::APU apu;
@@ -147,7 +231,7 @@ TEST_CASE("APU frame sequencer clocks length counters at blargg-validated cycles
         apu.Clock();
     }
     apu.CpuWrite(0x4017, 0x00);
-    for (int cycle = 0; cycle < 14'915; ++cycle)
+    for (int cycle = 0; cycle < 14'916; ++cycle)
     {
         apu.Clock();
     }

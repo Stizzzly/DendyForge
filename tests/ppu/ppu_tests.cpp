@@ -32,7 +32,9 @@ TEST_CASE("Debugger register peek observes PPU state without a CPU read")
     bus.CpuWrite(0x2003, 0x12);
 
     CHECK(bus.DebugPeekCpu(0x2000) == 0x83);
-    CHECK(bus.DebugPeekCpu(0x2004) == 0xAB);
+    // OAM attribute bits 2-4 do not physically exist; the debugger observes
+    // the stored byte rather than the unmasked value written by the CPU.
+    CHECK(bus.DebugPeekCpu(0x2004) == 0xA3);
     CHECK_FALSE(bus.DebugPeekCpu(0x4016).has_value());
 }
 
@@ -181,6 +183,10 @@ TEST_CASE("PPU delays a completed PPUADDR write while rendering")
 {
     dendyforge::PPU ppu;
     ppu.CpuWrite(0x2001, 0x08); // background rendering enabled
+    for (int dot = 0; dot < 4; ++dot)
+    {
+        ppu.Clock();
+    }
     ppu.CpuWrite(0x2006, 0x24);
     ppu.CpuWrite(0x2006, 0x00);
 
@@ -190,6 +196,50 @@ TEST_CASE("PPU delays a completed PPUADDR write while rendering")
     CHECK(ppu.AddressState().vramAddress == 0x0000);
     ppu.Clock();
     CHECK(ppu.AddressState().vramAddress == 0x2400);
+}
+
+TEST_CASE("OAMDATA uses the rendering-time OAM bus behavior")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2003, 0x02);
+    ppu.CpuWrite(0x2004, 0x5A);
+    ppu.CpuWrite(0x2003, 0x02);
+    ppu.CpuWrite(0x2001, 0x08);
+
+    for (int dot = 0; dot < 341 + 1; ++dot)
+    {
+        ppu.Clock();
+    }
+
+    CHECK(ppu.CpuRead(0x2004) == 0xFF);
+    ppu.CpuWrite(0x2004, 0xA5);
+    CHECK(ppu.DebugPeekCpuRegister(0x2003) == 0x04);
+
+    ppu.CpuWrite(0x2001, 0x00);
+    for (int dot = 0; dot < 4; ++dot)
+    {
+        ppu.Clock();
+    }
+    ppu.CpuWrite(0x2003, 0x02);
+    CHECK(ppu.CpuRead(0x2004) == (0x5A & 0xE3));
+}
+
+TEST_CASE("Greyscale masks CPU palette reads without changing palette RAM")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2006, 0x3F);
+    ppu.CpuWrite(0x2006, 0x1C);
+    ppu.CpuWrite(0x2007, 0x5A);
+
+    ppu.CpuWrite(0x2006, 0x3F);
+    ppu.CpuWrite(0x2006, 0x1C);
+    ppu.CpuWrite(0x2001, 0x01);
+    CHECK((ppu.CpuRead(0x2007) & 0x3F) == 0x10);
+
+    ppu.CpuWrite(0x2001, 0x00);
+    ppu.CpuWrite(0x2006, 0x3F);
+    ppu.CpuWrite(0x2006, 0x1C);
+    CHECK((ppu.CpuRead(0x2007) & 0x3F) == 0x1A);
 }
 
 TEST_CASE("PPU renders a background tile into the frame buffer")
@@ -208,6 +258,28 @@ TEST_CASE("PPU renders a background tile into the frame buffer")
 
     CHECK(ppu.FrameBuffer()[0] != ppu.FrameBuffer()[1]);
     CHECK(ppu.FrameBuffer()[1] == ppu.FrameBuffer()[256]);
+}
+
+TEST_CASE("PPU preserves the final high-plane pixel of every background tile")
+{
+    dendyforge::PPU ppu;
+    ppu.CpuWrite(0x2001, 0x0A);
+
+    // Color 2 exists only in the rightmost pixel of tile zero. Clearing bit
+    // 7 of the low shifter half immediately before its tile-boundary shift
+    // incorrectly erases this pixel and produces vertical eight-pixel bands.
+    ppu.PpuWrite(0x0000, 0x00);
+    ppu.PpuWrite(0x0008, 0x01);
+    ppu.PpuWrite(0x2000, 0x00);
+    ppu.PpuWrite(0x2001, 0x00);
+    ppu.PpuWrite(0x3F00, 0x0F);
+    ppu.PpuWrite(0x3F02, 0x21);
+
+    ppu.RenderBackground();
+
+    const auto& frame = ppu.FrameBuffer();
+    CHECK(frame[6] != frame[7]);
+    CHECK(frame[7] == frame[15]);
 }
 
 TEST_CASE("PPU background renderer applies scroll from the PPU scroll register")

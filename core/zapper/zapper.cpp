@@ -20,6 +20,11 @@ bool IsBright(std::uint32_t pixel)
 
 } // namespace
 
+void Zapper::SetConnected(bool connected)
+{
+    m_connected = connected;
+}
+
 void Zapper::SetAim(int x, int y)
 {
     m_aimValid = x >= 0 && x < ScreenWidth && y >= 0 && y < ScreenHeight;
@@ -38,6 +43,11 @@ std::uint8_t Zapper::ReadPort(
     const std::array<std::uint32_t, ScreenWidth * ScreenHeight>&
         frameBuffer) const
 {
+    if (!m_connected)
+    {
+        return 0;
+    }
+
     std::uint8_t data = 0x08; // no light
 
     // The sensor fires while the beam sweeps the aimed spot and the

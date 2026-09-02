@@ -23,6 +23,7 @@ public:
 
     // Aims at a pixel; coordinates outside the screen mean the gun points
     // away and no light is ever reported.
+    void SetConnected(bool connected);
     void SetAim(int x, int y);
     void SetTrigger(bool pulled);
 
@@ -33,6 +34,7 @@ public:
             frameBuffer) const;
 
 private:
+    bool m_connected{false};
     bool m_aimValid{false};
     std::uint16_t m_aimX{0};
     std::uint16_t m_aimY{0};

@@ -34,6 +34,7 @@ TEST_CASE("The Zapper reports light only on the aimed scanline past the aim colu
     RenderScreen(ppu, 0x30); // white
 
     dendyforge::Zapper zapper;
+    zapper.SetConnected(true);
     zapper.SetAim(10, 5);
 
     // Beam past the aim column on the aim scanline: light detected.
@@ -54,6 +55,7 @@ TEST_CASE("The Zapper ignores dark pixels and off-screen aims")
     RenderScreen(ppu, 0x0F); // black
 
     dendyforge::Zapper zapper;
+    zapper.SetConnected(true);
     zapper.SetAim(10, 5);
     CHECK((zapper.ReadPort(5, 21, ppu.FrameBuffer()) & 0x08) != 0);
 
@@ -70,6 +72,7 @@ TEST_CASE("The Zapper reports the trigger in bit 4")
     RenderScreen(ppu, 0x30);
 
     dendyforge::Zapper zapper;
+    zapper.SetConnected(true);
     zapper.SetAim(10, 5);
     CHECK((zapper.ReadPort(5, 21, ppu.FrameBuffer()) & 0x10) == 0);
 
@@ -86,6 +89,7 @@ TEST_CASE("The bus exposes the Zapper on $4017 reads")
 
     // The idle bus PPU sits on the pre-render line, which no aim can
     // match, so the sensor reads dark.
+    bus.SecondaryZapper().SetConnected(true);
     bus.SecondaryZapper().SetAim(10, 5);
     CHECK((bus.CpuRead(0x4017) & 0x08) != 0);
 

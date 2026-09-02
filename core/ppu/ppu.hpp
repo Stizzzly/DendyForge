@@ -73,6 +73,8 @@ private:
         std::uint8_t attributes{0};
         std::uint8_t lowPlane{0};
         std::uint8_t highPlane{0};
+        std::uint8_t xCounter{0};
+        bool counterCounting{false};
     };
 
     std::uint16_t NormalizeAddress(std::uint16_t address) const;
@@ -82,6 +84,7 @@ private:
     void RenderBackgroundPixel(std::uint16_t screenY, std::uint16_t screenX);
     void RenderBackgroundScanline(std::uint16_t screenY);
     void RenderSpritePixel(std::uint16_t screenY, std::uint16_t screenX);
+    void ClockSpriteUnits();
     void RenderSpritesScanline(std::uint16_t screenY);
     void EvaluateSpritesForScanline(std::uint16_t screenY);
     void FetchScanlineSprites(std::uint16_t screenY);
@@ -101,8 +104,13 @@ private:
     void FetchPatternHigh();
     void LoadBackgroundShifters();
     void ShiftBackgroundShifters();
+    std::uint8_t ReadRenderingBus(std::uint16_t address);
     void IncrementVramAddress();
+    void ClockPendingPpuDataRead();
     void ClockPendingVramAddressUpdate();
+    void ClockPendingRenderingMaskUpdate();
+    std::uint8_t OamCorruptionRow() const;
+    void ApplyPendingOamCorruption();
     void IncrementCoarseX(std::uint16_t& address) const;
     void IncrementY(std::uint16_t& address) const;
     void CopyHorizontalBits(std::uint16_t& destination,
@@ -123,6 +131,8 @@ private:
     std::array<bool, 256 * 240> m_backgroundOpaque{};
     BackgroundFetchState m_backgroundFetch{};
     std::array<ScanlineSprite, 8> m_scanlineSprites{};
+    std::array<bool, 8> m_scanlineSpritePatternValid{};
+    bool m_bulkSpriteRendering{false};
     std::size_t m_scanlineSpriteCount{0};
     // Secondary OAM (32 bytes) plus the evaluation state machine variables.
     // The sprite address is split into H (OAM entry) and L (byte in entry),
@@ -130,6 +140,9 @@ private:
     // overflow bug.
     std::array<std::uint8_t, 32> m_secondaryOam{};
     std::uint8_t m_oamCopyBuffer{0};
+    bool m_oamCopyBufferIsAttribute{false};
+    std::uint8_t m_oamCopyDoneBuffer{0};
+    bool m_oamCopyDoneBufferIsAttribute{false};
     std::uint8_t m_secondaryOamAddress{0};
     std::uint8_t m_spriteAddrH{0};
     std::uint8_t m_spriteAddrL{0};
@@ -138,14 +151,25 @@ private:
     bool m_sprite0Visible{false};
     bool m_oamCopyDone{false};
     std::uint8_t m_overflowBugCounter{0};
-    std::uint8_t m_spriteFetchIndex{0};
+    bool m_oamCorruptionPending{false};
+    std::uint8_t m_oamCorruptionRow{0};
     std::uint16_t m_spritePatternAddress{0};
 
     std::uint8_t m_control{0};
     std::uint8_t m_mask{0};
+    std::uint8_t m_effectiveRenderingMask{0};
+    std::uint8_t m_pendingRenderingMask{0};
+    std::uint8_t m_renderingMaskUpdateDelay{0};
     std::uint8_t m_status{0};
     std::uint8_t m_oamAddress{0};
     std::uint8_t m_dataBuffer{0};
+    std::uint8_t m_renderingReadBus{0};
+    bool m_ppuDataReadPending{false};
+    std::uint8_t m_ppuDataReadDelay{0};
+    bool m_ppuDataIncrementPending{false};
+    std::uint8_t m_ppuDataIncrementDelay{0};
+    bool m_ppuDataBusCollisionPending{false};
+    std::uint8_t m_ppuDataBusCollisionDelay{0};
     // PPU open-bus latch: holds the last value driven onto the CPU data
     // bus by any $2000-$2007 read or write. The capacitor leaks: without
     // an access for about half a second of PPU dots the latch reads zero

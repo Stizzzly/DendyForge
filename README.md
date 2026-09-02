@@ -149,6 +149,7 @@ A standalone, reusable, and hardware-accurate CPU6502 emulator suitable for inte
 * ✅ VBlank and NMI signal (NMI line sampled per CPU cycle; vbl_nmi_timing 7/7)
 * ✅ Sprite Zero Hit (blargg sprite_hit_tests 11/11)
 * ✅ PPU Open Bus (blargg ppu_open_bus)
+* ✅ AccuracyCoin hardware accuracy suite (141/141)
 
 ### Controller
 
@@ -211,6 +212,7 @@ of invoking their side effects.
 * ✅ Mapper 3 (CNROM)
 * ✅ Mapper 1 (MMC1)
 * ✅ Mapper 4 (MMC3)
+* ✅ Mapper 7 (AxROM)
 
 ---
 

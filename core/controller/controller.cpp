@@ -10,17 +10,15 @@ void Controller::SetButton(Button button, bool pressed)
 
 void Controller::Write(std::uint8_t data)
 {
-    const bool strobe = (data & 0x01) != 0;
-    if (strobe)
-    {
-        LatchButtons();
-    }
-    else if (m_strobe)
-    {
-        LatchButtons();
-    }
+    m_strobe = (data & 0x01) != 0;
+}
 
-    m_strobe = strobe;
+void Controller::ClockPutCycle()
+{
+    if (m_strobe)
+    {
+        LatchButtons();
+    }
 }
 
 std::uint8_t Controller::Read()
